@@ -1,0 +1,4 @@
+- [Code and docs in English](feedback_language.md) — all code/comments/docs in English, chat in German
+- [KISS review before commit](feedback_pre_commit_review.md) — run kiss-code-reviewer agent before every commit
+- [Brainstorm with game-level-designer](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
+- [Level system decisions](project_level_system.md) — linear planet unlock, roguelike upgrade reset, deferred questions
