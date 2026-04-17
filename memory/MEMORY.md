@@ -11,3 +11,7 @@
 - [Project: Pending Work](project_pending.md) — Outstanding feature requests not yet done
 - [Project: Recent Changes](project_recent_changes.md) — 2026-04-16 session: rename, biomes, ocean, Sun, ship types
 - [Project: Level system](project_level_system.md) — linear planet unlock, roguelike upgrade reset
+- [Project: Perf + resilience](project_perf_and_resilience.md) — sim radius cull, stuck detection, frame/gradient caches
+- [Project: On-foot weapons](project_onfoot_weapons.md) — 5 alien weapons (stunner, wail, plasma, g-well, swarm) + HUD
+- [Project: Mothership hub](project_mothership_hub.md) — walkable corridor + Star Map, Arena, Lab, Zoo Riot
+- [Project: Burning + jobs](project_burning_and_jobs.md) — day/night commuting, fire spread, ash piles

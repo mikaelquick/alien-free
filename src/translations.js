@@ -1,4 +1,4 @@
-// SAD ABDUCTION — i18n Translation Data
+// space — i18n Translation Data
 // Languages: en, de, sv, es, pt, fr
 
 export const TRANSLATIONS = {
@@ -9,7 +9,7 @@ export const TRANSLATIONS = {
 en: {
   // --- UI (HTML elements) ---
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"They never wanted to leave."',
     controls1: 'WASD / Arrow Keys - Fly',
     controls2: 'SPACE - Tractor beam   SHIFT - Boost',
@@ -195,7 +195,7 @@ en: {
 // ============================================================
 de: {
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"Sie wollten nie gehen."',
     controls1: 'WASD / Pfeiltasten - Fliegen',
     controls2: 'LEERTASTE - Traktorstrahl   SHIFT - Boost',
@@ -360,7 +360,7 @@ de: {
 // ============================================================
 sv: {
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"De ville aldrig lämna."',
     controls1: 'WASD / Piltangenter - Flyg',
     controls2: 'MELLANSLAG - Stråle   SHIFT - Boost',
@@ -525,7 +525,7 @@ sv: {
 // ============================================================
 es: {
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"Nunca quisieron irse."',
     controls1: 'WASD / Flechas - Volar',
     controls2: 'ESPACIO - Rayo tractor   SHIFT - Turbo',
@@ -690,7 +690,7 @@ es: {
 // ============================================================
 pt: {
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"Eles nunca quiseram partir."',
     controls1: 'WASD / Setas - Voar',
     controls2: 'ESPAÇO - Raio trator   SHIFT - Turbo',
@@ -855,7 +855,7 @@ pt: {
 // ============================================================
 fr: {
   ui: {
-    title: 'SAD ABDUCTION',
+    title: 'space',
     subtitle: '"Ils n\'ont jamais voulu partir."',
     controls1: 'ZQSD / Flèches - Voler',
     controls2: 'ESPACE - Rayon tracteur   SHIFT - Turbo',

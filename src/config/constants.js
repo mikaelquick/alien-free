@@ -9,4 +9,4 @@ export const WATER_DEPTH = 2500; // how deep the ocean goes below GROUND_LEVEL
 export const WATER_SURFACE = 2000; // same as GROUND_LEVEL
 export const SEABED_Y = GROUND_LEVEL + WATER_DEPTH;
 
-export const EARTH_WORLD_WIDTH = 34000;
+export const EARTH_WORLD_WIDTH = 52000;
