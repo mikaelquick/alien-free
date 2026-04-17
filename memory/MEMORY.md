@@ -1,4 +1,12 @@
-- [Code and docs in English](feedback_language.md) — all code/comments/docs in English, chat in German
-- [KISS review before commit](feedback_pre_commit_review.md) — run kiss-code-reviewer agent before every commit
-- [Brainstorm with game-level-designer](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
-- [Level system decisions](project_level_system.md) — linear planet unlock, roguelike upgrade reset, deferred questions
+- [User Profile](user_profile.md) — Game developer building "SpaceShip" (formerly "Sad Abduction") alien abduction game
+- [Feedback: Style](feedback_style.md) — Terse responses, no summaries, just do it
+- [Feedback: Language](feedback_language.md) — Code/comments/docs in English, chat in German
+- [Feedback: Gameplay](feedback_gameplay.md) — Design preferences for alive world, panic, controls
+- [Feedback: Removed Features](feedback_removed_features.md) — Speech bubbles and caves explicitly removed — don't re-add
+- [Feedback: Pre-commit review](feedback_pre_commit_review.md) — run kiss-code-reviewer agent before every commit
+- [Feedback: Game dev brainstorm](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
+- [Project: Earth Design](project_earth.md) — Earth biome layout, population, caves, mountains
+- [Project: Game Systems](project_systems.md) — Skins, save/load, menus, cave system, vehicles
+- [Project: Pending Work](project_pending.md) — Outstanding feature requests not yet done
+- [Project: Recent Changes](project_recent_changes.md) — 2026-04-16 session: rename, biomes, ocean, Sun, ship types
+- [Project: Level system](project_level_system.md) — linear planet unlock, roguelike upgrade reset
