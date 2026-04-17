@@ -148,6 +148,16 @@ let keys = {};
 let score = 0;
 let buildingsDestroyed = 0;
 let particles = [];
+// In-place particle step: advance + compact dead ones without allocating a new array.
+function stepParticles(){
+  let w=0;
+  for(let r=0;r<particles.length;r++){
+    const p=particles[r];
+    p.x+=p.vx;p.y+=p.vy;p.life--;
+    if(p.life>0){if(w!==r)particles[w]=p;w++;}
+  }
+  if(w<particles.length)particles.length=w;
+}
 let debris = [];
 let humans = [];
 let blocks = [];
@@ -1207,7 +1217,7 @@ function generateBuilding(x) {
 // --- DRAW BUILDING UNIT ---
 function drawBuildingUnit(b) {
   const sx=b.x, sy=b.y, w=b.w, h=b.h;
-  const t=Date.now()*0.001;
+  const t=frameT;
   const _ws=(i)=>Math.sin(b.windowSeed*(i+1)*137.5)>0; // seeded window lit
 
   switch(b.buildingType) {
@@ -4734,10 +4744,10 @@ function updatePlanetShared(){
     }
     // Heat distortion / smoke at base
     if(Math.random()>0.6)particles.push({x:ship.x+(Math.random()-0.5)*8,y:ship.y+15,vx:(Math.random()-0.5)*0.5,vy:1,life:15,color:'rgba(255,200,100,0.2)',size:8+Math.random()*5});
-    blocks.forEach(b=>{if(b.dead)return;const d=dist(ship.x,ship.y+60,b.x+b.w/2,b.y+b.h/2);if(d<flameRange&&b.y>ship.y){b.health-=flameDmg;b.cracked=true;b.onFire=true;if(!b.fixed)b.vx+=(Math.random()-0.5)*0.5;if(Math.random()>0.95)fires.push({x:b.x+Math.random()*b.w,y:b.y+Math.random()*b.h,life:120+Math.random()*100,size:Math.random()*10+5});checkBuildingDestroyed(b);}});
-    humans.forEach(h=>{if(h.collected)return;const d=dist(ship.x,ship.y+60,h.bodyX,h.bodyY);if(d<flameRange-20&&h.bodyY>ship.y){h.crying=true;h.panicLevel=Math.min(h.panicLevel+0.3,10);if(!h.ragdoll){h.walkDir=h.bodyX<ship.x?-1:1;h.walkSpeed=3;}}});
+    blocks.forEach(b=>{if(b.dead)return;if(Math.abs(b.x+b.w/2-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,b.x+b.w/2,b.y+b.h/2);if(d<flameRange&&b.y>ship.y){b.health-=flameDmg;b.cracked=true;b.onFire=true;if(!b.fixed)b.vx+=(Math.random()-0.5)*0.5;if(Math.random()>0.95)fires.push({x:b.x+Math.random()*b.w,y:b.y+Math.random()*b.h,life:120+Math.random()*100,size:Math.random()*10+5});checkBuildingDestroyed(b);}});
+    humans.forEach(h=>{if(h.collected)return;if(Math.abs(h.bodyX-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,h.bodyX,h.bodyY);if(d<flameRange-20&&h.bodyY>ship.y){h.crying=true;h.panicLevel=Math.min(h.panicLevel+0.3,10);if(!h.ragdoll){h.walkDir=h.bodyX<ship.x?-1:1;h.walkSpeed=3;}}});
     // Flame kills cows
-    cows.forEach(c=>{if(c.collected)return;const d=dist(ship.x,ship.y+60,c.x,c.bodyY);if(d<flameRange-10&&c.bodyY>ship.y){
+    cows.forEach(c=>{if(c.collected)return;if(Math.abs(c.x-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,c.x,c.bodyY);if(d<flameRange-10&&c.bodyY>ship.y){
       c.collected=true;score+=1;document.getElementById('score').textContent=score;
       showMessage(`${c.label} roasted!`);
       for(let i=0;i<15;i++)particles.push({x:c.x,y:c.bodyY,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:25,color:['#f80','#fa0','#f40'][Math.floor(Math.random()*3)],size:Math.random()*4+2});
@@ -5033,7 +5043,7 @@ function updatePlanetShared(){
   });
 
   // Particles (capped for performance)
-  particles.forEach(pt=>{pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;});particles=particles.filter(pt=>pt.life>0);
+  stepParticles();
   if(particles.length>150)particles.splice(0,particles.length-150);
   debris.forEach(d=>{d.vy+=GRAVITY*0.5;d.x+=d.vx;d.y+=d.vy;d.life--;if(d.y>GROUND_LEVEL){d.y=GROUND_LEVEL;d.vy*=-0.3;d.vx*=0.8;}});debris=debris.filter(d=>d.life>0);
   if(debris.length>100)debris.splice(0,debris.length-100);
@@ -5437,7 +5447,7 @@ function updatePlanetSystems(){
   humans=humans.filter(h=>!h.collected);
 
   // Particles, debris, tears, speech bubbles, clouds
-  particles.forEach(pt=>{pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;});particles=particles.filter(pt=>pt.life>0);
+  stepParticles();
   debris.forEach(d=>{d.vy+=GRAVITY*0.5;d.x+=d.vx;d.y+=d.vy;d.life--;if(d.y>GROUND_LEVEL){d.y=GROUND_LEVEL;d.vy*=-0.3;d.vx*=0.8;}});debris=debris.filter(d=>d.life>0);
   tears.forEach(t=>{t.x+=t.vx;t.y+=t.vy;t.vy+=0.05;t.life--;});tears=tears.filter(t=>t.life>0);
   speechBubbles.forEach(s=>{s.y+=s.vy;s.life--;});speechBubbles=speechBubbles.filter(s=>s.life>0);if(speechBubbles.length>20)speechBubbles.splice(0,speechBubbles.length-20);
@@ -5623,7 +5633,7 @@ function updateSpace(){
     }
   }
 
-  particles.forEach(pt=>{pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;});particles=particles.filter(pt=>pt.life>0);
+  stepParticles();
   if(messageTimer>0){messageTimer--;if(messageTimer===0)document.getElementById('message').style.opacity=0;}
   // Debug arena: override camera after normal camera logic has run.
   if(debugMode.active) updateDebug();
@@ -5632,7 +5642,20 @@ function updateSpace(){
 // ============================================================
 // --- DRAW ---
 // ============================================================
+// Per-frame time cache (updated at start of draw). Replaces repeated Date.now() calls in hot paths.
+let frameNow = Date.now();
+let frameT = frameNow * 0.001;
+// Gradient caches — Y-only linear gradients with constant stops can be created once and reused every frame.
+let _oceanWaterGrad=null,_oceanSeabedGrad=null,_mountainFarGrad=null,_mountainMidGrad=null;
+const _biomeGroundGradCache={};
+function _getOceanWaterGrad(){if(!_oceanWaterGrad){const g=ctx.createLinearGradient(0,GROUND_LEVEL,0,SEABED_Y);g.addColorStop(0,'#0a5090');g.addColorStop(0.15,'#084080');g.addColorStop(0.4,'#063060');g.addColorStop(0.7,'#0a3050');g.addColorStop(1,'#1a3850');_oceanWaterGrad=g;}return _oceanWaterGrad;}
+function _getOceanSeabedGrad(){if(!_oceanSeabedGrad){const g=ctx.createLinearGradient(0,SEABED_Y,0,SEABED_Y+120);g.addColorStop(0,'#c8a868');g.addColorStop(0.3,'#a88848');g.addColorStop(1,'#5a4020');_oceanSeabedGrad=g;}return _oceanSeabedGrad;}
+function _getMountainFarGrad(){if(!_mountainFarGrad){const g=ctx.createLinearGradient(0,GROUND_LEVEL-200,0,GROUND_LEVEL);g.addColorStop(0,'#8894a4');g.addColorStop(0.5,'#6a7686');g.addColorStop(1,'#4c5868');_mountainFarGrad=g;}return _mountainFarGrad;}
+function _getMountainMidGrad(){if(!_mountainMidGrad){const g=ctx.createLinearGradient(0,GROUND_LEVEL-360,0,GROUND_LEVEL);g.addColorStop(0,'#a8aeb4');g.addColorStop(0.12,'#807870');g.addColorStop(0.38,'#5e564c');g.addColorStop(0.7,'#463c30');g.addColorStop(1,'#2c2418');_mountainMidGrad=g;}return _mountainMidGrad;}
+function _getBiomeGroundGrad(biome){let g=_biomeGroundGradCache[biome.id];if(!g){g=ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);g.addColorStop(0,biome.groundColor[0]);g.addColorStop(0.3,biome.groundColor[1]);g.addColorStop(1,biome.groundColor[2]);_biomeGroundGradCache[biome.id]=g;}return g;}
 function draw(){
+  frameNow = Date.now();
+  frameT = frameNow * 0.001;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   if(mothershipMode){drawMothership();return;}
   if(gameMode==='space'){drawSpace();return;}
@@ -5642,8 +5665,13 @@ function draw(){
 function drawSpace(){
   ctx.fillStyle='#020208';ctx.fillRect(0,0,canvas.width,canvas.height);
   // Stars (not affected by zoom)
-  deepStars.forEach((s,_si)=>{if(window._perfMode&&_si%3!==0)return;s.twinkle+=s.speed;const sx=(s.x-camera.x*0.15)%(canvas.width+400)-200,sy=(s.y-camera.y*0.15)%(canvas.height+400)-200;
-    ctx.fillStyle=s.color;ctx.globalAlpha=0.4+Math.sin(s.twinkle)*0.4;ctx.beginPath();ctx.arc(sx,sy,s.size,0,Math.PI*2);ctx.fill();});
+  const _dsStep = window._perfMode ? 3 : 1;
+  for(let _si=0;_si<deepStars.length;_si+=_dsStep){
+    const s=deepStars[_si];
+    s.twinkle+=s.speed;
+    const sx=(s.x-camera.x*0.15)%(canvas.width+400)-200,sy=(s.y-camera.y*0.15)%(canvas.height+400)-200;
+    ctx.fillStyle=s.color;ctx.globalAlpha=0.4+Math.sin(s.twinkle)*0.4;ctx.beginPath();ctx.arc(sx,sy,s.size,0,Math.PI*2);ctx.fill();
+  }
   ctx.globalAlpha=1;
 
   // Apply zoom for transitions
@@ -5717,7 +5745,7 @@ function drawSpace(){
   // === WORMHOLE ===
   const wh=window.wormhole;
   if(wh){
-    const whsx=wh.x,whsy=wh.y,t2=Date.now()*0.001;
+    const whsx=wh.x,whsy=wh.y,t2=frameT;
     const whDist=dist(ship.x,ship.y,whsx,whsy);
     if(whDist<1500){
       // Outer swirl
@@ -5758,7 +5786,7 @@ function drawSpace(){
   }
   // Wormhole exit (in void space)
   if(window.wormholeExit){
-    const we=window.wormholeExit,t2=Date.now()*0.001;
+    const we=window.wormholeExit,t2=frameT;
     for(let ring=0;ring<4;ring++){
       const r=we.radius*(1.3-ring*0.2);
       ctx.strokeStyle=`rgba(${100+ring*30},${200+ring*10},${100+ring*10},${0.12-ring*0.02})`;
@@ -5911,9 +5939,10 @@ function drawPlanet(){
     // Sun rays
     ctx.strokeStyle='rgba(255,230,150,0.15)';ctx.lineWidth=2;
     for(let ri=0;ri<8;ri++){
-      const ra=ri*Math.PI/4+Date.now()*0.0003;
+      const ra=ri*Math.PI/4+frameNow*0.0003;
+      const rayLen=50+Math.sin(frameNow*0.002+ri)*10;
       ctx.beginPath();ctx.moveTo(sunX+Math.cos(ra)*30,sunY+Math.sin(ra)*30);
-      ctx.lineTo(sunX+Math.cos(ra)*(50+Math.sin(Date.now()*0.002+ri)*10),sunY+Math.sin(ra)*(50+Math.sin(Date.now()*0.002+ri)*10));ctx.stroke();
+      ctx.lineTo(sunX+Math.cos(ra)*rayLen,sunY+Math.sin(ra)*rayLen);ctx.stroke();
     }
     ctx.globalAlpha=1;
     // Brighten sky when sun is visible
@@ -5935,6 +5964,7 @@ function drawPlanet(){
     const seed = Math.abs(Math.sin(c.x*0.013+c.y*0.007));
     const puffs = 6 + Math.floor(seed*3);
     const puffList = [];
+    let minY = Infinity, maxY = -Infinity;
     for(let pi=0; pi<puffs; pi++){
       const tt = pi/(puffs-1);
       const px = c.x - c.width/2 + tt*c.width;
@@ -5942,6 +5972,8 @@ function drawPlanet(){
       const shape = Math.sin(tt*Math.PI);
       const pr = c.height*0.48 * (0.6 + shape*0.7 + Math.sin(pi*2.3+c.x*0.02)*0.08);
       puffList.push({px,py,pr});
+      if(py-pr<minY) minY=py-pr;
+      if(py+pr>maxY) maxY=py+pr;
     }
     // 1. One unified silhouette path — all arcs in one subpath so the union fills flat
     ctx.save();
@@ -5953,8 +5985,6 @@ function drawPlanet(){
     // 2. Clip to silhouette so shadow/highlight don't bleed outside
     ctx.clip();
     // 3. Soft bottom shadow (linear gradient over the cloud bounds)
-    const minY = Math.min(...puffList.map(p=>p.py-p.pr));
-    const maxY = Math.max(...puffList.map(p=>p.py+p.pr));
     const grd = ctx.createLinearGradient(0,minY,0,maxY);
     grd.addColorStop(0,`rgba(${highlightCol.join(',')},${a*0.35})`);
     grd.addColorStop(0.55,`rgba(${base.join(',')},0)`);
@@ -5965,7 +5995,7 @@ function drawPlanet(){
   });
   // --- Bird flocks (Earth day only, drifting V-formations) ---
   if(p.id==='earth' && sunVis > 0.25) {
-    const _bt = Date.now() * 0.001;
+    const _bt = frameT;
     const flocks = 4;
     for(let fl=0; fl<flocks; fl++) {
       const dir = fl % 2 === 0 ? 1 : -1;
@@ -5995,18 +6025,14 @@ function drawPlanet(){
   // Ground (flat, infinite - wraps seamlessly) with biome support
   if(p.id==='earth'){
     // Draw ground in biome-colored strips
-    const _t = Date.now() * 0.001;
+    const _t = frameT;
     for(let bx=Math.floor(camera.x/30)*30-30;bx<camera.x+canvas.width+30;bx+=30){
       const biome=getEarthBiome(bx);
       if(biome.isOcean){
         // Ocean: draw water body from surface down to seabed
-        const wg=ctx.createLinearGradient(0,GROUND_LEVEL,0,SEABED_Y);
-        wg.addColorStop(0,'#0a5090');wg.addColorStop(0.15,'#084080');wg.addColorStop(0.4,'#063060');wg.addColorStop(0.7,'#0a3050');wg.addColorStop(1,'#1a3850');
-        ctx.fillStyle=wg;ctx.fillRect(bx,GROUND_LEVEL,31,WATER_DEPTH);
+        ctx.fillStyle=_getOceanWaterGrad();ctx.fillRect(bx,GROUND_LEVEL,31,WATER_DEPTH);
         // Sandy seabed (brighter so it's visible)
-        const sg2=ctx.createLinearGradient(0,SEABED_Y,0,SEABED_Y+120);
-        sg2.addColorStop(0,'#c8a868');sg2.addColorStop(0.3,'#a88848');sg2.addColorStop(1,'#5a4020');
-        ctx.fillStyle=sg2;ctx.fillRect(bx,SEABED_Y,31,canvas.height+Math.abs(camera.y));
+        ctx.fillStyle=_getOceanSeabedGrad();ctx.fillRect(bx,SEABED_Y,31,canvas.height+Math.abs(camera.y));
         // Seabed surface highlight band
         ctx.fillStyle='rgba(240,220,160,0.25)';
         ctx.fillRect(bx,SEABED_Y-2,31,4);
@@ -6039,9 +6065,7 @@ function drawPlanet(){
           ctx.fillRect(bx,waveY-2,31,3);
         }
       } else {
-        const gg=ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);
-        gg.addColorStop(0,biome.groundColor[0]);gg.addColorStop(0.3,biome.groundColor[1]);gg.addColorStop(1,biome.groundColor[2]);
-        ctx.fillStyle=gg;ctx.fillRect(bx,GROUND_LEVEL,31,canvas.height+Math.abs(camera.y));
+        ctx.fillStyle=_getBiomeGroundGrad(biome);ctx.fillRect(bx,GROUND_LEVEL,31,canvas.height+Math.abs(camera.y));
         // Grass/ground detail per biome — now with varied blade sizes
         if(biome.grassHeight>0){
           ctx.strokeStyle=biome.grassColor;ctx.lineWidth=0.8;
@@ -6113,9 +6137,7 @@ function drawPlanet(){
           const _mhTree=(x)=>Math.max(0, 55+Math.sin(x*0.009+2.3)*42+Math.sin(x*0.022+0.7)*18+Math.cos(x*0.04+1.2)*6);
           // --- FAR (hazy distant) ridge ---
           const fh1=_mhFar(bx), fh2=_mhFar(bx+30);
-          const fg=ctx.createLinearGradient(0,GROUND_LEVEL-200,0,GROUND_LEVEL);
-          fg.addColorStop(0,'#8894a4');fg.addColorStop(0.5,'#6a7686');fg.addColorStop(1,'#4c5868');
-          ctx.fillStyle=fg;
+          ctx.fillStyle=_getMountainFarGrad();
           ctx.beginPath();ctx.moveTo(bx,GROUND_LEVEL);ctx.lineTo(bx,GROUND_LEVEL-fh1);ctx.lineTo(bx+30,GROUND_LEVEL-fh2);ctx.lineTo(bx+30,GROUND_LEVEL);ctx.closePath();ctx.fill();
           // Atmospheric haze over far ridge
           ctx.fillStyle='rgba(200,215,230,0.12)';
@@ -6128,9 +6150,7 @@ function drawPlanet(){
 
           // --- MID (main) mountain ---
           const mh1=_mhMid(bx), mh2=_mhMid(bx+30);
-          const mg=ctx.createLinearGradient(0,GROUND_LEVEL-360,0,GROUND_LEVEL);
-          mg.addColorStop(0,'#a8aeb4');mg.addColorStop(0.12,'#807870');mg.addColorStop(0.38,'#5e564c');mg.addColorStop(0.7,'#463c30');mg.addColorStop(1,'#2c2418');
-          ctx.fillStyle=mg;
+          ctx.fillStyle=_getMountainMidGrad();
           ctx.beginPath();ctx.moveTo(bx,GROUND_LEVEL);ctx.lineTo(bx,GROUND_LEVEL-mh1);ctx.lineTo(bx+30,GROUND_LEVEL-mh2);ctx.lineTo(bx+30,GROUND_LEVEL);ctx.closePath();ctx.fill();
           // Slope shading: east-facing (descending) gets darker shadow
           const _slope=mh2-mh1;
@@ -7244,8 +7264,7 @@ function drawPlanet(){
     } // end _playerInCave else
     }
   }else{
-    const gg=ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);gg.addColorStop(0,p.groundColor[0]);gg.addColorStop(0.3,p.groundColor[1]);gg.addColorStop(1,p.groundColor[2]);
-    ctx.fillStyle=gg;ctx.fillRect(camera.x-200,GROUND_LEVEL,canvas.width+400,canvas.height+Math.abs(camera.y));
+    ctx.fillStyle=_getBiomeGroundGrad({id:'planet_'+p.id,groundColor:p.groundColor});ctx.fillRect(camera.x-200,GROUND_LEVEL,canvas.width+400,canvas.height+Math.abs(camera.y));
     ctx.strokeStyle=p.grassColor;for(let gx=Math.floor(camera.x/30)*30;gx<camera.x+canvas.width;gx+=30){ctx.beginPath();ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx-3,GROUND_LEVEL-5);ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx+3,GROUND_LEVEL-6);ctx.stroke();}
   }
   // Blocks (single-unit buildings)
@@ -7283,7 +7302,7 @@ function drawPlanet(){
   // Speech bubbles disabled
   // Fires
   fires.forEach(f=>{if(f.x<camera.x-30||f.x>camera.x+canvas.width+30)return;
-    const fa=Math.min(1,f.life/60);const ft=Date.now()*0.005+f.x*0.1;
+    const fa=Math.min(1,f.life/60);const ft=frameNow*0.005+f.x*0.1;
     // Outer glow
     ctx.fillStyle=`rgba(255,60,0,${fa*0.1})`;ctx.beginPath();ctx.arc(f.x,f.y,f.size*2,0,Math.PI*2);ctx.fill();
     // Fire tongues — 3 overlapping flame shapes
@@ -7343,7 +7362,7 @@ function drawPlanet(){
     ctx.save();ctx.translate(t.x,t.y);ctx.rotate(a);
     ctx.fillStyle='#888';ctx.fillRect(0,-3,20,6); // barrel
     ctx.restore();
-    ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(t.x,t.y-3,4+Math.sin(Date.now()*0.005)*2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(t.x,t.y-3,4+Math.sin(frameNow*0.005)*2,0,Math.PI*2);ctx.fill();
     // Bullets
     t.bullets.forEach(b=>{ctx.fillStyle='#f44';ctx.beginPath();ctx.arc(b.x,b.y,3,0,Math.PI*2);ctx.fill();});
   });
@@ -7369,9 +7388,9 @@ function drawPlanet(){
       ctx.fillStyle=m.color;ctx.fillRect(m.x-m.w/2,m.y-m.h,m.w,m.h*0.6);
       ctx.fillStyle='#113';roundRect(ctx,m.x-m.w/2+5,m.y-m.h-6,m.w-10,7,2);ctx.fill();
       // Siren lights
-      ctx.fillStyle=Math.sin(Date.now()*0.02)>0?'#f00':'#00f';
+      ctx.fillStyle=Math.sin(frameNow*0.02)>0?'#f00':'#00f';
       ctx.beginPath();ctx.arc(m.x-5,m.y-m.h-8,3,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle=Math.sin(Date.now()*0.02)>0?'#00f':'#f00';
+      ctx.fillStyle=Math.sin(frameNow*0.02)>0?'#00f':'#f00';
       ctx.beginPath();ctx.arc(m.x+5,m.y-m.h-8,3,0,Math.PI*2);ctx.fill();
       // Wheels
       ctx.fillStyle='#222';ctx.beginPath();ctx.arc(m.x-12,m.y,4,0,Math.PI*2);ctx.arc(m.x+12,m.y,4,0,Math.PI*2);ctx.fill();
@@ -7402,7 +7421,7 @@ function drawPlanet(){
       ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(m.x-3,m.y-20,2,0,Math.PI*2);ctx.arc(m.x+3,m.y-20,2,0,Math.PI*2);ctx.fill();
       // Shield
       if(m.shieldUp){
-        ctx.strokeStyle=`rgba(200,100,255,${0.3+Math.sin(Date.now()*0.008)*0.2})`;ctx.lineWidth=2;
+        ctx.strokeStyle=`rgba(200,100,255,${0.3+Math.sin(frameNow*0.008)*0.2})`;ctx.lineWidth=2;
         ctx.beginPath();ctx.ellipse(m.x,m.y-12,18,20,0,0,Math.PI*2);ctx.stroke();
       }
     }
@@ -7511,7 +7530,7 @@ function drawPlanet(){
       arY=Math.max(pad,Math.min(canvas.height-pad,arY));
 
       // Pulsing glow
-      const pulse=0.5+Math.sin(Date.now()*0.005)*0.3;
+      const pulse=0.5+Math.sin(frameNow*0.005)*0.3;
       // Arrow
       ctx.save();ctx.translate(arX,arY);ctx.rotate(ang);
       ctx.fillStyle=`rgba(0,255,100,${pulse})`;
@@ -7548,7 +7567,7 @@ function drawPlanet(){
     }
     // Caustic light ripples near surface
     if(depthRatio < 0.4) {
-      const t = Date.now() * 0.001;
+      const t = frameT;
       ctx.globalAlpha = (0.4 - depthRatio) * 0.15;
       for(let i = 0; i < 8; i++) {
         const cx = canvas.width * 0.1 + (i / 8) * canvas.width * 0.8 + Math.sin(t + i * 1.3) * 40;
@@ -7568,7 +7587,7 @@ function drawPlanet(){
     // Flashlight — radial glow around the ship so you can see the area
     if(flashlightOn) {
       const flX = canvas.width / 2, flY = canvas.height / 2;
-      const flR = inCave ? 220 + Math.sin(Date.now()*0.003)*10 : 180 + depthRatio * 120;
+      const flR = inCave ? 220 + Math.sin(frameNow*0.003)*10 : 180 + depthRatio * 120;
       // Punch a bright hole in the darkness using destination-out, then re-add color
       // Step 1: dark overlay with a radial hole
       ctx.save();
@@ -7593,7 +7612,7 @@ function drawPlanet(){
       ctx.beginPath(); ctx.arc(flX, flY, flR * 0.8, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       // Ship light ring
-      ctx.strokeStyle = `rgba(180,220,255,${0.15 + Math.sin(Date.now()*0.004)*0.05})`;
+      ctx.strokeStyle = `rgba(180,220,255,${0.15 + Math.sin(frameNow*0.004)*0.05})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(flX, flY, 25, 0, Math.PI * 2); ctx.stroke();
     }
@@ -7605,7 +7624,7 @@ function drawPlanet(){
     ctx.fillText(`DEPTH: ${depthM}m`, 15, canvas.height - 40);
     // Flashlight indicator
     if(!flashlightOn && depthRatio > 0.3) {
-      ctx.fillStyle = `rgba(100,200,255,${0.3 + Math.sin(Date.now() * 0.005) * 0.15})`;
+      ctx.fillStyle = `rgba(100,200,255,${0.3 + Math.sin(frameNow * 0.005) * 0.15})`;
       ctx.font = '10px monospace'; ctx.textAlign = 'left';
       ctx.fillText('[L] FLASHLIGHT', 15, canvas.height - 55);
     } else if(flashlightOn) {
@@ -7615,7 +7634,7 @@ function drawPlanet(){
     }
     // Oxygen warning at extreme depth
     if(depthRatio > 0.8) {
-      const warn = 0.4 + Math.sin(Date.now() * 0.008) * 0.3;
+      const warn = 0.4 + Math.sin(frameNow * 0.008) * 0.3;
       ctx.fillStyle = `rgba(255,100,50,${warn})`;
       ctx.font = '13px monospace'; ctx.textAlign = 'center';
       ctx.fillText('EXTREME DEPTH', canvas.width / 2, canvas.height - 35);
@@ -7647,7 +7666,7 @@ function drawPlanet(){
     }
     // Alarm pulse overlay
     if(alarmPulse>0){
-      ctx.fillStyle=`rgba(255,0,0,${alarmPulse/60*0.08*Math.abs(Math.sin(Date.now()*0.01))})`;
+      ctx.fillStyle=`rgba(255,0,0,${alarmPulse/60*0.08*Math.abs(Math.sin(frameNow*0.01))})`;
       ctx.fillRect(0,0,canvas.width,canvas.height);
     }
   }
@@ -7674,7 +7693,7 @@ function drawPlanet(){
     const cx=canvas.width/2-50,cy=62;
     ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(cx-1,cy-1,102,8);
     const ep=shipCloak.energy/shipCloak.maxEnergy*100;
-    ctx.fillStyle=shipCloak.active?`rgba(0,200,255,${0.5+Math.sin(Date.now()*0.01)*0.3})`:'#08a';
+    ctx.fillStyle=shipCloak.active?`rgba(0,200,255,${0.5+Math.sin(frameNow*0.01)*0.3})`:'#08a';
     ctx.fillRect(cx,cy,ep,6);
     ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(shipCloak.active?'CLOAKED':'CLOAK [C]',canvas.width/2,cy-3);
   }
@@ -7736,7 +7755,7 @@ function drawPlanet(){
   drawBossIntro();
   // Boss lockdown barrier
   if(bossLockdown){
-    const pulse=0.3+Math.sin(Date.now()*0.005)*0.15;
+    const pulse=0.3+Math.sin(frameNow*0.005)*0.15;
     ctx.fillStyle=`rgba(255,0,0,${pulse})`;ctx.fillRect(0,0,canvas.width,4);
     ctx.fillStyle='rgba(255,0,0,0.15)';ctx.fillRect(0,0,canvas.width,30);
   }
@@ -7880,7 +7899,7 @@ function drawShipBody(pc,pa,pt,type){
 
 function drawShip(){
   ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.tilt);
-  if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(Date.now()*0.005)*0.05;}
+  if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(frameNow*0.005)*0.05;}
   const pc=shipPaint.color,pa=shipPaint.accent,pt=shipPaint.trail;
   const type=shipPaint.ship||'saucer';
   drawShipBody(pc,pa,pt,type);
@@ -8111,7 +8130,7 @@ function renderCow(c){
     for(let i=0;i<4;i++){const sx=cx-8*s+i*5*s;ctx.beginPath();ctx.moveTo(sx,by-10*s);ctx.lineTo(sx-2*s,by-18*s-i*2*s);ctx.lineTo(sx+2*s,by-10*s);ctx.closePath();ctx.fill();}
   }
   if(c.wack==='fire'){
-    const t=Date.now()*0.005;
+    const t=frameNow*0.005;
     for(let i=0;i<3;i++){
       ctx.fillStyle=`rgba(255,${100+Math.random()*80},0,${0.4+Math.random()*0.3})`;
       ctx.beginPath();ctx.arc(cx-6*s+i*6*s,by-12*s+Math.sin(t+i)*3*s,3*s+Math.random()*2*s,0,Math.PI*2);ctx.fill();
