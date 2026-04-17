@@ -1934,6 +1934,19 @@ const COW_TYPES = {
                {label:'Vein Worm',color:'#3a2a3a',spots:'#6a4a5a',size:0.4,wack:'tiny'}]
 };
 
+// Vehicle catalogs keyed by planet id (for debug preview). Earth is the only planet with real road traffic.
+const VEHICLE_TYPES = {
+  'earth': [
+    {type:'car',w:62,h:22,color:'#c33',speed:1.5,label:'Sedan'},
+    {type:'car',w:64,h:22,color:'#33c',speed:1.8,label:'Hatchback'},
+    {type:'car',w:68,h:26,color:'#3a3a3a',speed:1.3,label:'SUV'},
+    {type:'car',w:62,h:22,color:'#cc3',speed:2.0,label:'Taxi'},
+    {type:'truck',w:100,h:32,color:'#555',speed:0.8,label:'Truck'},
+    {type:'bus',w:130,h:34,color:'#e82',speed:0.6,label:'Bus'},
+    {type:'truck',w:80,h:30,color:'#2a8a3a',speed:0.5,label:'Tractor'},
+  ],
+};
+
 function generateCow(x) {
   const p = currentPlanet||planetDefs[0];
   const gy = GROUND_LEVEL;
@@ -2492,14 +2505,7 @@ function generateVehicles(){
   const p=currentPlanet;if(!p)return;
   vehicles=[];
   if(p.id==='earth'){
-    const vTypes=[
-      {type:'car',w:62,h:22,color:'#c33',speed:1.5,label:'Sedan'},
-      {type:'car',w:64,h:22,color:'#33c',speed:1.8,label:'Hatchback'},
-      {type:'car',w:68,h:26,color:'#3a3a3a',speed:1.3,label:'SUV'},
-      {type:'car',w:62,h:22,color:'#cc3',speed:2.0,label:'Taxi'},
-      {type:'truck',w:100,h:32,color:'#555',speed:0.8,label:'Truck'},
-      {type:'bus',w:130,h:34,color:'#e82',speed:0.6,label:'Bus'},
-    ];
+    const vTypes=VEHICLE_TYPES.earth.slice(0,6); // first six: city/suburb traffic (not the tractor)
     // City: 6 vehicles
     for(let i=0;i<6;i++){
       const vt=vTypes[Math.floor(Math.random()*vTypes.length)];
@@ -7308,78 +7314,7 @@ function drawPlanet(){
       ctx.globalAlpha=v.exploding/40;ctx.fillStyle='#f80';ctx.beginPath();ctx.arc(v.x+v.w/2,v.y,15+Math.random()*10,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;return;
     }
     if(!v.alive)return;
-    // Flip sprite so the vehicle always faces its travel direction (never drives backwards)
-    ctx.save();
-    if(v.vx<0){ctx.translate(v.x+v.w/2,0);ctx.scale(-1,1);ctx.translate(-(v.x+v.w/2),0);}
-    if(v.type==='car'){
-      const wr=v.h*0.35;
-      // Body (lower half)
-      ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h*0.55,v.w,v.h*0.55);
-      // Roof/cabin
-      ctx.fillStyle=v.color;roundRect(ctx,v.x+v.w*0.2,v.y-v.h-2,v.w*0.6,v.h*0.5,4);ctx.fill();
-      // Windows
-      ctx.fillStyle='rgba(150,200,255,0.55)';
-      ctx.fillRect(v.x+v.w*0.22,v.y-v.h+2,v.w*0.22,v.h*0.4);
-      ctx.fillRect(v.x+v.w*0.56,v.y-v.h+2,v.w*0.22,v.h*0.4);
-      // Side body trim
-      ctx.fillStyle='rgba(0,0,0,0.25)';ctx.fillRect(v.x,v.y-v.h*0.15,v.w,1.5);
-      // Wheels (tires + hubcaps)
-      ctx.fillStyle='#111';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.22,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.78,v.y,wr,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#888';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.22,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.78,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
-      // Headlights
-      if(dayNightBrightness<0){ctx.fillStyle='rgba(255,255,150,0.7)';const hx=v.vx>0?v.x+v.w+2:v.x-2;ctx.beginPath();ctx.arc(hx,v.y-v.h*0.35,wr*0.8,0,Math.PI*2);ctx.fill();}
-    }else if(v.type==='truck'){
-      const wr=v.h*0.3;
-      // Cab
-      ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w*0.3,v.h);
-      // Cab roof rounding
-      roundRect(ctx,v.x+v.w*0.02,v.y-v.h-3,v.w*0.26,5,2);ctx.fill();
-      // Cargo box
-      ctx.fillStyle='#888';ctx.fillRect(v.x+v.w*0.32,v.y-v.h*1.15,v.w*0.68,v.h*1.15);
-      ctx.strokeStyle='#555';ctx.lineWidth=1.2;ctx.strokeRect(v.x+v.w*0.32,v.y-v.h*1.15,v.w*0.68,v.h*1.15);
-      // Cargo panel lines
-      ctx.strokeStyle='#666';ctx.lineWidth=0.6;
-      for(let pl=1;pl<4;pl++){const px=v.x+v.w*0.32+v.w*0.68*pl/4;ctx.beginPath();ctx.moveTo(px,v.y-v.h*1.15);ctx.lineTo(px,v.y);ctx.stroke();}
-      // Windshield
-      ctx.fillStyle='rgba(150,200,255,0.55)';ctx.fillRect(v.x+v.w*0.05,v.y-v.h+3,v.w*0.22,v.h*0.4);
-      // Wheels (big tires)
-      ctx.fillStyle='#111';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.15,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.65,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.87,v.y,wr,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#999';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.15,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.65,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.87,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
-    }else if(v.type==='bus'){
-      const wr=v.h*0.3;
-      // Body
-      ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w,v.h);
-      roundRect(ctx,v.x+2,v.y-v.h-3,v.w-4,5,2);ctx.fill();
-      // Windows (many)
-      ctx.fillStyle='rgba(150,200,255,0.55)';
-      const winCount=8;
-      for(let wi=0;wi<winCount;wi++){
-        const wx=v.x+v.w*0.05+wi*(v.w*0.88/winCount);
-        ctx.fillRect(wx,v.y-v.h+4,v.w*0.8/winCount*0.85,v.h*0.45);
-      }
-      // Door
-      ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(v.x+v.w-v.w*0.12,v.y-v.h+3,v.w*0.08,v.h-5);
-      // Wheel wells
-      ctx.fillStyle='#111';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.12,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.85,v.y,wr,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#999';
-      ctx.beginPath();ctx.arc(v.x+v.w*0.12,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.85,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
-      // Route sign
-      ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.fillText('42',v.x+v.w/2,v.y-v.h-1);
-    }else if(v.type==='rover'){
-      ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w,v.h*0.5);
-      ctx.fillRect(v.x+10,v.y-v.h-8,v.w-20,8);
-      ctx.fillStyle='#666';ctx.beginPath();ctx.arc(v.x+12,v.y,6,0,Math.PI*2);ctx.arc(v.x+v.w-12,v.y,6,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#aaa';ctx.beginPath();ctx.arc(v.x+12,v.y,3,0,Math.PI*2);ctx.arc(v.x+v.w-12,v.y,3,0,Math.PI*2);ctx.fill();
-      // Antenna
-      ctx.strokeStyle='#888';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(v.x+v.w-15,v.y-v.h-8);ctx.lineTo(v.x+v.w-10,v.y-v.h-20);ctx.stroke();
-      ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(v.x+v.w-10,v.y-v.h-20,2,0,Math.PI*2);ctx.fill();
-    }
-    ctx.restore();
+    renderVehicle(v);
   });
 
   // --- HAZARDS ---
@@ -8197,6 +8132,62 @@ function renderCow(c){
   if(c.beingBeamed){ctx.fillStyle='rgba(0,255,0,0.7)';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(c.label,cx,by-16*s);}
 }
 
+function renderVehicle(v){
+  ctx.save();
+  if(v.vx<0){ctx.translate(v.x+v.w/2,0);ctx.scale(-1,1);ctx.translate(-(v.x+v.w/2),0);}
+  if(v.type==='car'){
+    const wr=v.h*0.35;
+    ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h*0.55,v.w,v.h*0.55);
+    ctx.fillStyle=v.color;roundRect(ctx,v.x+v.w*0.2,v.y-v.h-2,v.w*0.6,v.h*0.5,4);ctx.fill();
+    ctx.fillStyle='rgba(150,200,255,0.55)';
+    ctx.fillRect(v.x+v.w*0.22,v.y-v.h+2,v.w*0.22,v.h*0.4);
+    ctx.fillRect(v.x+v.w*0.56,v.y-v.h+2,v.w*0.22,v.h*0.4);
+    ctx.fillStyle='rgba(0,0,0,0.25)';ctx.fillRect(v.x,v.y-v.h*0.15,v.w,1.5);
+    ctx.fillStyle='#111';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.22,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.78,v.y,wr,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#888';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.22,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.78,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
+    if(typeof dayNightBrightness!=='undefined' && dayNightBrightness<0){ctx.fillStyle='rgba(255,255,150,0.7)';const hx=v.vx>0?v.x+v.w+2:v.x-2;ctx.beginPath();ctx.arc(hx,v.y-v.h*0.35,wr*0.8,0,Math.PI*2);ctx.fill();}
+  }else if(v.type==='truck'){
+    const wr=v.h*0.3;
+    ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w*0.3,v.h);
+    roundRect(ctx,v.x+v.w*0.02,v.y-v.h-3,v.w*0.26,5,2);ctx.fill();
+    ctx.fillStyle='#888';ctx.fillRect(v.x+v.w*0.32,v.y-v.h*1.15,v.w*0.68,v.h*1.15);
+    ctx.strokeStyle='#555';ctx.lineWidth=1.2;ctx.strokeRect(v.x+v.w*0.32,v.y-v.h*1.15,v.w*0.68,v.h*1.15);
+    ctx.strokeStyle='#666';ctx.lineWidth=0.6;
+    for(let pl=1;pl<4;pl++){const px=v.x+v.w*0.32+v.w*0.68*pl/4;ctx.beginPath();ctx.moveTo(px,v.y-v.h*1.15);ctx.lineTo(px,v.y);ctx.stroke();}
+    ctx.fillStyle='rgba(150,200,255,0.55)';ctx.fillRect(v.x+v.w*0.05,v.y-v.h+3,v.w*0.22,v.h*0.4);
+    ctx.fillStyle='#111';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.15,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.65,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.87,v.y,wr,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#999';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.15,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.65,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.87,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
+  }else if(v.type==='bus'){
+    const wr=v.h*0.3;
+    ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w,v.h);
+    roundRect(ctx,v.x+2,v.y-v.h-3,v.w-4,5,2);ctx.fill();
+    ctx.fillStyle='rgba(150,200,255,0.55)';
+    const winCount=8;
+    for(let wi=0;wi<winCount;wi++){
+      const wx=v.x+v.w*0.05+wi*(v.w*0.88/winCount);
+      ctx.fillRect(wx,v.y-v.h+4,v.w*0.8/winCount*0.85,v.h*0.45);
+    }
+    ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fillRect(v.x+v.w-v.w*0.12,v.y-v.h+3,v.w*0.08,v.h-5);
+    ctx.fillStyle='#111';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.12,v.y,wr,0,Math.PI*2);ctx.arc(v.x+v.w*0.85,v.y,wr,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#999';
+    ctx.beginPath();ctx.arc(v.x+v.w*0.12,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.85,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.fillText('42',v.x+v.w/2,v.y-v.h-1);
+  }else if(v.type==='rover'){
+    ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w,v.h*0.5);
+    ctx.fillRect(v.x+10,v.y-v.h-8,v.w-20,8);
+    ctx.fillStyle='#666';ctx.beginPath();ctx.arc(v.x+12,v.y,6,0,Math.PI*2);ctx.arc(v.x+v.w-12,v.y,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#aaa';ctx.beginPath();ctx.arc(v.x+12,v.y,3,0,Math.PI*2);ctx.arc(v.x+v.w-12,v.y,3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#888';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(v.x+v.w-15,v.y-v.h-8);ctx.lineTo(v.x+v.w-10,v.y-v.h-20);ctx.stroke();
+    ctx.fillStyle='#f00';ctx.beginPath();ctx.arc(v.x+v.w-10,v.y-v.h-20,2,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawStar(c,cx,cy,r,pts){c.beginPath();for(let i=0;i<pts*2;i++){const a=Math.PI/2*3+i*Math.PI/pts;const rad=i%2===0?r:r*0.4;c.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);}c.closePath();c.fill();}
 // Draw a detailed alien preview at given position and scale with a skin
 function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
@@ -8846,6 +8837,8 @@ function getDebugUnitCatalog(planet){
   }
   const cows = COW_TYPES[planet.id];
   if(cows && cows.length) groups.push({cat:'Animals',units:cows.map(c=>({label:c.label,type:c.wack,size:c.size,color:c.color,spots:c.spots,isCow:true}))});
+  const vehs = VEHICLE_TYPES[planet.id];
+  if(vehs && vehs.length) groups.push({cat:'Vehicles',units:vehs.map(v=>({...v,isVehicle:true}))});
   return groups;
 }
 
@@ -8862,6 +8855,13 @@ let debugSelectedPlanet = null;
 let debugPreviewPuppets = null; // { unit, isCow, left, right }
 
 function buildPreviewPuppet(unit, forceDir, planet){
+  if(unit.isVehicle){
+    return {
+      x:-unit.w/2, y:GROUND_LEVEL, w:unit.w, h:unit.h,
+      color:unit.color, type:unit.type, label:unit.label,
+      vx:forceDir*(unit.speed||1), alive:true, exploding:0
+    };
+  }
   if(unit.isCow){
     const s=unit.size;
     return {
@@ -8894,7 +8894,8 @@ function buildPreviewPuppet(unit, forceDir, planet){
   };
 }
 
-function animatePreviewPuppet(p, isCow){
+function animatePreviewPuppet(p, isCow, isVehicle){
+  if(isVehicle) return; // static preview — sprite direction already set via vx sign
   p.walkTimer++;
   if(isCow){
     p.legAnim += 0.2;
@@ -8914,10 +8915,11 @@ function animatePreviewPuppet(p, isCow){
 }
 
 // Draw a preview puppet anchored at (screenX, screenY) where screenY is the ground line.
-function drawPreviewPuppetAt(p, isCow, screenX, screenY){
+function drawPreviewPuppetAt(p, isCow, screenX, screenY, isVehicle){
   ctx.save();
   ctx.translate(screenX, screenY - GROUND_LEVEL);
-  if(isCow) renderCow(p);
+  if(isVehicle) renderVehicle(p);
+  else if(isCow) renderCow(p);
   else renderHuman(p);
   ctx.restore();
 }
@@ -9269,6 +9271,7 @@ function drawMainMenu(){
     const topY    = ch*0.42;
     const bottomY = ch*0.62;
     const isCow = debugPreviewPuppets.isCow;
+    const isVehicle = debugPreviewPuppets.isVehicle;
 
     // Draw two "ground lines" so the viewer sees where the feet are planted
     ctx.strokeStyle='rgba(0,255,0,0.18)';ctx.lineWidth=1;
@@ -9277,12 +9280,12 @@ function drawMainMenu(){
 
     // Row labels
     ctx.fillStyle='rgba(0,255,150,0.5)';ctx.font='12px monospace';ctx.textAlign='left';
-    ctx.fillText('walking left ←',  cw*0.2, topY-8);
-    ctx.fillText('walking right →', cw*0.2, bottomY-8);
+    ctx.fillText(isVehicle?'facing left ←':'walking left ←',  cw*0.2, topY-8);
+    ctx.fillText(isVehicle?'facing right →':'walking right →', cw*0.2, bottomY-8);
 
     // Puppets
-    drawPreviewPuppetAt(debugPreviewPuppets.left,  isCow, cw/2, topY);
-    drawPreviewPuppetAt(debugPreviewPuppets.right, isCow, cw/2, bottomY);
+    drawPreviewPuppetAt(debugPreviewPuppets.left,  isCow, cw/2, topY,    isVehicle);
+    drawPreviewPuppetAt(debugPreviewPuppets.right, isCow, cw/2, bottomY, isVehicle);
 
     ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
     ctx.fillText('ESC to back',cw/2,ch-20);
@@ -9398,7 +9401,7 @@ function updateMainMenu(){
       if(flat.length>0){
         const u=flat[mainMenuSel].unit;
         debugPreviewPuppets = {
-          unit:u, isCow:!!u.isCow,
+          unit:u, isCow:!!u.isCow, isVehicle:!!u.isVehicle,
           left:  buildPreviewPuppet(u, -1, debugSelectedPlanet),
           right: buildPreviewPuppet(u,  1, debugSelectedPlanet),
         };
@@ -9409,8 +9412,8 @@ function updateMainMenu(){
   }
   else if(mainMenuMode==='debugPreview'){
     if(debugPreviewPuppets){
-      animatePreviewPuppet(debugPreviewPuppets.left,  debugPreviewPuppets.isCow);
-      animatePreviewPuppet(debugPreviewPuppets.right, debugPreviewPuppets.isCow);
+      animatePreviewPuppet(debugPreviewPuppets.left,  debugPreviewPuppets.isCow, debugPreviewPuppets.isVehicle);
+      animatePreviewPuppet(debugPreviewPuppets.right, debugPreviewPuppets.isCow, debugPreviewPuppets.isVehicle);
     }
     if(keys['escape']||keys['backspace']){keys['escape']=false;keys['backspace']=false;mainMenuMode='debugUnits';debugPreviewPuppets=null;window._mmCool=10;}
   }
