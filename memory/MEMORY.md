@@ -4,6 +4,7 @@
 - [Feedback: Gameplay](feedback_gameplay.md) — Design preferences for alive world, panic, controls
 - [Feedback: Removed Features](feedback_removed_features.md) — Speech bubbles and caves explicitly removed — don't re-add
 - [Feedback: Pre-commit review](feedback_pre_commit_review.md) — run kiss-code-reviewer agent before every commit
+- [Feedback: Commit workflow](feedback_commit_workflow.md) — user commits themselves; don't run git commit unless asked
 - [Feedback: Game dev brainstorm](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
 - [Project: Earth Design](project_earth.md) — Earth biome layout, population, caves, mountains
 - [Project: Game Systems](project_systems.md) — Skins, save/load, menus, cave system, vehicles

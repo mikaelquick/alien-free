@@ -5683,12 +5683,20 @@ function drawSpace(){
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // hidden until discovered
     const sx=p.spaceX,sy=p.spaceY;
-    // Atmosphere glow
-    const gr=ctx.createRadialGradient(sx,sy,p.radius*0.8,sx,sy,p.radius*1.4);gr.addColorStop(0,p.atmosphere+'40');gr.addColorStop(1,'transparent');
-    ctx.fillStyle=gr;ctx.beginPath();ctx.arc(sx,sy,p.radius*1.4,0,Math.PI*2);ctx.fill();
+    // Atmosphere glow (gradient cached per planet — coords + colors are static)
+    if(!p._atmosphereGrad){
+      const gr=ctx.createRadialGradient(sx,sy,p.radius*0.8,sx,sy,p.radius*1.4);
+      gr.addColorStop(0,p.atmosphere+'40');gr.addColorStop(1,'transparent');
+      p._atmosphereGrad=gr;
+    }
+    ctx.fillStyle=p._atmosphereGrad;ctx.beginPath();ctx.arc(sx,sy,p.radius*1.4,0,Math.PI*2);ctx.fill();
     // Planet body
-    const pg=ctx.createRadialGradient(sx-p.radius*0.3,sy-p.radius*0.3,p.radius*0.1,sx,sy,p.radius);pg.addColorStop(0,p.color);pg.addColorStop(0.7,p.color2);pg.addColorStop(1,'#000');
-    ctx.fillStyle=pg;ctx.beginPath();ctx.arc(sx,sy,p.radius,0,Math.PI*2);ctx.fill();
+    if(!p._bodyGrad){
+      const pg=ctx.createRadialGradient(sx-p.radius*0.3,sy-p.radius*0.3,p.radius*0.1,sx,sy,p.radius);
+      pg.addColorStop(0,p.color);pg.addColorStop(0.7,p.color2);pg.addColorStop(1,'#000');
+      p._bodyGrad=pg;
+    }
+    ctx.fillStyle=p._bodyGrad;ctx.beginPath();ctx.arc(sx,sy,p.radius,0,Math.PI*2);ctx.fill();
     // Surface bands
     ctx.strokeStyle=p.color+'60';ctx.lineWidth=1;
     for(let i=0;i<5;i++){const yO=(i-2)*p.radius*0.3,w=Math.sqrt(Math.max(0,p.radius*p.radius-yO*yO));ctx.beginPath();ctx.ellipse(sx,sy+yO,w,Math.abs(yO)*0.15+3,0,0,Math.PI*2);ctx.stroke();}
@@ -7910,7 +7918,8 @@ function drawShip(){
 
 // --- HELPERS ---
 function renderHuman(h){
-  const limb=(x1,y1,x2,y2,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
+  ctx.lineCap='round';
+  const limb=(x1,y1,x2,y2,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
   const s=h.scale||1,bw=h.bodyWidth||5;
   const legW=bw>7?4:bw<4?2:3;
   // Legs
