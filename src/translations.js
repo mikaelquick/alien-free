@@ -1,7 +1,7 @@
 // SAD ABDUCTION — i18n Translation Data
 // Languages: en, de, sv, es, pt, fr
 
-const TRANSLATIONS = {
+export const TRANSLATIONS = {
 
 // ============================================================
 // ENGLISH
