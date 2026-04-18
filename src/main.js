@@ -1271,12 +1271,17 @@ const mountainHumanTypes = [
 // Used when window.prehistoricEra is true and planet is Earth.
 // Flags: isDino (marks render path), dinoKind (silhouette variant), biped (true=2 legs + small arms + tail, false=quadruped)
 const prehistoricHumanTypes = [
+  // Warm/temperate dinos — excluded from snow by generateInhabitant's filter.
   { type:'dino', label:'T-Rex',       scale:2.6, bodyWidth:15, headR:14, mass:6,   colors:['#5a4a20','#6a5520','#4a3818'],   hat:null, extra:null, isDino:true, dinoKind:'trex',   biped:true  },
   { type:'dino', label:'Raptor',      scale:1.3, bodyWidth:6,  headR:8,  mass:1.4, colors:['#8a6820','#a08040','#704818'],   hat:null, extra:null, isDino:true, dinoKind:'raptor', biped:true  },
   { type:'dino', label:'Stegosaurus', scale:2.2, bodyWidth:18, headR:9,  mass:4.5, colors:['#3a6a4a','#2a4a3a','#4a7a5a'],   hat:null, extra:null, isDino:true, dinoKind:'stego',  biped:false },
   { type:'dino', label:'Triceratops', scale:2.1, bodyWidth:16, headR:13, mass:4.8, colors:['#6a4a30','#7a5a40','#4a3820'],   hat:null, extra:null, isDino:true, dinoKind:'tricera',biped:false },
   { type:'dino', label:'Brontosaurus',scale:3.0, bodyWidth:20, headR:9,  mass:8,   colors:['#4a6a5a','#5a7a6a','#3a5a4a'],   hat:null, extra:null, isDino:true, dinoKind:'bronto', biped:false },
   { type:'dino', label:'Pterodactyl', scale:1.4, bodyWidth:5,  headR:9,  mass:0.9, colors:['#5a4020','#6a4830','#4a3018'],   hat:null, extra:null, isDino:true, dinoKind:'ptero',  biped:true  },
+  // Polar dinos — only spawn in snow biome. Reuse silhouettes with cold palettes.
+  { type:'dino', label:'Cryolophosaurus', scale:1.5, bodyWidth:7,  headR:9,  mass:1.8, colors:['#d8e0ec','#b0bcd0','#8090a8'], hat:null, extra:null, isDino:true, dinoKind:'raptor',  biped:true,  biomes:['snow'] },
+  { type:'dino', label:'Pachyrhinosaurus', scale:2.0, bodyWidth:15, headR:13, mass:4.0, colors:['#c0c8d8','#a0a8c0','#7080a0'], hat:null, extra:null, isDino:true, dinoKind:'tricera', biped:false, biomes:['snow'] },
+  { type:'dino', label:'Nanuqsaurus',     scale:2.0, bodyWidth:12, headR:12, mass:3.5, colors:['#c8d0e0','#a0acc0','#6a7890'], hat:null, extra:null, isDino:true, dinoKind:'trex',    biped:true,  biomes:['snow'] },
 ];
 
 // Biome-specific human types for Earth
@@ -1508,6 +1513,156 @@ function generateBuilding(x) {
   }
 }
 
+// Helper: push a decorative entity (tree/volcano) directly into blocks/buildings arrays.
+function _addDecor(bx, by, w, h, type, opts={}) {
+  const building = {x:bx, w, blocks:[], destroyed:false, totalBlocks:1, brokenBlocks:0};
+  const block = {x:bx, y:by, w, h, vx:0, vy:0,
+    color: opts.color||'#4a3a1a', accentColor: opts.accent||'#2a1a0a',
+    fixed:true, mass:Math.max(3, w*h/300), building, row:0, col:0,
+    health:opts.health||300, maxHealth:opts.health||300,
+    cracked:false, onFire:false, burnTimer:0, exploding:false, explodeTimer:0,
+    hasWindow:false, windowLit:false, isDoor:false,
+    shape:'building', buildingType:type,
+    windowSeed:Math.random()*1000, isTree:opts.isTree||false,
+    ...opts};
+  building.blocks.push(block); blocks.push(block); buildings.push(building);
+  return block;
+}
+
+// Prehistoric flora — biome-appropriate Mesozoic-era trees spread across old Earth.
+function generatePrehistoricFlora() {
+  let x = 200;
+  while (x < worldWidth - 200) {
+    const biome = getEarthBiome(x);
+    if (biome.isOcean || isOverOcean(x)) { x += 200; continue; }
+    let placed = false;
+    const r = Math.random();
+    switch (biome.id) {
+      case 'snow': {
+        // Snow-capped conifers (hardy conifers lived at polar dino regions)
+        if (r < 0.55) {
+          const th = 90 + Math.random()*60;
+          _addDecor(x, GROUND_LEVEL-th, 40, th, 'tree',
+            {isTree:true, health:200, treeColor:'#3a2a14', canopyColor:'#1a3a28', conifer:true, snowCap:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'mountains': {
+        if (r < 0.45) {
+          const th = 80 + Math.random()*50;
+          _addDecor(x, GROUND_LEVEL-th, 40, th, 'tree',
+            {isTree:true, health:180, treeColor:'#3a2a10', canopyColor:'#224a24', conifer:true});
+          placed = true;
+        } else if (r < 0.6) {
+          const th = 70 + Math.random()*40;
+          _addDecor(x, GROUND_LEVEL-th, 45, th, 'tree',
+            {isTree:true, health:170, treeColor:'#5a4a20', canopyColor:'#a4c040', ginkgo:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'farmland':
+      case 'suburbs': {
+        if (r < 0.5) {
+          const th = 70 + Math.random()*50;
+          _addDecor(x, GROUND_LEVEL-th, 40, th, 'tree',
+            {isTree:true, health:170, treeColor:'#3a2a10', canopyColor:'#2a5a2a', conifer:true});
+          placed = true;
+        } else if (r < 0.7) {
+          const th = 80 + Math.random()*40;
+          _addDecor(x, GROUND_LEVEL-th, 50, th, 'tree',
+            {isTree:true, health:180, treeColor:'#5a4020', canopyColor:'#b0c840', ginkgo:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'jungle': {
+        if (r < 0.55) {
+          const th = 90 + Math.random()*70;
+          _addDecor(x, GROUND_LEVEL-th, 70, th, 'tree',
+            {isTree:true, health:160, treeColor:'#2a1a0a', canopyColor:'#2a6028', treeFern:true});
+          placed = true;
+        } else if (r < 0.8) {
+          const th = 55 + Math.random()*30;
+          _addDecor(x, GROUND_LEVEL-th, 50, th, 'tree',
+            {isTree:true, health:150, treeColor:'#3a2814', canopyColor:'#4a7828', cycad:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'desert': {
+        if (r < 0.18) {
+          const th = 50 + Math.random()*25;
+          _addDecor(x, GROUND_LEVEL-th, 45, th, 'tree',
+            {isTree:true, health:150, treeColor:'#4a3818', canopyColor:'#5c7828', cycad:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'beach': {
+        if (r < 0.3) {
+          const th = 70 + Math.random()*35;
+          _addDecor(x, GROUND_LEVEL-th, 40, th, 'tree',
+            {isTree:true, health:170, treeColor:'#3a2a10', canopyColor:'#2a5a2a', conifer:true});
+          placed = true;
+        }
+        break;
+      }
+      case 'city':
+      case 'landmarks': {
+        if (r < 0.25) {
+          const th = 55 + Math.random()*30;
+          _addDecor(x, GROUND_LEVEL-th, 48, th, 'tree',
+            {isTree:true, health:150, treeColor:'#3a2814', canopyColor:'#4a7828', cycad:true});
+          placed = true;
+        } else if (r < 0.45) {
+          const th = 70 + Math.random()*40;
+          _addDecor(x, GROUND_LEVEL-th, 45, th, 'tree',
+            {isTree:true, health:170, treeColor:'#5a4020', canopyColor:'#a8c040', ginkgo:true});
+          placed = true;
+        }
+        break;
+      }
+      default: {
+        if (r < 0.3) {
+          const th = 80 + Math.random()*40;
+          _addDecor(x, GROUND_LEVEL-th, 45, th, 'tree',
+            {isTree:true, health:180, treeColor:'#3a2a10', canopyColor:'#2a5a2a', conifer:true});
+          placed = true;
+        }
+      }
+    }
+    // Spacing: denser in forests, sparser in open biomes
+    const spacing = (biome.id==='jungle') ? 90 : (biome.id==='desert') ? 260 : (biome.id==='snow') ? 140 : (biome.id==='mountains') ? 150 : 120;
+    x += spacing + Math.random()*60;
+    if (!placed) x += 20;
+  }
+}
+
+// Prehistoric volcanoes — a few scattered across old Earth.
+function generatePrehistoricVolcanoes() {
+  // Pick ~3 spots in varied biomes, avoiding ocean.
+  const positions = [
+    {frac: 0.12, snowCap: true},  // polar/snow area
+    {frac: 0.48, snowCap: false}, // mid, likely desert/mountains
+    {frac: 0.78, snowCap: false}, // later in world
+  ];
+  for (const p of positions) {
+    let vx = Math.floor(worldWidth * p.frac);
+    // nudge off ocean
+    let tries = 0;
+    while (tries < 20 && (isOverOcean(vx) || (getEarthBiome(vx).isOcean))) {
+      vx += 400; tries++;
+      if (vx > worldWidth - 300) vx = 400;
+    }
+    const h = 180 + Math.random()*120;
+    const w = 220 + Math.random()*100;
+    _addDecor(vx, GROUND_LEVEL-h, w, h, 'volcano',
+      {health:1200, color:'#3a2618', accent:'#1a1008', snowCap: p.snowCap});
+  }
+}
+
 // --- DRAW BUILDING UNIT ---
 function drawBuildingUnit(b) {
   const sx=b.x, sy=b.y, w=b.w, h=b.h;
@@ -1631,6 +1786,79 @@ function drawBuildingUnit(b) {
   case 'tree': case 'palmTree': {
     const trunkW=12, trunkH=h*0.55;
     const trkC=b.treeColor||'#5a3a1a', canC=b.canopyColor||'#2a6a1a';
+    // --- Conifer (tall layered spire — araucaria / sequoia silhouette) ---
+    if(b.conifer){
+      // Thin straight trunk
+      ctx.fillStyle=trkC; ctx.fillRect(sx+w/2-3,sy+h*0.2,6,h*0.8);
+      // Stacked triangle layers
+      const layers=5;
+      for(let i=0;i<layers;i++){
+        const ly=sy+h*0.08+i*(h*0.18);
+        const lw=w*(0.5+i*0.1);
+        ctx.fillStyle=i%2===0?canC:'rgba(0,0,0,0.12)';
+        if(i%2===1) ctx.fillStyle=canC;
+        ctx.beginPath();
+        ctx.moveTo(sx+w/2,ly);
+        ctx.lineTo(sx+w/2-lw/2,ly+h*0.22);
+        ctx.lineTo(sx+w/2+lw/2,ly+h*0.22);
+        ctx.closePath(); ctx.fill();
+        if(b.snowCap){
+          ctx.fillStyle='rgba(255,255,255,0.85)';
+          ctx.beginPath();
+          ctx.moveTo(sx+w/2,ly+2);
+          ctx.lineTo(sx+w/2-lw*0.42,ly+h*0.2);
+          ctx.lineTo(sx+w/2+lw*0.42,ly+h*0.2);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+      break;
+    }
+    // --- Ginkgo (fan-shape canopy, autumn-tinted) ---
+    if(b.ginkgo){
+      ctx.fillStyle=trkC; ctx.fillRect(sx+w/2-4,sy+h-trunkH,8,trunkH);
+      ctx.fillStyle=canC;
+      // Fan-shaped canopy made of 3 overlapping ellipses
+      ctx.beginPath(); ctx.ellipse(sx+w/2,sy+h*0.25,w*0.55,h*0.3,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx+w*0.3,sy+h*0.35,w*0.3,h*0.18,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx+w*0.7,sy+h*0.35,w*0.3,h*0.18,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(220,220,120,0.35)';
+      ctx.beginPath(); ctx.ellipse(sx+w*0.45,sy+h*0.2,w*0.2,h*0.12,0,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    // --- Tree fern (thin trunk with arching fronds radiating out) ---
+    if(b.treeFern){
+      ctx.fillStyle=trkC; ctx.fillRect(sx+w/2-3,sy+h*0.15,6,h*0.85);
+      // Bark rings
+      ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+      for(let i=0;i<5;i++){const ry=sy+h*0.25+i*h*0.15;
+        ctx.beginPath(); ctx.moveTo(sx+w/2-3,ry); ctx.lineTo(sx+w/2+3,ry); ctx.stroke();}
+      // Fronds
+      ctx.strokeStyle=canC; ctx.lineWidth=3; ctx.lineCap='round';
+      for(let i=0;i<7;i++){const a=-Math.PI*0.5 + (i-3)*0.55;
+        const fx=sx+w/2+Math.cos(a)*w*0.55;
+        const fy=sy+h*0.15+Math.sin(a)*h*0.2;
+        ctx.beginPath(); ctx.moveTo(sx+w/2,sy+h*0.2);
+        ctx.quadraticCurveTo(sx+w/2+Math.cos(a)*w*0.3,sy+h*0.15+Math.sin(a)*h*0.12+Math.sin(t+i)*2, fx,fy); ctx.stroke();
+        ctx.fillStyle=canC; ctx.beginPath(); ctx.arc(fx,fy,3,0,Math.PI*2); ctx.fill();}
+      break;
+    }
+    // --- Cycad (short stout trunk with palm-like crown of stiff fronds) ---
+    if(b.cycad){
+      const cTrunkW=w*0.35;
+      ctx.fillStyle=trkC;
+      ctx.fillRect(sx+w/2-cTrunkW/2,sy+h*0.4,cTrunkW,h*0.6);
+      // Textured scales
+      ctx.fillStyle='rgba(0,0,0,0.25)';
+      for(let i=0;i<4;i++){ctx.fillRect(sx+w/2-cTrunkW/2,sy+h*0.45+i*h*0.14,cTrunkW,2);}
+      // Stiff fronds crown
+      ctx.strokeStyle=canC; ctx.lineWidth=3; ctx.lineCap='round';
+      for(let i=0;i<9;i++){const a=-Math.PI*0.5 + (i-4)*0.38;
+        ctx.beginPath(); ctx.moveTo(sx+w/2,sy+h*0.4);
+        ctx.lineTo(sx+w/2+Math.cos(a)*w*0.55, sy+h*0.4+Math.sin(a)*h*0.35); ctx.stroke();}
+      ctx.fillStyle=canC;
+      ctx.beginPath(); ctx.arc(sx+w/2,sy+h*0.4,6,0,Math.PI*2); ctx.fill();
+      break;
+    }
     // Trunk (gradient cached on fixed trees)
     let tg=b._trunkGrad;
     if(!tg||!b.fixed){tg=ctx.createLinearGradient(sx+w/2-trunkW/2,sy+h-trunkH,sx+w/2+trunkW/2,sy+h);tg.addColorStop(0,trkC);tg.addColorStop(0.5,'#7a5a3a');tg.addColorStop(1,trkC);if(b.fixed)b._trunkGrad=tg;}
@@ -1678,6 +1906,86 @@ function drawBuildingUnit(b) {
     }
     ctx.strokeStyle='rgba(0,80,0,0.3)'; ctx.lineWidth=1;
     ctx.strokeRect(sx+w/2-trunk/2,sy,trunk,h);
+    break;
+  }
+  case 'volcano': {
+    // Prehistoric Earth volcano: dark cone + crater glow + rising smoke + lava drips.
+    const cx=sx+w/2;
+    // Snow cap check
+    const isSnowy = !!b.snowCap;
+    // Silhouette slope (filled polygon)
+    const grad=ctx.createLinearGradient(cx,sy,cx,sy+h);
+    grad.addColorStop(0,'#4a2a20');
+    grad.addColorStop(0.5,'#3a1e16');
+    grad.addColorStop(1,'#1a100c');
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.moveTo(sx,sy+h);
+    ctx.lineTo(sx+w*0.3,sy+h*0.12);
+    ctx.lineTo(sx+w*0.7,sy+h*0.12);
+    ctx.lineTo(sx+w,sy+h);
+    ctx.closePath(); ctx.fill();
+    // Rugged shading
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(sx+w*0.25,sy+h*0.5); ctx.lineTo(sx+w*0.35,sy+h*0.7); ctx.lineTo(sx+w*0.3,sy+h*0.9); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx+w*0.75,sy+h*0.4); ctx.lineTo(sx+w*0.7,sy+h*0.6); ctx.lineTo(sx+w*0.72,sy+h*0.85); ctx.stroke();
+    // Snow cap on flanks (optional)
+    if(isSnowy){
+      ctx.fillStyle='rgba(240,245,255,0.85)';
+      ctx.beginPath();
+      ctx.moveTo(sx+w*0.3,sy+h*0.12);
+      ctx.lineTo(sx+w*0.18,sy+h*0.4);
+      ctx.lineTo(sx+w*0.28,sy+h*0.45);
+      ctx.lineTo(sx+w*0.4,sy+h*0.35);
+      ctx.lineTo(sx+w*0.5,sy+h*0.45);
+      ctx.lineTo(sx+w*0.6,sy+h*0.38);
+      ctx.lineTo(sx+w*0.72,sy+h*0.45);
+      ctx.lineTo(sx+w*0.82,sy+h*0.4);
+      ctx.lineTo(sx+w*0.7,sy+h*0.12);
+      ctx.closePath(); ctx.fill();
+    }
+    // Crater rim
+    const crW=w*0.4, crH=h*0.06, crY=sy+h*0.12;
+    ctx.fillStyle='#2a1410';
+    ctx.beginPath(); ctx.ellipse(cx,crY,crW/2,crH,0,0,Math.PI*2); ctx.fill();
+    // Lava glow in crater (animated)
+    const glowP=0.7+Math.sin(t*2+sx*0.01)*0.25;
+    const lg=ctx.createRadialGradient(cx,crY,0,cx,crY,crW*0.55);
+    lg.addColorStop(0,`rgba(255,220,80,${glowP})`);
+    lg.addColorStop(0.4,`rgba(255,120,20,${glowP*0.7})`);
+    lg.addColorStop(1,'rgba(120,30,0,0)');
+    ctx.fillStyle=lg;
+    ctx.beginPath(); ctx.ellipse(cx,crY,crW*0.6,crH*3,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,180,40,${glowP})`;
+    ctx.beginPath(); ctx.ellipse(cx,crY-1,crW*0.35,crH*0.8,0,0,Math.PI*2); ctx.fill();
+    // Lava dribble down one side (animated length)
+    const dribPh=Math.sin(t*0.7+sx*0.02);
+    const dribLen=h*(0.15+0.25*Math.max(0,dribPh));
+    ctx.strokeStyle='rgba(255,120,30,0.85)'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(cx-crW*0.3,crY+crH);
+    ctx.quadraticCurveTo(cx-crW*0.4,crY+crH+dribLen*0.5, cx-crW*0.22, crY+crH+dribLen);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,220,80,0.6)'; ctx.lineWidth=1.2;
+    ctx.stroke();
+    // Smoke: few layered puffs above crater (don't push to particles — draw directly)
+    for(let i=0;i<4;i++){
+      const ph=t*0.6 + i*1.1 + sx*0.03;
+      const rise=((t*0.8 + i*0.9 + sx*0.01) % 5)/5;
+      const sxo=cx + Math.sin(ph)*crW*0.3;
+      const syo=crY - rise*h*1.2;
+      const sr=10 + rise*18;
+      ctx.fillStyle=`rgba(140,130,125,${(1-rise)*0.35})`;
+      ctx.beginPath(); ctx.arc(sxo,syo,sr,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=`rgba(80,70,70,${(1-rise)*0.25})`;
+      ctx.beginPath(); ctx.arc(sxo+4,syo+2,sr*0.7,0,Math.PI*2); ctx.fill();
+    }
+    // Rare ember spark dropped into particles (camera-visible only)
+    if(Math.random()<0.04 && typeof particles!=='undefined'){
+      particles.push({x:cx+(Math.random()-0.5)*crW*0.3, y:crY, vx:(Math.random()-0.5)*1.5, vy:-1.5-Math.random()*1.5, life:40+Math.random()*30, color:['#f80','#fa0','#ff6'][Math.floor(Math.random()*3)], size:1+Math.random()*1.5});
+    }
     break;
   }
   case 'mosque': {
@@ -2646,7 +2954,11 @@ function generateInhabitant(x) {
   } else {
     // Earth: biome-specific humans (or Cretaceous dinosaurs, during prehistoricEra)
     if(p.id==='earth' && window.prehistoricEra){
-      template = prehistoricHumanTypes[Math.floor(Math.random()*prehistoricHumanTypes.length)];
+      // Biome-aware dino pick: entries with a `biomes` list are restricted to those biomes;
+      // entries without one are excluded from the snow biome (no tropical dinos in the Arctic).
+      const biomeId = getEarthBiome(x).id;
+      const candidates = prehistoricHumanTypes.filter(t => t.biomes ? t.biomes.includes(biomeId) : biomeId!=='snow');
+      template = (candidates.length ? candidates : prehistoricHumanTypes)[Math.floor(Math.random()*(candidates.length||prehistoricHumanTypes.length))];
       // Dinos: reptilian skin uses template colors rather than human hsl
       skinColor = template.colors[0];
     } else if(p.id==='earth'){
@@ -3092,6 +3404,30 @@ function generateUnderwaterObjects() {
     });
   }
 
+  // Prehistoric marine reptiles — only during the dinosaur era
+  if (window.prehistoricEra) {
+    // Mosasaurus — apex predator, big and fast
+    for (let i = 0; i < 2; i++) {
+      underwaterObjects.push({
+        type: 'mosasaurus', x: oceanFrom + Math.random() * oceanW,
+        y: GROUND_LEVEL + 180 + Math.random() * (WATER_DEPTH - 420),
+        dir: Math.random()>0.5?1:-1, speed: 0.6 + Math.random()*0.4,
+        phase: Math.random()*Math.PI*2,
+        bodyColor:'#2a3a4a', bellyColor:'#6a8090',
+      });
+    }
+    // Plesiosaurus — long-necked, slower, more common
+    for (let i = 0; i < 3; i++) {
+      underwaterObjects.push({
+        type: 'plesiosaurus', x: oceanFrom + Math.random() * oceanW,
+        y: GROUND_LEVEL + 140 + Math.random() * (WATER_DEPTH - 380),
+        dir: Math.random()>0.5?1:-1, speed: 0.35 + Math.random()*0.25,
+        phase: Math.random()*Math.PI*2,
+        bodyColor:'#3a5a48', bellyColor:'#8aaa90',
+      });
+    }
+  }
+
   // Caves disabled for now
   underwaterCaves = [];
   caveCreatures = [];
@@ -3274,8 +3610,12 @@ function loadPlanet(planet) {
     const diff=planetProgress[planet.id]?planetProgress[planet.id].missionIndex:0;
     const density=(planet.buildingDensity||1)*(1+diff*0.15);
     let bx=200;
-    // Prehistoric Earth: no buildings at all — just wilderness
-    if(planet.id==='earth' && window.prehistoricEra) bx = worldWidth;
+    // Prehistoric Earth: no buildings, but generate biome-appropriate flora + a few volcanoes.
+    if(planet.id==='earth' && window.prehistoricEra){
+      generatePrehistoricFlora();
+      generatePrehistoricVolcanoes();
+      bx = worldWidth;
+    }
     // Planets with buildingDensity 0 (e.g. Moon) stay empty
     if((planet.buildingDensity||1) === 0) bx = worldWidth;
     while(bx<worldWidth-200){
@@ -7361,6 +7701,12 @@ document.addEventListener('keydown', e => {
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
   if (k==='g'&&playerMode==='ship')ship.minigunFiring=true;
   if (!keys[k]&&k==='c'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
+  // Vehicle cloak: while driving a hijacked vehicle, 'v' toggles cloak (matches ship cloak; no energy limit).
+  if (!keys[k]&&k==='v'&&playerMode==='onfoot'&&alien.drivingVehicle&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){
+    const v=alien.drivingVehicle;
+    v.cloaked=!v.cloaked;
+    showMessage(v.cloaked?'Vehicle cloak engaged':'Vehicle cloak disengaged');
+  }
   // Upgrades
   if(!keys[k]&&(k==='1'||k==='2'||k==='3')&&score>=10&&gameMode==='planet'){
     const cost=10;
@@ -9437,8 +9783,9 @@ function updateAlienOnFoot(){
       // World clamp
       if(v.x<50){v.x=50; v.vx=0;}
       if(v.x+v.w>worldWidth-50){v.x=worldWidth-50-v.w; v.vx=0;}
-      // Drive-over gore — horizontal-overlap based, tolerant of unit scale/floating
-      if(Math.abs(v.vx)>0.5){
+      // Drive-over gore — horizontal-overlap based, tolerant of unit scale/floating.
+      // Cloaked vehicles pass through units harmlessly.
+      if(Math.abs(v.vx)>0.5 && !v.cloaked){
         const vL = v.x - 4, vR = v.x + v.w + 4;
         for(let hi=0;hi<humans.length;hi++){
           const h=humans[hi];
@@ -11072,6 +11419,121 @@ function drawPlanet(){
           ctx.restore();
         }
 
+        else if(obj.type === 'mosasaurus') {
+          obj.x += obj.dir * obj.speed;
+          if(obj.x > oceanBounds.to) { obj.dir = -1; }
+          if(obj.x < oceanBounds.from) { obj.dir = 1; }
+          obj.y += Math.sin(_t*0.7 + obj.phase) * 0.3;
+          ctx.save(); ctx.translate(obj.x, obj.y); ctx.scale(obj.dir, 1);
+          const sway = Math.sin(_t*2 + obj.phase) * 6;
+          // Tail (long, tapered, sways)
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath();
+          ctx.moveTo(-15, -8);
+          ctx.quadraticCurveTo(-60, -4 + sway*0.5, -90, sway);
+          ctx.quadraticCurveTo(-95, sway+2, -92, sway+4);
+          ctx.quadraticCurveTo(-60, 4 + sway*0.5, -15, 8);
+          ctx.fill();
+          // Tail fluke
+          ctx.beginPath();
+          ctx.moveTo(-88, sway-2);
+          ctx.lineTo(-104, sway-10);
+          ctx.lineTo(-100, sway);
+          ctx.lineTo(-104, sway+10);
+          ctx.lineTo(-88, sway+2);
+          ctx.fill();
+          // Body
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath();
+          ctx.moveTo(-20, -12);
+          ctx.quadraticCurveTo(10, -16, 30, -10);
+          ctx.quadraticCurveTo(45, -5, 50, 0);
+          ctx.quadraticCurveTo(45, 5, 30, 10);
+          ctx.quadraticCurveTo(10, 16, -20, 12);
+          ctx.fill();
+          // Belly
+          ctx.fillStyle = obj.bellyColor;
+          ctx.beginPath();
+          ctx.moveTo(-20, 8); ctx.quadraticCurveTo(10, 13, 35, 6);
+          ctx.quadraticCurveTo(10, 10, -20, 8);
+          ctx.fill();
+          // Jaw (open slightly)
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath();
+          ctx.moveTo(40, -8); ctx.lineTo(58, -6); ctx.lineTo(56, -2); ctx.lineTo(42, -4);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(42, 4); ctx.lineTo(58, 6); ctx.lineTo(56, 10); ctx.lineTo(40, 8);
+          ctx.fill();
+          // Teeth
+          ctx.fillStyle = '#f0e8d0';
+          for(let i=0; i<5; i++){
+            ctx.beginPath(); ctx.moveTo(42+i*3, -3); ctx.lineTo(43+i*3, 0); ctx.lineTo(44+i*3, -3); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(42+i*3, 5); ctx.lineTo(43+i*3, 2); ctx.lineTo(44+i*3, 5); ctx.fill();
+          }
+          // Eye
+          ctx.fillStyle = '#ffe040'; ctx.beginPath(); ctx.arc(38, -6, 2.2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(38.5, -6, 1.1, 0, Math.PI*2); ctx.fill();
+          // Flippers
+          const flap = Math.sin(_t*1.8 + obj.phase) * 0.35;
+          ctx.fillStyle = obj.bodyColor;
+          ctx.save(); ctx.translate(10, 11); ctx.rotate(0.3 + flap);
+          ctx.beginPath(); ctx.ellipse(0, 0, 14, 4, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(-5, 12); ctx.rotate(0.4 - flap);
+          ctx.beginPath(); ctx.ellipse(0, 0, 12, 3.5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(10, -11); ctx.rotate(-0.3 - flap);
+          ctx.beginPath(); ctx.ellipse(0, 0, 12, 3.5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.restore();
+        }
+
+        else if(obj.type === 'plesiosaurus') {
+          obj.x += obj.dir * obj.speed;
+          if(obj.x > oceanBounds.to) { obj.dir = -1; }
+          if(obj.x < oceanBounds.from) { obj.dir = 1; }
+          obj.y += Math.sin(_t*0.9 + obj.phase) * 0.2;
+          ctx.save(); ctx.translate(obj.x, obj.y); ctx.scale(obj.dir, 1);
+          // Body (rounded)
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath(); ctx.ellipse(0, 0, 28, 11, 0, 0, Math.PI*2); ctx.fill();
+          // Belly
+          ctx.fillStyle = obj.bellyColor;
+          ctx.beginPath(); ctx.ellipse(0, 4, 22, 5, 0, 0, Math.PI*2); ctx.fill();
+          // Long neck (curved, sways)
+          const neckS = Math.sin(_t*1.2 + obj.phase) * 4;
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath();
+          ctx.moveTo(20, -6);
+          ctx.quadraticCurveTo(36, -18 + neckS*0.3, 52, -22 + neckS);
+          ctx.quadraticCurveTo(56, -20 + neckS, 54, -18 + neckS);
+          ctx.quadraticCurveTo(40, -12 + neckS*0.2, 22, -2);
+          ctx.fill();
+          // Head
+          ctx.fillStyle = obj.bodyColor;
+          ctx.beginPath(); ctx.ellipse(55, -22 + neckS, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+          // Eye
+          ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(58, -23 + neckS, 0.9, 0, Math.PI*2); ctx.fill();
+          // Tail
+          ctx.fillStyle = obj.bodyColor;
+          const tailS = Math.sin(_t*1.5 + obj.phase) * 3;
+          ctx.beginPath();
+          ctx.moveTo(-22, -4);
+          ctx.quadraticCurveTo(-36, 0 + tailS*0.4, -44, tailS);
+          ctx.quadraticCurveTo(-36, 4 + tailS*0.4, -22, 4);
+          ctx.fill();
+          // Four flippers
+          const fl = Math.sin(_t*1.5 + obj.phase) * 0.4;
+          ctx.fillStyle = obj.bodyColor;
+          ctx.save(); ctx.translate(8, 8); ctx.rotate(0.4 + fl);
+          ctx.beginPath(); ctx.ellipse(0, 0, 14, 4, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(-10, 8); ctx.rotate(0.5 - fl);
+          ctx.beginPath(); ctx.ellipse(0, 0, 13, 3.5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(8, -7); ctx.rotate(-0.4 - fl);
+          ctx.beginPath(); ctx.ellipse(0, 0, 12, 3.5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(-10, -7); ctx.rotate(-0.5 + fl);
+          ctx.beginPath(); ctx.ellipse(0, 0, 11, 3, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          ctx.restore();
+        }
+
         else if(obj.type === 'seaRock') {
           ctx.fillStyle = obj.color;
           ctx.beginPath();
@@ -12563,11 +13025,11 @@ function drawPlanet(){
     const ep=shipCloak.energy/shipCloak.maxEnergy*100;
     ctx.fillStyle=shipCloak.active?`rgba(0,200,255,${0.5+Math.sin(frameNow*0.01)*0.3})`:'#08a';
     ctx.fillRect(cx,cy,ep,6);
-    ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(shipCloak.active?'CLOAKED':'CLOAK [C]',canvas.width/2,cy-3);
+    ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(shipCloak.active?'CLOAKED':'CLOAK [V]',canvas.width/2,cy-3);
   }
 
-  // --- ALIEN WEAPON HUD (on foot) ---
-  if(playerMode==='onfoot'){
+  // --- ALIEN WEAPON HUD (on foot) — hidden while driving; vehicle controls shown instead ---
+  if(playerMode==='onfoot' && !alien.drivingVehicle){
     const _lo=getRaceWeapons();
     const slots=_lo.length;
     const sw=40, gap=4, total=slots*sw+(slots-1)*gap;
@@ -12589,6 +13051,63 @@ function drawPlanet(){
       ctx.fillText((i+1)+'',sx+7,sy+11);
       ctx.font='8px monospace';
       ctx.fillText(_lo[i].label,sx+sw/2+3,sy+22);
+    }
+  }
+  // --- VEHICLE CONTROLS HUD (while driving) ---
+  if(playerMode==='onfoot' && alien.drivingVehicle){
+    const v = alien.drivingVehicle;
+    const total=170, hx=(canvas.width-total)/2, hy=canvas.height-40;
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(hx-6,hy-6,total+12,34);
+    // Cloak indicator
+    const cloakBg = v.cloaked ? `rgba(120,220,255,${0.25+Math.sin(frameNow*0.01)*0.1})` : 'rgba(120,180,255,0.12)';
+    ctx.fillStyle=cloakBg; ctx.fillRect(hx,hy,78,22);
+    ctx.strokeStyle=v.cloaked?'rgba(160,240,255,0.9)':'rgba(120,180,255,0.5)';
+    ctx.lineWidth=v.cloaked?2:1; ctx.strokeRect(hx+0.5,hy+0.5,77,21);
+    ctx.fillStyle=v.cloaked?'#cff':'#bdf'; ctx.font='bold 10px monospace'; ctx.textAlign='center';
+    ctx.fillText(v.cloaked?'CLOAKED [V]':'CLOAK [V]', hx+39, hy+14);
+    // Boost indicator
+    const boosting = !!keys['shift'];
+    const boostBg = boosting ? 'rgba(255,200,80,0.3)' : 'rgba(255,180,80,0.12)';
+    ctx.fillStyle=boostBg; ctx.fillRect(hx+84,hy,78,22);
+    ctx.strokeStyle=boosting?'rgba(255,220,120,0.9)':'rgba(255,180,80,0.5)';
+    ctx.lineWidth=boosting?2:1; ctx.strokeRect(hx+84.5,hy+0.5,77,21);
+    ctx.fillStyle=boosting?'#ffd':'#fdb'; ctx.font='bold 10px monospace';
+    ctx.fillText(boosting?'BOOSTING':'BOOST [SHIFT]', hx+123, hy+14);
+  }
+
+  // --- SHIP CONTROLS HUD (in ship, on a planet) ---
+  if(playerMode==='ship' && gameMode==='planet' && !mothershipMode){
+    const chips = [
+      {label:'BEAM',   key:'SPC', active: !!ship.beamActive,                       col:[0,255,100]},
+      {label:'MSL',    key:'Q',   active: missileCooldown>0,                       col:[255,140,40]},
+      {label:'FLM',    key:'F',   active: !!ship.flameOn,                          col:[255,80,40]},
+      {label:'CLOAK',  key:'V',   active: !!shipCloak.active,                      col:[120,200,255]},
+      {label:'LASSO',  key:'C',   active: !!(ship.lasso && ship.lasso.active),     col:[255,220,80]},
+      {label:'NUKE',   key:'N',   active: false,                                   col:[255,80,200]},
+      {label:'REPLS',  key:'E',   active: !!keys['e'],                             col:[255,80,80]},
+      {label:'DEPLOY', key:'B',   active: false,                                   col:[180,255,180]},
+    ];
+    const chipW=56, gap=4;
+    const total = chips.length*chipW + (chips.length-1)*gap;
+    const hx=(canvas.width-total)/2, hy=canvas.height-40;
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(hx-6, hy-6, total+12, 34);
+    for(let i=0;i<chips.length;i++){
+      const c = chips[i];
+      const sx = hx + i*(chipW+gap);
+      const [r,g,b] = c.col;
+      const pulse = c.active ? (0.35 + Math.sin(frameNow*0.012)*0.12) : 0.12;
+      ctx.fillStyle = `rgba(${r},${g},${b},${pulse})`;
+      ctx.fillRect(sx, hy, chipW, 22);
+      ctx.strokeStyle = c.active ? `rgba(${r},${g},${b},0.95)` : `rgba(${r},${g},${b},0.5)`;
+      ctx.lineWidth = c.active ? 2 : 1;
+      ctx.strokeRect(sx+0.5, hy+0.5, chipW-1, 21);
+      ctx.fillStyle = c.active ? '#fff' : `rgb(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)})`;
+      ctx.font='bold 9px monospace'; ctx.textAlign='center';
+      ctx.fillText(c.label, sx+chipW/2, hy+10);
+      ctx.font='8px monospace';
+      ctx.fillStyle = c.active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)';
+      ctx.fillText('['+c.key+']', sx+chipW/2, hy+19);
     }
   }
 
@@ -13890,6 +14409,11 @@ function renderHijackedVehicle(v){
   const cx=v.x+v.w/2;
   const hover = 5 + Math.sin(frameNow*0.006)*1.2;
   const gy = v.y; // ground line (wheels would sit here)
+  // Cloak wraps the whole render in low alpha + a subtle shimmer tint
+  if(v.cloaked){
+    ctx.save();
+    ctx.globalAlpha = 0.18 + Math.sin(frameNow*0.008)*0.05;
+  }
 
   // --- Antigrav underglow on the ground (before lifting the vehicle) ---
   const glowGrad=ctx.createRadialGradient(cx, gy+1, 2, cx, gy+1, v.w*0.75);
@@ -13986,6 +14510,7 @@ function renderHijackedVehicle(v){
   ctx.shadowBlur=0;
 
   ctx.restore();
+  if(v.cloaked) ctx.restore();
 }
 
 function renderVehicle(v){
