@@ -74,21 +74,34 @@ const KEY_ACTIONS = [
   {id:'grapple',     label:'Grappling Hook',     canonical:'g',     context:'foot'},
   {id:'switchWeap',  label:'Next Weapon',        canonical:'tab',   context:'foot'},
   {id:'toggleMode',  label:'Enter/Exit Ship',    canonical:'enter', context:'both'},
-  {id:'cloak',       label:'Cloak',              canonical:'c',     context:'ship'},
-  {id:'lasso',       label:'Lasso',              canonical:'h',     context:'ship'},
+  {id:'cloak',       label:'Cloak',              canonical:'v',     context:'ship'},
+  {id:'lasso',       label:'Lasso',              canonical:'c',     context:'ship'},
   {id:'nuke',        label:'Nuke',               canonical:'n',     context:'ship'},
   {id:'repulsor',    label:'Repulsor',           canonical:'e',     context:'ship'},
   {id:'flashlight',  label:'Flashlight',         canonical:'l',     context:'both'},
   {id:'mute',        label:'Mute Audio',         canonical:'m',     context:'both'},
 ];
+const KEYBIND_VERSION = 2; // bump when defaults change to invalidate stale saved bindings
 let keyBindings = (()=>{
   try{
     const saved=JSON.parse(localStorage.getItem('sadabduction_keybinds')||'{}');
-    const out={}; KEY_ACTIONS.forEach(a=>{ out[a.id]=saved[a.id]||a.canonical; });
+    const savedVer=parseInt(localStorage.getItem('sadabduction_keybinds_v')||'0',10);
+    const out={};
+    if(savedVer!==KEYBIND_VERSION){
+      // Version mismatch: discard saved bindings, use new defaults
+      KEY_ACTIONS.forEach(a=>out[a.id]=a.canonical);
+      localStorage.setItem('sadabduction_keybinds_v', String(KEYBIND_VERSION));
+      localStorage.setItem('sadabduction_keybinds', JSON.stringify(out));
+    } else {
+      KEY_ACTIONS.forEach(a=>{ out[a.id]=saved[a.id]||a.canonical; });
+    }
     return out;
   }catch(e){ const out={}; KEY_ACTIONS.forEach(a=>out[a.id]=a.canonical); return out; }
 })();
-function saveKeyBindings(){ localStorage.setItem('sadabduction_keybinds',JSON.stringify(keyBindings)); }
+function saveKeyBindings(){
+  localStorage.setItem('sadabduction_keybinds',JSON.stringify(keyBindings));
+  localStorage.setItem('sadabduction_keybinds_v', String(KEYBIND_VERSION));
+}
 function keyLabel(k){
   if(k===' ')return 'SPACE';
   if(k==='arrowup')return '\u2191';
@@ -1011,7 +1024,7 @@ const planetDefs = [
       "MOMMY","NOOOO","I LEFT THE OVEN ON","MY PARKING METER"],
   },
   {
-    id: 'mars', name: 'Mars Colony', desc: '"They came here to escape Earth. Ironic."',
+    id: 'mars', name: 'Mars', desc: '"The Red Planet. 4th from the Sun. Dust storms forever."',
     radius: 140, color: '#8a3a1a', color2: '#6a2a0a', atmosphere: '#ff6a3a',
     skyTop: '#1a0a0a', skyMid: '#3a1a0a', skyBot: '#5a2a1a',
     groundColor: ['#6a3a2a','#5a2a1a','#4a1a0a'], grassColor: '#7a4a3a',
@@ -1023,11 +1036,11 @@ const planetDefs = [
       "EARTH WAS RIGHT","MAYDAY MAYDAY","SEAL THE AIRLOCK"],
   },
   {
-    id: 'glimora', name: 'Glimora', desc: '"A peaceful purple world. Was."',
-    radius: 200, color: '#5a2a8a', color2: '#3a1a6a', atmosphere: '#a050ff',
-    skyTop: '#1a0a2a', skyMid: '#2a1a4a', skyBot: '#3a1a5a',
-    groundColor: ['#4a2a5a','#3a1a4a','#2a0a3a'], grassColor: '#6a3a8a',
-    buildingColors: [['#a8f','#c8f','#86d'],['#8af','#8cf','#68d']],
+    id: 'glimora', name: 'Jupiter', desc: '"The gas giant. 5th from the Sun. A storm larger than Earth rages for centuries."',
+    radius: 260, color: '#d4a070', color2: '#a06030', atmosphere: '#ffb060',
+    skyTop: '#2a1810', skyMid: '#5a3818', skyBot: '#8a5828',
+    groundColor: ['#c8a070','#a88050','#806030'], grassColor: '#d4b080',
+    buildingColors: [['#d4a070','#c08040','#a06030'],['#d4b080','#b08040','#805030']],
     inhabitantCount: 35, buildingDensity: 1.2, hasClouds: true, isAlien: true,
     alienSkin: ['#c8f','#a6d','#d8ff','#b8e'],
     alienHeadShape: 'tall', // tall oval head
@@ -1045,8 +1058,8 @@ const planetDefs = [
     ],
   },
   {
-    id: 'ice', name: 'Frostheim', desc: '"Frozen. Like their hopes."',
-    radius: 160, color: '#4a6a8a', color2: '#2a4a6a', atmosphere: '#8acaff',
+    id: 'ice', name: 'Uranus', desc: '"The ice giant. 7th from the Sun. Tilted on its side, rolling through eternity."',
+    radius: 160, color: '#8ed4e0', color2: '#5098b0', atmosphere: '#c0e8f0',
     skyTop: '#0a1a2a', skyMid: '#1a2a4a', skyBot: '#2a3a5a',
     groundColor: ['#8aaacc','#6a8aaa','#4a6a8a'], grassColor: '#aaccee',
     buildingColors: [['#aac','#bbd','#88a'],['#abc','#bcd','#9ab']],
@@ -1067,8 +1080,8 @@ const planetDefs = [
     ],
   },
   {
-    id: 'lava', name: 'Infernia', desc: '"Hot planet. Hotter tempers."',
-    radius: 170, color: '#8a2a0a', color2: '#aa4a0a', atmosphere: '#ff4400',
+    id: 'lava', name: 'Mercury', desc: '"Closest to the Sun. A rocky furnace with no atmosphere."',
+    radius: 110, color: '#a07050', color2: '#604030', atmosphere: '#ff6020',
     skyTop: '#2a0a00', skyMid: '#4a1a00', skyBot: '#6a2a0a',
     groundColor: ['#4a2a1a','#3a1a0a','#5a2a0a'], grassColor: '#8a4a2a',
     buildingColors: [['#644','#755','#533'],['#654','#765','#543']],
@@ -1089,8 +1102,8 @@ const planetDefs = [
     ],
   },
   {
-    id: 'sand', name: 'Kephara', desc: '"Ancient. Eternal. Doomed."',
-    radius: 190, color: '#c0a040', color2: '#a08030', atmosphere: '#e0c060',
+    id: 'sand', name: 'Venus', desc: '"Our sister planet. 2nd from the Sun. Thick clouds of acid hide a scorched surface."',
+    radius: 170, color: '#e8c078', color2: '#b08830', atmosphere: '#f0d090',
     skyTop: '#1a1508', skyMid: '#2a2510', skyBot: '#4a3a20',
     groundColor: ['#c0a050','#b09040','#a08030'], grassColor: '#d0b060',
     buildingColors: [['#a98','#ba9','#987'],['#b98','#ca9','#a87']],
@@ -1112,31 +1125,34 @@ const planetDefs = [
     ],
   },
   {
-    id: 'tomb', name: 'Khet', desc: '"Sealed pyramids. And one that isn\'t."',
-    radius: 170, color: '#d4a848', color2: '#b08828', atmosphere: '#e8c878',
-    skyTop: '#0a0804', skyMid: '#2a1810', skyBot: '#4a3018',
-    groundColor: ['#c89860','#a07838','#805820'], grassColor: '#d0a858',
+    id: 'tomb', name: 'Saturn', desc: '"The ringed gas giant. No solid ground — only endless ammonia cloud decks where strange drifters breathe helium winds."',
+    radius: 240, color: '#e8c878', color2: '#a07840', atmosphere: '#f0d098',
+    hasRings: true, isGasGiant: true,
+    // Golden banded atmosphere — Saturn's real palette
+    skyTop: '#b48840', skyMid: '#d4a868', skyBot: '#ecd098',
+    // "Ground" is a dense cloud deck (hydrogen/ammonia crystal haze)
+    groundColor: ['#f0dcb0','#c8a870','#8a6830'], grassColor: '#e8d0a0',
     buildingColors: [['#d4a868','#b08838','#806020']],
-    inhabitantCount: 32, buildingDensity: 0.5, hasClouds: false, isAlien: true,
-    alienSkin: ['#c8a060','#a08040','#d8b070','#906030'],
-    alienHeadShape: 'egyptian',
-    alienExtra: 'none',
-    alienLabel: 'Tomb Slave',
-    hasPyramids: true, hasSlaves: true,
-    sadFacts: ['"They built them for a god who never came..."','"Sand fills the lungs of generations..."','"The overseer\'s whip never rests..."','"One pyramid was left open. No one knows why..."'],
-    cryPhrases: ['THE PHARAOH WEEPS','MY CHAINS','WHO WILL FINISH IT','MASTER HELP','SAND AND BLOOD','FREE AT LAST','THE OPEN ONE CALLS'],
+    inhabitantCount: 18, buildingDensity: 0, hasClouds: true, isAlien: true,
+    alienSkin: ['#e8d0a0','#d4b878','#c0a060','#a88848'],
+    alienHeadShape: 'tall',
+    alienExtra: 'antennae',
+    alienLabel: 'Cloud Drifter',
+    sadFacts: ['"They have never touched solid ground — none exists here..."','"Born in the clouds, they live and die aloft..."','"The wind is their only home..."','"Below, the pressure crushes even light..."','"They taste the storms by color alone..."'],
+    cryPhrases: ['THE WIND TAKES ALL','NO GROUND','FALLING FOREVER','THE RINGS SING','STORM-SONG','HELIUM DREAMS','DRIFT AWAY','DEEPER PRESSURES'],
     alienTypes: [
-      { type:'slave',    label:'Tomb Slave',    scale:0.95, bodyWidth:4, headR:8, mass:0.9, colors:['#b08050','#906030','#a07040'] },
-      { type:'overseer', label:'Overseer',      scale:1.15, bodyWidth:6, headR:9, mass:1.5, colors:['#3a2a1a','#2a1a0a','#4a3a20'] },
-      { type:'pharaoh',  label:'Forgotten Pharaoh', scale:1.3, bodyWidth:7, headR:11, mass:2.2, colors:['#d4a020','#b08010','#ffd060'] },
-      { type:'child',    label:'Slave Child',   scale:0.55, bodyWidth:3, headR:8, mass:0.3, colors:['#c09060','#a07850'] },
+      { type:'gasWhale',    label:'Gas Whale',       scale:2.2, bodyWidth:18, headR:10, mass:0.4, colors:['#d4b878','#a88848','#e8d0a0'], float:true },
+      { type:'skyJelly',    label:'Sky Jelly',       scale:1.0, bodyWidth:6,  headR:11, mass:0.15, colors:['#f0e0b8','#d4b878','#ffeed0'], float:true },
+      { type:'stormWisp',   label:'Storm Wisp',      scale:0.6, bodyWidth:3,  headR:5,  mass:0.08, colors:['#fff8d8','#e8c878','#ffeea0'], float:true },
+      { type:'cloudRider',  label:'Cloud Rider',     scale:1.1, bodyWidth:5,  headR:9,  mass:0.9, colors:['#c8a870','#a08848','#d8b88a'] },
+      { type:'auroraSprite',label:'Aurora Sprite',   scale:0.8, bodyWidth:3,  headR:7,  mass:0.1, colors:['#a0c8ff','#ffc0e8','#c0f0ff'], float:true },
     ],
   },
   {
-    id: 'asteroid', name: 'Gorvath Rock', desc: '"A drifting tomb. Something lives inside."',
-    radius: 60, color: '#3a3a3a', color2: '#1a1a1a', atmosphere: '#4a2a4a',
-    skyTop: '#000000', skyMid: '#0a0008', skyBot: '#150010',
-    groundColor: ['#2a2a2a','#1a1a1a','#0a0a0a'], grassColor: '#3a3a3a',
+    id: 'asteroid', name: 'Neptune', desc: '"The deep-blue ice giant. 8th from the Sun. Winds at 2,000 km/h."',
+    radius: 150, color: '#3050c0', color2: '#102080', atmosphere: '#4080ff',
+    skyTop: '#000818', skyMid: '#102040', skyBot: '#203060',
+    groundColor: ['#2040a0','#1028'+'60','#08143a'], grassColor: '#3060c0',
     buildingColors: [['#333','#444','#222'],['#343','#454','#232']],
     inhabitantCount: 12, buildingDensity: 0.3, hasClouds: false, isAlien: true,
     alienSkin: ['#5a3a5a','#4a2a4a','#6a4a6a','#3a1a3a'],
@@ -1156,7 +1172,7 @@ const planetDefs = [
     ],
   },
   {
-    id: 'sun', name: 'Helion', desc: '"The star itself. Surface temperature: too much."',
+    id: 'sun', name: 'Sun', desc: '"Our star. The heart of the solar system. 109 Earths across."',
     radius: 420, color: '#ffd060', color2: '#ff8020', atmosphere: '#ffb040',
     skyTop: '#ff6020', skyMid: '#ff8040', skyBot: '#ffb060',
     groundColor: ['#ff6020','#e04010','#a02000'], grassColor: '#ff8040',
@@ -1173,6 +1189,30 @@ const planetDefs = [
       { type:'flare', label:'Flare Dancer', scale:1.0, bodyWidth:6, headR:9, mass:1, colors:['#ffe080','#ffa040','#ff6020'] },
       { type:'inferno', label:'Inferno Lord', scale:1.6, bodyWidth:12, headR:13, mass:4, colors:['#ff4010','#a02000','#ffc040'] },
     ],
+  },
+  {
+    id: 'moon', name: 'Moon', desc: '"Earth\'s only natural satellite. Airless, silent, pockmarked."',
+    radius: 60, color: '#d0d0d0', color2: '#8a8a8a', atmosphere: '#e0e0e0',
+    skyTop: '#000000', skyMid: '#050510', skyBot: '#0a0a14',
+    groundColor: ['#9a9a9a','#6a6a6a','#4a4a4a'], grassColor: '#7a7a7a',
+    buildingColors: [['#888','#777','#666']],
+    inhabitantCount: 0, buildingDensity: 0, hasClouds: false, isAlien: false, isMoon: true,
+    orbitsEarth: true,
+    sadFacts: ['"Silent. Forever silent."','"No one hears anything here..."','"Only dust and footprints remain..."'],
+    cryPhrases: [],
+    alienTypes: [],
+  },
+  {
+    id: 'wormhole', name: 'Wormhole', desc: '"A tear in spacetime. Where does it lead? WHEN does it lead?"',
+    radius: 180, color: '#6040c0', color2: '#100030', atmosphere: '#c060ff',
+    skyTop: '#000000', skyMid: '#10002a', skyBot: '#2a0060',
+    groundColor: ['#1a0040','#100028','#000018'], grassColor: '#2a0080',
+    buildingColors: [['#6040c0','#4020a0','#301080']],
+    inhabitantCount: 0, buildingDensity: 0, hasClouds: false, isAlien: true, isWormhole: true,
+    alienLabel: 'Anomaly',
+    sadFacts: ['"Time flows wrong here..."','"Spacetime frays at the edges..."','"Past and future collapse..."'],
+    cryPhrases: ["WHEN AM I","TIME BLEEDS","THE LOOP","ECHO OF ECHO"],
+    alienTypes: [],
   },
 ];
 
@@ -1202,6 +1242,18 @@ const landmarkHumanTypes = [
 const mountainHumanTypes = [
   { type:'jogger', label:'Hiker', scale:1, bodyWidth:5, headR:8, mass:1, colors:['#684','#486','#648'], hat:'cap', extra:'backpack' },
   { type:'normal', label:'Mountain Guide', scale:1.05, bodyWidth:5, headR:8, mass:1.1, colors:['#664','#446'], hat:null, extra:null },
+];
+
+// --- PREHISTORIC (Cretaceous) DINOSAUR TYPES ---
+// Used when window.prehistoricEra is true and planet is Earth.
+// Flags: isDino (marks render path), dinoKind (silhouette variant), biped (true=2 legs + small arms + tail, false=quadruped)
+const prehistoricHumanTypes = [
+  { type:'dino', label:'T-Rex',       scale:2.6, bodyWidth:15, headR:14, mass:6,   colors:['#5a4a20','#6a5520','#4a3818'],   hat:null, extra:null, isDino:true, dinoKind:'trex',   biped:true  },
+  { type:'dino', label:'Raptor',      scale:1.3, bodyWidth:6,  headR:8,  mass:1.4, colors:['#8a6820','#a08040','#704818'],   hat:null, extra:null, isDino:true, dinoKind:'raptor', biped:true  },
+  { type:'dino', label:'Stegosaurus', scale:2.2, bodyWidth:18, headR:9,  mass:4.5, colors:['#3a6a4a','#2a4a3a','#4a7a5a'],   hat:null, extra:null, isDino:true, dinoKind:'stego',  biped:false },
+  { type:'dino', label:'Triceratops', scale:2.1, bodyWidth:16, headR:13, mass:4.8, colors:['#6a4a30','#7a5a40','#4a3820'],   hat:null, extra:null, isDino:true, dinoKind:'tricera',biped:false },
+  { type:'dino', label:'Brontosaurus',scale:3.0, bodyWidth:20, headR:9,  mass:8,   colors:['#4a6a5a','#5a7a6a','#3a5a4a'],   hat:null, extra:null, isDino:true, dinoKind:'bronto', biped:false },
+  { type:'dino', label:'Pterodactyl', scale:1.4, bodyWidth:5,  headR:9,  mass:0.9, colors:['#5a4020','#6a4830','#4a3018'],   hat:null, extra:null, isDino:true, dinoKind:'ptero',  biped:true  },
 ];
 
 // Biome-specific human types for Earth
@@ -1236,14 +1288,55 @@ const ship = { x:400, y:GROUND_LEVEL-200, vx:0, vy:0, tilt:0, boosting:false, be
 const mothershipPos={x:3500,y:-600};
 function initSpacePlanets() {
   planets = [];
+  // Positions match planetDefs array order.
+  // planetDefs: [earth, mars, glimora(=Jupiter), ice(=Uranus), lava(=Mercury), sand(=Venus), tomb(=Saturn), asteroid(=Neptune), sun, moon, wormhole]
+  // Laid out in real solar-system order along a diagonal. Sun in -x direction (inner),
+  // Wormhole in +x direction past Neptune (outer, farthest). Moon orbits Earth.
   const positions = [
-    {x:1500,y:-1500},{x:4000,y:-2500},{x:6500,y:-1800},{x:3000,y:-4200},{x:5500,y:-3800},{x:7500,y:-4500},
-    {x:9800,y:-5400}, // Khet — pyramid tomb world
-    {x:-2000,y:-6500},
-    {x:60000,y:-48000}, // Sun (Helion) — VERY far away; travel long to discover
+    {x:1500,  y:-1500},   // [0] Earth — anchor
+    {x:4000,  y:-2500},   // [1] Mars — outward from Earth
+    {x:6500,  y:-3500},   // [2] Jupiter (id:glimora)
+    {x:11500, y:-5500},   // [3] Uranus (id:ice)
+    {x:-3000, y:-500},    // [4] Mercury (id:lava) — inner
+    {x:-500,  y:-1000},   // [5] Venus (id:sand) — inner, between Mercury and Earth
+    {x:9000,  y:-4500},   // [6] Saturn (id:tomb)
+    {x:14000, y:-6500},   // [7] Neptune (id:asteroid) — outermost real planet
+    {x:-6500, y:0},       // [8] Sun — farthest inner
+    {x:1590,  y:-1500},   // [9] Moon — child of Earth; position overridden by orbit tick
+    {x:17500, y:-7800},   // [10] Wormhole — FURTHEST outer; leads to prehistoric Earth
   ];
   planetDefs.forEach((def,i) => {
     planets.push({ ...def, spaceX:positions[i].x, spaceY:positions[i].y, visited:false, savedState:null });
+  });
+  // --- Orbits ---
+  // Each planet orbits the Sun with a period proportional to its real orbital period.
+  // Current (spaceX, spaceY) is taken as the starting point → gives orbitRadius + orbitAngle.
+  // Sun and Wormhole don't orbit. Orbits keep the existing solar-order layout intact on t=0.
+  const sunPlanet = planets.find(p=>p.isSun);
+  const sunX = sunPlanet ? sunPlanet.spaceX : 0;
+  const sunY = sunPlanet ? sunPlanet.spaceY : 0;
+  // Real orbital periods in Earth years (keys are planet ids — lava=Mercury, sand=Venus, glimora=Jupiter, tomb=Saturn, ice=Uranus, asteroid=Neptune)
+  const orbitalYears = { lava:0.241, sand:0.615, earth:1, mars:1.881, glimora:11.86, tomb:29.46, ice:84.01, asteroid:164.8 };
+  // One Earth year = 30 real minutes (60fps * 1800s). Far planets barely drift; feels
+  // astronomical rather than arcade. Inner planets (Mercury, Venus) are still visibly moving.
+  const EARTH_PERIOD_FRAMES = 60 * 1800;
+  planets.forEach(p=>{
+    if(p.isSun || p.isWormhole){ p.orbits=false; return; }
+    if(p.orbitsEarth){
+      // Moon orbits Earth, not the Sun. Distance is tiny (scaled for visibility).
+      p.orbits = true;
+      p.orbitRadius = 420; // Earth radius 180 + clearance so the moon reads as a distinct body
+      p.orbitAngle = 0;
+      // ~27.3 Earth days in real life.
+      p.orbitSpeed = (Math.PI * 2) / (EARTH_PERIOD_FRAMES * (27.3/365));
+      return;
+    }
+    const dx = p.spaceX - sunX, dy = p.spaceY - sunY;
+    p.orbits = true;
+    p.orbitRadius = Math.hypot(dx, dy);
+    p.orbitAngle = Math.atan2(dy, dx);
+    const years = orbitalYears[p.id] || 1;
+    p.orbitSpeed = (Math.PI * 2) / (EARTH_PERIOD_FRAMES * years);
   });
 }
 
@@ -1304,7 +1397,10 @@ function generateBuilding(x) {
       }
     }else if(biome.id==='desert'){
       const r=Math.random();
-      if(r<0.3) addUnit(x, GROUND_LEVEL-148, 120, 148, 'mosque', {color:'#e8dcc8', roofColor:'#d4c8a0'});
+      // Rare pyramids — open (enterable puzzle) or closed (decorative)
+      if(r<0.04){const l=4+Math.floor(Math.random()*3);const ph=l*22+30,pw=l*40;addUnit(x,GROUND_LEVEL-ph,pw,ph,'openPyramid',{layers:l,health:600});}
+      else if(r<0.08){const l=4+Math.floor(Math.random()*3);const ph=l*22+30,pw=l*40;addUnit(x,GROUND_LEVEL-ph,pw,ph,'closedPyramid',{layers:l,health:600});}
+      else if(r<0.3) addUnit(x, GROUND_LEVEL-148, 120, 148, 'mosque', {color:'#e8dcc8', roofColor:'#d4c8a0'});
       else if(r<0.45) addUnit(x, GROUND_LEVEL-75, 64, 75, 'adobe', {color:'#c0a070', accent:'#a08050'});
       else if(r<0.55) addUnit(x, GROUND_LEVEL-62, 70, 62, 'market', {color:'#8a6a3a', roofColor:'#d4a040'});
       else if(r<0.65){const f=2+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-f*25-8, 90, f*25+8, 'sandApartment', {color:'#d8c8a0', accent:'#c8b890', floors:f});}
@@ -1377,37 +1473,7 @@ function generateBuilding(x) {
     else if(r<0.7){const c=3+Math.floor(Math.random()*2); addUnit(x, GROUND_LEVEL-95, c*28+10, 95, 'temple', {columnCount:c});}
     else{const h=4+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-h*22-15, 20, h*22+15, 'obelisk', {floors:h});}
   }else if(p.id==='tomb'){
-    // Khet is a living ancient-Egyptian world — pyramids + temples + obelisks + sphinxes + markets + statues
-    const r=Math.random();
-    if(r<0.18){
-      // Half-built pyramid: truncated top, scaffolding
-      const l=3+Math.floor(Math.random()*3);
-      const fullL=l+2+Math.floor(Math.random()*2);
-      const hh=l*22+10;
-      addUnit(x, GROUND_LEVEL-hh, l*38+30, hh, 'halfPyramid', {layers:l, targetLayers:fullL, health:260});
-    } else if(r<0.38){
-      // Closed pyramid
-      const l=4+Math.floor(Math.random()*4);
-      const pw=l*40, ph=l*22+20;
-      addUnit(x, GROUND_LEVEL-ph, pw, ph, 'closedPyramid', {layers:l, health:500});
-    } else if(r<0.52){
-      // Sphinx (colossal lion body + pharaoh head)
-      addUnit(x, GROUND_LEVEL-72, 140, 72, 'sphinx', {health:320});
-    } else if(r<0.65){
-      // Obelisk (reuse existing obelisk type)
-      const hh=5+Math.floor(Math.random()*3);
-      addUnit(x, GROUND_LEVEL-hh*22-15, 20, hh*22+15, 'obelisk', {floors:hh});
-    } else if(r<0.78){
-      // Ancient Egyptian temple (reuse temple with column layout)
-      const c=3+Math.floor(Math.random()*3);
-      addUnit(x, GROUND_LEVEL-95, c*28+10, 95, 'temple', {columnCount:c});
-    } else if(r<0.90){
-      // Desert market (stalls)
-      addUnit(x, GROUND_LEVEL-48, 80, 48, 'desertMarket', {});
-    } else {
-      // Anubis statue
-      addUnit(x, GROUND_LEVEL-90, 46, 90, 'anubisStatue', {});
-    }
+    // Saturn gas giant — no solid buildings. buildingDensity:0 means this should never fire.
   }else{
     // Asteroid and fallback
     addUnit(x, GROUND_LEVEL-40-Math.random()*40, 40+Math.random()*40, 40+Math.random()*40, 'alienStructure', {});
@@ -2493,8 +2559,12 @@ function generateInhabitant(x) {
     template = { ...at, hat:null, extra:p.alienExtra||null };
     skinColor = p.alienSkin[Math.floor(Math.random()*p.alienSkin.length)];
   } else {
-    // Earth: biome-specific humans
-    if(p.id==='earth'){
+    // Earth: biome-specific humans (or Cretaceous dinosaurs, during prehistoricEra)
+    if(p.id==='earth' && window.prehistoricEra){
+      template = prehistoricHumanTypes[Math.floor(Math.random()*prehistoricHumanTypes.length)];
+      // Dinos: reptilian skin uses template colors rather than human hsl
+      skinColor = template.colors[0];
+    } else if(p.id==='earth'){
       const biome=getEarthBiome(x);
       if(biome.id==='jungle'){
         template=jungleHumanTypes[Math.floor(Math.random()*jungleHumanTypes.length)];
@@ -2537,6 +2607,9 @@ function generateInhabitant(x) {
     type:template.type, label:template.label||p.alienLabel||'Creature', scale:s,
     bodyWidth:template.bodyWidth, hat:template.hat||null, extra:template.extra||null,
     isAlien:isAlienCreature,
+    float:template.float||false,
+    floatPhase:Math.random()*Math.PI*2,
+    isDino:template.isDino||false, dinoKind:template.dinoKind||null, biped:template.biped,
     alienHeadShape:p.alienHeadShape||'normal',
     alienExtra:p.alienExtra||null,
     planetId:p.id,
@@ -2653,9 +2726,11 @@ function generateCows() {
     const _farm=earthBiomes.find(b=>b.id==='farmland');
     const _jungle=earthBiomes.find(b=>b.id==='jungle');
     const _snow=earthBiomes.find(b=>b.id==='snow');
+    const _desertB=earthBiomes.find(b=>b.id==='desert');
     const farmMin=_farm?_farm.from+100:6100, farmMax=_farm?_farm.to-100:9400;
     const jungleMin=_jungle?_jungle.from+100:10100, jungleMax=_jungle?_jungle.to-100:13400;
     const snowMin=_snow?_snow.from+100:16100, snowMax=_snow?_snow.to-100:19400;
+    const desMin=_desertB?_desertB.from+200:34700, desMax=_desertB?_desertB.to-200:41300;
     // Farmland: cows + sheep
     const cowCount=Math.floor(8+Math.random()*6);
     for(let i=0;i<cowCount;i++){
@@ -2691,6 +2766,18 @@ function generateCows() {
         walkTimer:Math.random()*200,mooTimer:Math.random()*300,legAnim:0,tailAnim:0,
         beingBeamed:false,collected:false,planetId:p.id,hoverPhase:Math.random()*Math.PI*2,extraHeadAngle:0,
         biomeMin:jungleMin,biomeMax:jungleMax});
+    }
+    // Desert biome: camels
+    const camelCount=3+Math.floor(Math.random()*4);
+    for(let i=0;i<camelCount;i++){
+      const cx=desMin+Math.random()*(desMax-desMin);
+      const s=1.1;
+      cows.push({x:cx,y:GROUND_LEVEL,bodyY:GROUND_LEVEL-18*s,vx:0,vy:0,
+        size:s,color:'#d4a860',spots:'#8a6a3a',label:'Camel',wack:'camel',
+        walkDir:Math.random()>0.5?1:-1,walkSpeed:0.18+Math.random()*0.22,
+        walkTimer:Math.random()*200,mooTimer:Math.random()*500,legAnim:0,tailAnim:0,
+        beingBeamed:false,collected:false,planetId:p.id,hoverPhase:Math.random()*Math.PI*2,extraHeadAngle:0,
+        biomeMin:desMin,biomeMax:desMax});
     }
     // Snow biome: a few wolves/yetis wandering
     const snowTypes=[
@@ -3096,6 +3183,10 @@ function loadPlanet(planet) {
     const diff=planetProgress[planet.id]?planetProgress[planet.id].missionIndex:0;
     const density=(planet.buildingDensity||1)*(1+diff*0.15);
     let bx=200;
+    // Prehistoric Earth: no buildings at all — just wilderness
+    if(planet.id==='earth' && window.prehistoricEra) bx = worldWidth;
+    // Planets with buildingDensity 0 (e.g. Moon) stay empty
+    if((planet.buildingDensity||1) === 0) bx = worldWidth;
     while(bx<worldWidth-200){
       // Earth: vary spacing by biome
       if(planet.id==='earth'){
@@ -3107,7 +3198,7 @@ function loadPlanet(planet) {
         generateBuilding(bx);bx+=(Math.random()*200+150)/density;
       }
     }
-    let popCount=Math.floor((planet.inhabitantCount||30)*(1+diff*0.2));
+    let popCount=Math.floor((planet.inhabitantCount!=null?planet.inhabitantCount:30)*(1+diff*0.2));
     if(planet.id==='earth'){
       // Biome-appropriate population for larger Earth (coords derived from biome list)
       const _range=id=>{const b=earthBiomes.find(x=>x.id===id);return b?[b.from+100,b.to-100]:[0,0];};
@@ -3124,26 +3215,37 @@ function loadPlanet(planet) {
       for(let i=0;i<popCount;i++) generateInhabitant(Math.random()*(worldWidth-400)+200);
     }
     initialPopulation=popCount;
-    // Tomb world: mark exactly one pyramid as OPEN; spawn slaves at half-built sites
-    if(planet.id==='tomb'){
-      const closedPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='closedPyramid');
-      if(closedPys.length>0){
-        const chosen = closedPys[Math.floor(Math.random()*closedPys.length)];
-        chosen.blocks[0].buildingType='openPyramid';
-      }
-      const halfPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='halfPyramid');
-      halfPys.forEach(hp => {
-        const cx = hp.x + hp.w/2;
-        for(let k=0;k<4;k++){
-          generateInhabitant(cx + (Math.random()-0.5)*140);
+    // Earth desert: guarantee at least one enterable pyramid
+    if(planet.id==='earth'){
+      const openPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='openPyramid');
+      if(openPys.length===0){
+        const closedPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='closedPyramid');
+        if(closedPys.length>0){
+          closedPys[Math.floor(Math.random()*closedPys.length)].blocks[0].buildingType='openPyramid';
+        } else {
+          // No pyramids generated at all — drop one in the middle of the desert biome
+          const _des=earthBiomes.find(b=>b.id==='desert');
+          if(_des){
+            const px=(_des.from+_des.to)/2, l=5;
+            const ph=l*22+30, pw=l*40;
+            const building={x:px-pw/2,w:pw,blocks:[],destroyed:false,totalBlocks:1,brokenBlocks:0};
+            const block={x:px-pw/2,y:GROUND_LEVEL-ph,w:pw,h:ph,vx:0,vy:0,
+              color:'#d8c080',accentColor:'#b89860',fixed:true,mass:Math.max(3,pw*ph/300),building,row:0,col:0,
+              health:600,maxHealth:600,cracked:false,onFire:false,burnTimer:0,exploding:false,explodeTimer:0,
+              hasWindow:false,windowLit:false,isDoor:false,
+              shape:'building',buildingType:'openPyramid',layers:l,windowSeed:Math.random()*1000,isTree:false};
+            building.blocks.push(block);blocks.push(block);buildings.push(building);
+          }
         }
-      });
+      }
     }
-    generateCows();
+    // Saturn: gas giant — inhabitants drift in the cloud decks, handled by normal generation.
+    if(!(planet.id==='earth' && window.prehistoricEra)) generateCows();
     generateUnderwaterObjects();
     // Generate military bases on Earth (3 bases at fixed positions)
+    // Skip during prehistoricEra — no armies 68M years ago
     earthMilitaryBases=[];
-    if(planet.id==='earth'){
+    if(planet.id==='earth' && !window.prehistoricEra){
       // Military bases in city, farmland-edge, mountains, landmarks
       const _cityB=earthBiomes.find(b=>b.id==='city');
       const _lmB=earthBiomes.find(b=>b.id==='landmarks');
@@ -3217,6 +3319,7 @@ function generateWeather(){
 function generateVehicles(){
   const p=currentPlanet;if(!p)return;
   vehicles=[];
+  if(p.id==='earth' && window.prehistoricEra) return; // no cars in the Cretaceous
   if(p.id==='earth'){
     const vTypes=VEHICLE_TYPES.earth.slice(0,6); // first six: city/suburb traffic (not the tractor)
     // City: 6 vehicles
@@ -3701,6 +3804,8 @@ function enterMothership(){
 
 function exitMothership(){
   mothershipMode=false;
+  // Grace period to prevent auto-reentry while still close to mothership
+  mothership._exitCool=180;
   showMessage(tr('msg.returningToVoid'));
   document.getElementById('planet-name').textContent=tr('hud.deepSpace');
 }
@@ -7142,10 +7247,10 @@ document.addEventListener('keydown', e => {
   if (!keys[k]&&k==='enter'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&!pauseMenu.active) togglePlayerMode();
   if (!keys[k]&&k==='e'&&playerMode==='ship'&&!mothershipMode) repulsorBlast();
   if (!keys[k]&&k==='n'&&gameMode==='planet'&&playerMode==='ship') nukeplanet();
-  if (!keys[k]&&k==='c'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
+  if (!keys[k]&&k==='v'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
   if (k==='g'&&playerMode==='ship')ship.minigunFiring=true;
-  if (!keys[k]&&k==='h'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
+  if (!keys[k]&&k==='c'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
   // Upgrades
   if(!keys[k]&&(k==='1'||k==='2'||k==='3')&&score>=10&&gameMode==='planet'){
     const cost=10;
@@ -8461,6 +8566,18 @@ function updatePlanetShared(){
     // Sim radius: skip AI for idle (non-ragdoll, non-beaming) humans far from player
     if(!h.ragdoll&&!h.beingBeamed&&Math.abs(h.bodyX-_simPX)>3000)return;
     if(h.ragdoll){
+      // Being eaten: continuous gore while the predator chews — spawn blood+chunks, then vanish.
+      if(h.eatTimer && h.eatTimer>0){
+        h.eatTimer--;
+        if(h.eatTimer%6===0){ bleedEffect(h, (Math.random()-0.5)*2, -1, 0.6); }
+        if(h.eatTimer%18===0){
+          gibs.push({x:h.bodyX+(Math.random()-0.5)*14,y:h.bodyY,vx:(Math.random()-0.5)*3,vy:-Math.random()*3,
+            rot:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.3,size:4,life:180,
+            kind:['torso','leg','arm'][Math.floor(Math.random()*3)],
+            color:h.color||'#6a4a20',bloodC:getBleedColor(h),groundY:GROUND_LEVEL,onGround:false});
+        }
+        if(h.eatTimer<=0){ h.collected=true; return; }
+      }
       const parts=['head','body','legL','legR','armL','armR','footL','footR'];
       parts.forEach(pt=>{if(!h.beingBeamed)h[pt+'VY']+=GRAVITY*0.8;h[pt+'VX']*=0.99;h[pt+'VY']*=0.99;h[pt+'X']+=h[pt+'VX'];h[pt+'Y']+=h[pt+'VY'];if(h[pt+'Y']>GROUND_LEVEL){h[pt+'Y']=GROUND_LEVEL;h[pt+'VY']*=-0.3;h[pt+'VX']*=0.8;}if(h[pt+'Y']<-2000){h[pt+'Y']=-2000;h[pt+'VY']*=-0.3;}});
       // Ragdoll death: if lying still on ground for ~5 sec, mark as dead
@@ -8554,6 +8671,64 @@ function updatePlanetShared(){
         }else{
           h.panicLevel=Math.max(0,h.panicLevel-0.01);if(h.panicLevel<0.5)h.crying=false;
           h.behaviorTimer=(h.behaviorTimer||0)-1;
+          // --- CARNIVORE DINO HUNTING ---
+          // T-Rex and Raptors (when in prehistoric Earth) hunt the herbivore dinos.
+          // On contact: massive gore, prey ragdolled/killed, eat particles.
+          const isCarnivore = h.isDino && (h.dinoKind==='trex' || h.dinoKind==='raptor');
+          if(isCarnivore){
+            const senseR = h.dinoKind==='trex'? 550 : 380;
+            const sprintSpeed = h.dinoKind==='trex'? 1.6 : 2.4;
+            h.huntCooldown = Math.max(0,(h.huntCooldown||0)-1);
+            // Find nearest living prey
+            let prey=null, bestD=senseR;
+            for(let pi=0;pi<humans.length;pi++){
+              const p2=humans[pi];
+              if(p2===h||p2.collected||p2.ragdoll||p2.hidden)continue;
+              if(!p2.isDino)continue;
+              if(p2.dinoKind==='trex'||p2.dinoKind==='raptor')continue; // don't hunt each other
+              const d=Math.abs(p2.bodyX-h.bodyX);
+              if(d<bestD){bestD=d;prey=p2;}
+            }
+            if(prey){
+              h.walkDir = prey.bodyX < h.bodyX ? -1 : 1;
+              h.walkSpeed = sprintSpeed;
+              h.crying = false;
+              // Occasional roar
+              if(h.huntCooldown<=0 && Math.random()<0.005){
+                speechBubbles.push({x:h.headX,y:h.headY-24,text:h.dinoKind==='trex'?'ROOAAARR!':'*screech!*',life:60,vy:-0.3});
+                h.huntCooldown=120;
+              }
+              // Bite range — scales with size
+              const biteR = (h.scale||1) * 18;
+              if(bestD < biteR){
+                // KILL: gore, ragdoll prey, eat.
+                const killPower = h.dinoKind==='trex' ? 4 : 2.5;
+                const fx = h.walkDir * 8, fy = -4;
+                prey.ragdoll = true;
+                prey.crying = true;
+                prey.panicLevel = 10;
+                applyForce(prey, fx, fy);
+                bleedEffect(prey, fx, fy, killPower);
+                spawnGibs(prey, fx, fy, killPower);
+                // Extra blood spray bursts for maximum gore
+                for(let k=0;k<3;k++) bleedEffect(prey, fx*0.6, fy*0.4, killPower*0.8);
+                // Mark prey as eaten after a beat — it lingers as ragdoll so the player sees the carnage
+                prey.eatenBy = h;
+                prey.eatTimer = 90;
+                // Predator speech
+                speechBubbles.push({x:h.headX,y:h.headY-24,text:['*CRUNCH*','*RIPS FLESH*','*DEVOURS*'][Math.floor(Math.random()*3)],life:70,vy:-0.3});
+                // Cooldown so the T-Rex doesn't instantly chain into another kill
+                h.huntCooldown = 300;
+              }
+            } else {
+              // No prey seen — slow wander
+              if(h.behaviorTimer<=0){
+                h.walkDir = Math.random()>0.5?1:-1;
+                h.walkSpeed = 0.5;
+                h.behaviorTimer = 150+Math.random()*200;
+              }
+            }
+          } else
           // Behavior-driven movement
           if(h.behavior==='farming'){
             // Farmer: walk back and forth near home, occasionally stop and "work"
@@ -9243,8 +9418,8 @@ function updateAlienOnFoot(){
     }
   }
 
-  // Pyramid tomb entry (Khet: walk to the open pyramid's door + E/Enter)
-  if(p.id==='tomb'){
+  // Pyramid tomb entry (Khet + Earth desert: walk to the open pyramid's door + E/Enter)
+  if(p.id==='tomb' || p.id==='earth'){
     for(let bi=0;bi<blocks.length;bi++){
       const b=blocks[bi];
       if(b.dead||b.buildingType!=='openPyramid')continue;
@@ -9515,8 +9690,31 @@ function updateSpace(){
     return;
   }
 
-  ship.x=Math.max(-4000,Math.min(spaceWidth+60000,ship.x));
-  ship.y=Math.max(-spaceHeight-50000,Math.min(500,ship.y));
+  // Advance planetary orbits (Sun stationary; Wormhole stationary).
+  {
+    const sunP = planets.find(p=>p.isSun);
+    const sunX = sunP ? sunP.spaceX : 0, sunY = sunP ? sunP.spaceY : 0;
+    // First pass: advance solar-orbit planets around the Sun
+    planets.forEach(p=>{
+      if(!p.orbits || p.orbitsEarth) return;
+      p.orbitAngle += p.orbitSpeed;
+      p.spaceX = sunX + Math.cos(p.orbitAngle) * p.orbitRadius;
+      p.spaceY = sunY + Math.sin(p.orbitAngle) * p.orbitRadius;
+    });
+    // Second pass: Earth-orbiting bodies (Moon) — must run AFTER Earth moved.
+    const earth = planets.find(p=>p.id==='earth');
+    planets.forEach(p=>{
+      if(!p.orbitsEarth || !earth) return;
+      p.orbitAngle += p.orbitSpeed;
+      p.spaceX = earth.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
+      p.spaceY = earth.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
+    });
+  }
+
+  // Space bounds: wide enough to reach Sun (far -x) and Wormhole (far +x,-y)
+  // but not so wide the player gets lost in empty space.
+  ship.x=Math.max(-10000,Math.min(spaceWidth+12000,ship.x));
+  ship.y=Math.max(-spaceHeight-4000,Math.min(500,ship.y));
   camera.x=ship.x-canvas.width/2;camera.y=ship.y-canvas.height/2;
 
   // Sun discovery: if player gets within range, discover it
@@ -9533,6 +9731,7 @@ function updateSpace(){
   // Auto-land: check if ship enters a planet
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // can't land on undiscovered sun
+    if(p.isWormhole) return; // wormhole has special teleport behavior, not landing
     const d=dist(ship.x,ship.y,p.spaceX,p.spaceY);
     if(d<p.radius*0.6&&!transition.active){
       if(!unlockedPlanets.includes(p.id)){
@@ -9550,66 +9749,39 @@ function updateSpace(){
     }
   });
 
-  // Mothership docking
+  // Wormhole - flying through it triggers time travel (68M years back → prehistoric Earth)
+  {
+    const wh=planets.find(p=>p.isWormhole);
+    if(wh && !transition.active){
+      const whDist=dist(ship.x,ship.y,wh.spaceX,wh.spaceY);
+      if(whDist<wh.radius*0.5){
+        window.prehistoricEra=!window.prehistoricEra; // toggle: through once = past, through again = present
+        // Eject the ship opposite the wormhole's pull so you don't re-enter instantly
+        const ejAng=Math.atan2(ship.y-wh.spaceY,ship.x-wh.spaceX);
+        ship.x=wh.spaceX+Math.cos(ejAng)*(wh.radius*2+60);
+        ship.y=wh.spaceY+Math.sin(ejAng)*(wh.radius*2+60);
+        ship.vx=Math.cos(ejAng)*4; ship.vy=Math.sin(ejAng)*4;
+        if(window.prehistoricEra){
+          showMessage("68,000,000 YEARS AGO — THE CRETACEOUS. Earth belongs to the dinosaurs now...");
+        } else {
+          showMessage("Back to the present day. Earth is as you left it.");
+        }
+        // Invalidate saved Earth state — it must regenerate for the new era
+        const e=planets.find(p=>p.id==='earth');
+        if(e) e.savedState=null;
+      }
+    }
+  }
+
+  // Mothership docking — auto-enter when close (like planet landing)
+  if(mothership._exitCool>0) mothership._exitCool--;
   const mDist=dist(ship.x,ship.y,mothershipPos.x,mothershipPos.y);
   if(mDist<80){
     ship.vx*=0.95;ship.vy*=0.95;
-    if(mDist<50&&!mothership._dockMsg){
-      mothership._dockMsg=true;
-      showMessage(tr('msg.docked'));
+    if(mDist<50 && mothership._exitCool<=0 && !mothershipMode){
+      enterMothership();
     }
-    if(mDist<50&&keys['x']&&!keys._xUsed){
-      keys._xUsed=true;enterMothership();
-    }
-    if(!keys['x'])keys._xUsed=false;
   }else{mothership._dockMsg=false;}
-
-  // Wormhole - distant anomaly
-  if(!window.wormhole)window.wormhole={x:200,y:-5500,radius:80,angle:0,active:true};
-  const wh=window.wormhole;wh.angle+=0.02;
-  const whDist=dist(ship.x,ship.y,wh.x,wh.y);
-  if(whDist<wh.radius*0.5&&wh.active&&!transition.active){
-    // Teleport to the void dimension!
-    wh.active=false;
-    ship.x=4000;ship.y=-7000; // teleport far away
-    // Spawn a hidden void planet
-    if(!window.voidPlanetAdded){
-      window.voidPlanetAdded=true;
-      planets.push({
-        id:'void',name:'The Void',desc:'"Nothing here makes sense. Everything here is wrong."',
-        radius:220,color:'#1a0a2a',color2:'#0a0018',atmosphere:'#6020a0',
-        skyTop:'#000000',skyMid:'#0a0020',skyBot:'#1a0040',
-        groundColor:['#0a0020','#060018','#030010'],grassColor:'#2a1050',
-        buildingColors:[['#208','#30a','#106'],['#218','#31a','#116']],
-        inhabitantCount:15,buildingDensity:0.4,hasClouds:false,isAlien:true,
-        alienSkin:['#60f','#40a','#80f','#308'],
-        alienHeadShape:'tall',alienExtra:'antennae',alienLabel:'Void Walker',
-        sadFacts:['"They exist between dimensions..."','"Time has no meaning here..."',
-          '"They have always been here. And nowhere."','"The void stares back..."'],
-        cryPhrases:["THE VOID SCREAMS","BETWEEN WORLDS","NOTHING IS REAL","TIME LOOPS","WE ARE THE ECHO","DIMENSION BLEEDS"],
-        alienTypes:[
-          {type:'wraith',label:'Void Wraith',scale:1.4,bodyWidth:4,headR:12,mass:0.5,colors:['#40a','#208','#60c']},
-          {type:'echo',label:'Echo Entity',scale:0.8,bodyWidth:3,headR:9,mass:0.3,colors:['#80f','#60a','#a0f']},
-          {type:'watcher',label:'Silent Watcher',scale:1.6,bodyWidth:6,headR:14,mass:3,colors:['#106','#204','#308']},
-          {type:'child',label:'Void Sprite',scale:0.4,bodyWidth:2,headR:7,mass:0.2,colors:['#c0f','#a0f','#e0f']},
-        ],
-        spaceX:4000,spaceY:-7000,visited:false,savedState:null
-      });
-    }
-    showMessage("The wormhole tears through reality...");
-    // Create wormhole exit
-    window.wormholeExit={x:4000,y:-6500,radius:80,angle:0};
-  }
-  // Wormhole exit - returns to normal space
-  if(window.wormholeExit){
-    const we=window.wormholeExit;we.angle+=0.02;
-    const weDist=dist(ship.x,ship.y,we.x,we.y);
-    if(weDist<we.radius*0.5&&!transition.active){
-      ship.x=wh.x;ship.y=wh.y-150;wh.active=true;
-      window.wormholeExit=null;
-      showMessage("Back in known space. The void lingers in your mind...");
-    }
-  }
 
   stepParticles();
   if(messageTimer>0){messageTimer--;if(messageTimer===0)document.getElementById('message').style.opacity=0;}
@@ -9662,6 +9834,46 @@ function drawSpace(){
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // hidden until discovered
     const sx=p.spaceX,sy=p.spaceY;
+    // Wormhole: render as swirling anomaly instead of normal planet body
+    if(p.isWormhole){
+      const t2=frameT;
+      if(!p._whAng) p._whAng=0; p._whAng+=0.02;
+      const ang=p._whAng;
+      // Outer swirl rings
+      for(let ring=0;ring<6;ring++){
+        const r=p.radius*(1.5-ring*0.18);
+        const a=0.2-ring*0.025;
+        ctx.strokeStyle=`rgba(${120+ring*25},${20+ring*10},${200+ring*8},${a})`;
+        ctx.lineWidth=4-ring*0.45;
+        ctx.beginPath();ctx.arc(sx,sy,r,ang+ring*0.5,ang+ring*0.5+Math.PI*1.2);ctx.stroke();
+        ctx.beginPath();ctx.arc(sx,sy,r,ang+ring*0.5+Math.PI,ang+ring*0.5+Math.PI*2.2);ctx.stroke();
+      }
+      // Core glow
+      const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,p.radius);
+      glow.addColorStop(0,`rgba(180,100,255,${0.35+Math.sin(t2*3)*0.1})`);
+      glow.addColorStop(0.5,'rgba(100,0,200,0.1)');
+      glow.addColorStop(1,'transparent');
+      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,p.radius,0,Math.PI*2);ctx.fill();
+      // Center bright spot
+      ctx.fillStyle=`rgba(220,180,255,${0.5+Math.sin(t2*4)*0.3})`;
+      ctx.beginPath();ctx.arc(sx,sy,16+Math.sin(t2*2)*4,0,Math.PI*2);ctx.fill();
+      // Particle pull effect
+      for(let i=0;i<4;i++){
+        const pa=t2*2+i*1.6,pr=p.radius*(0.5+Math.sin(t2+i)*0.3);
+        ctx.fillStyle=`rgba(180,100,255,${0.3+Math.sin(t2+i)*0.2})`;
+        ctx.beginPath();ctx.arc(sx+Math.cos(pa)*pr,sy+Math.sin(pa)*pr*0.5,3+Math.sin(t2*3+i)*1.5,0,Math.PI*2);ctx.fill();
+      }
+      // Label
+      const dWh=dist(ship.x,ship.y,sx,sy);
+      if(dWh<p.radius+800){
+        const la=Math.min(1,(p.radius+800-dWh)/400);ctx.globalAlpha=la;
+        ctx.fillStyle='#c8f';ctx.font='bold 16px monospace';ctx.textAlign='center';
+        ctx.fillText(tr('planet.wormhole.name').toUpperCase(),sx,sy+p.radius+30);
+        if(dWh<p.radius+200){ctx.fillStyle='#a6d';ctx.font='11px monospace';ctx.fillText('fly into the anomaly...',sx,sy+p.radius+48);}
+        ctx.globalAlpha=1;
+      }
+      return; // skip the normal planet body/bands/lock logic
+    }
     // Atmosphere glow (gradient cached per planet — coords + colors are static)
     if(!p._atmosphereGrad){
       const gr=ctx.createRadialGradient(sx,sy,p.radius*0.8,sx,sy,p.radius*1.4);
@@ -9669,13 +9881,25 @@ function drawSpace(){
       p._atmosphereGrad=gr;
     }
     ctx.fillStyle=p._atmosphereGrad;ctx.beginPath();ctx.arc(sx,sy,p.radius*1.4,0,Math.PI*2);ctx.fill();
-    // Planet body
+    // Planet body — bright, lit sphere. No black rim; fades to color2 so every planet
+    // reads as a light source even from far away.
     if(!p._bodyGrad){
       const pg=ctx.createRadialGradient(sx-p.radius*0.3,sy-p.radius*0.3,p.radius*0.1,sx,sy,p.radius);
-      pg.addColorStop(0,p.color);pg.addColorStop(0.7,p.color2);pg.addColorStop(1,'#000');
+      pg.addColorStop(0,p.color);pg.addColorStop(0.75,p.color2);pg.addColorStop(1,p.color2);
       p._bodyGrad=pg;
     }
     ctx.fillStyle=p._bodyGrad;ctx.beginPath();ctx.arc(sx,sy,p.radius,0,Math.PI*2);ctx.fill();
+    // Saturn rings
+    if(p.hasRings){
+      ctx.save();
+      ctx.strokeStyle='rgba(240,210,150,0.7)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.ellipse(sx,sy,p.radius*1.6,p.radius*0.35,0,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle='rgba(210,180,120,0.45)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.ellipse(sx,sy,p.radius*1.85,p.radius*0.42,0,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle='rgba(180,150,100,0.35)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.ellipse(sx,sy,p.radius*2.05,p.radius*0.48,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
     // Surface bands
     ctx.strokeStyle=p.color+'60';ctx.lineWidth=1;
     for(let i=0;i<5;i++){const yO=(i-2)*p.radius*0.3,w=Math.sqrt(Math.max(0,p.radius*p.radius-yO*yO));ctx.beginPath();ctx.ellipse(sx,sy+yO,w,Math.abs(yO)*0.15+3,0,0,Math.PI*2);ctx.stroke();}
@@ -9729,63 +9953,6 @@ function drawSpace(){
     ctx.globalAlpha=1;
   }
 
-  // === WORMHOLE ===
-  const wh=window.wormhole;
-  if(wh){
-    const whsx=wh.x,whsy=wh.y,t2=frameT;
-    const whDist=dist(ship.x,ship.y,whsx,whsy);
-    if(whDist<1500){
-      // Outer swirl
-      for(let ring=0;ring<5;ring++){
-        const r=wh.radius*(1.5-ring*0.2);
-        const a=wh.active?(0.15-ring*0.02):(0.03);
-        ctx.strokeStyle=`rgba(${120+ring*30},${20+ring*10},${200+ring*10},${a})`;
-        ctx.lineWidth=3-ring*0.4;
-        ctx.beginPath();ctx.arc(whsx,whsy,r,wh.angle+ring*0.5,wh.angle+ring*0.5+Math.PI*1.2);ctx.stroke();
-        ctx.beginPath();ctx.arc(whsx,whsy,r,wh.angle+ring*0.5+Math.PI,wh.angle+ring*0.5+Math.PI*2.2);ctx.stroke();
-      }
-      // Core glow
-      if(wh.active){
-        const glow=ctx.createRadialGradient(whsx,whsy,0,whsx,whsy,wh.radius);
-        glow.addColorStop(0,`rgba(180,100,255,${0.3+Math.sin(t2*3)*0.1})`);
-        glow.addColorStop(0.5,`rgba(100,0,200,0.1)`);
-        glow.addColorStop(1,'transparent');
-        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(whsx,whsy,wh.radius,0,Math.PI*2);ctx.fill();
-        // Center bright spot
-        ctx.fillStyle=`rgba(220,180,255,${0.5+Math.sin(t2*4)*0.3})`;
-        ctx.beginPath();ctx.arc(whsx,whsy,8+Math.sin(t2*2)*3,0,Math.PI*2);ctx.fill();
-        // Particle pull effect
-        for(let i=0;i<3;i++){
-          const pa=t2*2+i*2.1,pr=wh.radius*(0.5+Math.sin(t2+i)*0.3);
-          ctx.fillStyle=`rgba(180,100,255,${0.3+Math.sin(t2+i)*0.2})`;
-          ctx.beginPath();ctx.arc(whsx+Math.cos(pa)*pr,whsy+Math.sin(pa)*pr*0.5,2+Math.sin(t2*3+i)*1,0,Math.PI*2);ctx.fill();
-        }
-      }
-      // Label
-      if(whDist<800){
-        const la=Math.min(1,(800-whDist)/400);ctx.globalAlpha=la;
-        ctx.fillStyle='#c8f';ctx.font='14px monospace';ctx.textAlign='center';
-        ctx.fillText(wh.active?'WORMHOLE':'[collapsed]',whsx,whsy+wh.radius+25);
-        if(wh.active&&whDist<200){ctx.fillStyle='#a6d';ctx.font='10px monospace';ctx.fillText('fly into the anomaly...',whsx,whsy+wh.radius+42);}
-        ctx.globalAlpha=1;
-      }
-    }
-  }
-  // Wormhole exit (in void space)
-  if(window.wormholeExit){
-    const we=window.wormholeExit,t2=frameT;
-    for(let ring=0;ring<4;ring++){
-      const r=we.radius*(1.3-ring*0.2);
-      ctx.strokeStyle=`rgba(${100+ring*30},${200+ring*10},${100+ring*10},${0.12-ring*0.02})`;
-      ctx.lineWidth=2;ctx.beginPath();ctx.arc(we.x,we.y,r,we.angle+ring*0.6,we.angle+ring*0.6+Math.PI*1.3);ctx.stroke();
-    }
-    const glow=ctx.createRadialGradient(we.x,we.y,0,we.x,we.y,we.radius*0.8);
-    glow.addColorStop(0,`rgba(100,255,150,${0.2+Math.sin(t2*3)*0.1})`);glow.addColorStop(1,'transparent');
-    ctx.fillStyle=glow;ctx.beginPath();ctx.arc(we.x,we.y,we.radius*0.8,0,Math.PI*2);ctx.fill();
-    const wed=dist(ship.x,ship.y,we.x,we.y);
-    if(wed<500){ctx.fillStyle='#8f8';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText('RETURN WORMHOLE',we.x,we.y+we.radius+20);}
-  }
-
   drawShip();
   particles.forEach(pt=>{const sx=pt.x-camera.x,sy=pt.y-camera.y;if(sx<-20||sx>canvas.width+20||sy<-20||sy>canvas.height+20)return;ctx.globalAlpha=pt.life/30;ctx.fillStyle=pt.color;if(pt.size<3){ctx.fillRect(pt.x-pt.size/2,pt.y-pt.size/2,pt.size,pt.size);}else{ctx.beginPath();ctx.arc(pt.x,pt.y,pt.size,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;});
   ctx.restore();
@@ -9827,8 +9994,6 @@ function drawMinimap(){
     minX=Math.min(minX,p.spaceX-p.radius);maxX=Math.max(maxX,p.spaceX+p.radius);minY=Math.min(minY,p.spaceY-p.radius);maxY=Math.max(maxY,p.spaceY+p.radius);
   });
   minX=Math.min(minX,mothershipPos.x-150);maxX=Math.max(maxX,mothershipPos.x+150);minY=Math.min(minY,mothershipPos.y-50);maxY=Math.max(maxY,mothershipPos.y+50);
-  if(window.wormhole){minX=Math.min(minX,window.wormhole.x-100);maxX=Math.max(maxX,window.wormhole.x+100);minY=Math.min(minY,window.wormhole.y-100);maxY=Math.max(maxY,window.wormhole.y+100);}
-  if(window.wormholeExit){minX=Math.min(minX,window.wormholeExit.x-100);maxX=Math.max(maxX,window.wormholeExit.x+100);minY=Math.min(minY,window.wormholeExit.y-100);maxY=Math.max(maxY,window.wormholeExit.y+100);}
   minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
   // Also include ship
   minX=Math.min(minX,ship.x);maxX=Math.max(maxX,ship.x);minY=Math.min(minY,ship.y);maxY=Math.max(maxY,ship.y);
@@ -9836,25 +10001,27 @@ function drawMinimap(){
   const sX=mW/rangeX,sY=mH/rangeY;
 
   ctx.fillStyle='rgba(0,20,0,0.7)';ctx.strokeStyle='#0f0';ctx.lineWidth=1;ctx.fillRect(mX,mY,mW,mH);ctx.strokeRect(mX,mY,mW,mH);
+  // Clip all planet drawing to the minimap rect so nothing leaks outside the frame.
+  ctx.save(); ctx.beginPath(); ctx.rect(mX,mY,mW,mH); ctx.clip();
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // hidden until discovered
-    const px=mX+(p.spaceX-minX)*sX,py=mY+(p.spaceY-minY)*sY,pr=Math.max(4,p.radius*sX);
     const pd=Math.sqrt((p.spaceX-ship.x)**2+(p.spaceY-ship.y)**2);
+    // Match the bounds-calculation skip rule exactly — only show visited or nearby planets.
+    if(pd>3000&&!p.visited)return;
+    const px=mX+(p.spaceX-minX)*sX,py=mY+(p.spaceY-minY)*sY,pr=Math.max(4,p.radius*sX);
     const isLocked=!unlockedPlanets.includes(p.id);
-    if(pd>3000&&!p.visited&&isLocked)return; // hide distant undiscovered planets
-    ctx.fillStyle=isLocked?'#333':p.color;ctx.beginPath();ctx.arc(px,py,pr,0,Math.PI*2);ctx.fill();
+    // Planets always render as bright lights on the minimap — locked or not.
+    // A subtle glow halo makes them read as little suns instead of dull dots.
+    ctx.fillStyle=p.color+'55';ctx.beginPath();ctx.arc(px,py,pr+2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(px,py,pr,0,Math.PI*2);ctx.fill();
     // Medal dot
     const comp=planetProgress[p.id]?planetProgress[p.id].completion:'none';
     if(comp!=='none'){ctx.fillStyle=comp==='gold'?'#ffd700':comp==='silver'?'#c0c0c0':'#cd7f32';ctx.beginPath();ctx.arc(px+pr+3,py-pr,2,0,Math.PI*2);ctx.fill();}
     // Tiny label
-    ctx.fillStyle=isLocked?'#555':'#0f0';ctx.font='7px monospace';ctx.textAlign='center';ctx.fillText(p.name.slice(0,4),px,py+pr+8);
+    ctx.fillStyle='#0f0';ctx.font='7px monospace';ctx.textAlign='center';ctx.fillText(tr('planet.'+p.id+'.name'),px,py+pr+8);
   });
-  // Wormhole on minimap
-  if(window.wormhole){const wh=window.wormhole;const whx=mX+(wh.x-minX)*sX,why=mY+(wh.y-minY)*sY;
-    ctx.fillStyle=wh.active?'#c0f':'#404';ctx.beginPath();ctx.arc(whx,why,4,0,Math.PI*2);ctx.fill();
-    ctx.font='6px monospace';ctx.textAlign='center';ctx.fillStyle='#c0f';ctx.fillText('WH',whx,why+7);}
-  if(window.wormholeExit){const we=window.wormholeExit;const wex=mX+(we.x-minX)*sX,wey=mY+(we.y-minY)*sY;
-    ctx.fillStyle='#0f8';ctx.beginPath();ctx.arc(wex,wey,3,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+  // (Wormhole now lives in the planets array and is rendered there with the 'WH' marker inlined)
   // Mothership on minimap
   const mmx=mX+(mothershipPos.x-minX)*sX,mmy=mY+(mothershipPos.y-minY)*sY;
   ctx.fillStyle='#0f0';ctx.beginPath();ctx.ellipse(mmx,mmy,6,2,0,0,Math.PI*2);ctx.fill();
@@ -11319,6 +11486,162 @@ function drawPlanet(){
       });
     } // end _playerInCave else
     }
+  }else if(p.id==='tomb' || p.isGasGiant){
+    // Saturn: gas giant — no solid ground, endless banded cloud decks
+    const _sg = ctx.createLinearGradient(0,GROUND_LEVEL-20,0,GROUND_LEVEL+400);
+    _sg.addColorStop(0,'#f0dcb0'); _sg.addColorStop(0.15,'#d4a868');
+    _sg.addColorStop(0.35,'#e8c890'); _sg.addColorStop(0.55,'#a87840');
+    _sg.addColorStop(0.75,'#c89858'); _sg.addColorStop(1,'#6a4820');
+    ctx.fillStyle=_sg; ctx.fillRect(camera.x-200,GROUND_LEVEL-20,canvas.width+400,canvas.height+Math.abs(camera.y)+40);
+    // Horizontal cloud bands (slow parallax drift)
+    const _ct = frameT*0.2;
+    for(let by=0; by<9; by++){
+      const bandY = GROUND_LEVEL + by*22;
+      const bandH = 8+by*0.8;
+      const alpha = 0.12 + (by%2)*0.08;
+      const tint = by%3===0 ? '240,220,170' : (by%3===1 ? '160,110,60' : '210,170,110');
+      for(let bx=Math.floor(camera.x/120)*120-120; bx<camera.x+canvas.width+120; bx+=120){
+        const wob = Math.sin(bx*0.008 + by*1.7 + _ct*0.01)*6;
+        ctx.fillStyle=`rgba(${tint},${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(bx+60 + (_ct*(1+by*0.1)%240 - 120), bandY+wob, 80, bandH, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+    // Atmospheric wisps near horizon
+    for(let wx=Math.floor(camera.x/80)*80-80; wx<camera.x+canvas.width+80; wx+=80){
+      const ws=Math.sin(wx*0.023+_ct*0.02)*0.5+0.5;
+      if(ws>0.45){
+        ctx.fillStyle=`rgba(255,245,210,${0.1+ws*0.15})`;
+        ctx.beginPath();
+        ctx.ellipse(wx + _ct*0.3%160, GROUND_LEVEL-6 - ws*8, 45, 3+ws*2, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+    // Faint lightning flicker in deeper bands
+    if(Math.random()<0.006){
+      const flx = camera.x + Math.random()*canvas.width;
+      const fly = GROUND_LEVEL + 80 + Math.random()*120;
+      ctx.strokeStyle='rgba(255,250,220,0.7)';ctx.lineWidth=1.3;
+      ctx.beginPath();ctx.moveTo(flx,fly);
+      for(let k=0;k<5;k++){ ctx.lineTo(flx+(Math.random()-0.5)*14, fly+k*6); }
+      ctx.stroke();
+    }
+  }else if(p.id==='moon'){
+    // Moon: dusty grey regolith, craters, no grass, no atmosphere
+    const _mg = ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);
+    _mg.addColorStop(0,'#bcbcc0'); _mg.addColorStop(0.3,'#8c8c90'); _mg.addColorStop(1,'#3a3a3e');
+    ctx.fillStyle=_mg; ctx.fillRect(camera.x-200,GROUND_LEVEL,canvas.width+400,canvas.height+Math.abs(camera.y));
+    // Deterministic craters tiled across worldWidth
+    for(let cx=Math.floor(camera.x/140)*140-140; cx<camera.x+canvas.width+140; cx+=140){
+      const cs=Math.sin(cx*0.013)*0.5+0.5;
+      if(cs>0.25){
+        const cr=8+cs*22;
+        // Inner shadow bowl
+        ctx.fillStyle='rgba(25,25,32,0.55)';
+        ctx.beginPath();ctx.ellipse(cx+20,GROUND_LEVEL+cr*0.25,cr,cr*0.35,0,0,Math.PI*2);ctx.fill();
+        // Bright upper rim
+        ctx.strokeStyle='rgba(235,235,240,0.4)';ctx.lineWidth=2;
+        ctx.beginPath();ctx.ellipse(cx+20,GROUND_LEVEL+cr*0.25,cr,cr*0.35,0,Math.PI,Math.PI*2);ctx.stroke();
+        // Dark lower lip
+        ctx.strokeStyle='rgba(30,30,38,0.5)';ctx.lineWidth=1.3;
+        ctx.beginPath();ctx.ellipse(cx+20,GROUND_LEVEL+cr*0.25,cr,cr*0.35,0,0,Math.PI);ctx.stroke();
+      }
+      // Small scattered rocks
+      const rs=Math.sin(cx*0.041+12.3)*0.5+0.5;
+      if(rs>0.4){
+        ctx.fillStyle='rgba(50,50,58,0.55)';
+        ctx.beginPath();ctx.ellipse(cx+70,GROUND_LEVEL-1,2+rs*2,1.2,0,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(240,240,245,0.3)';
+        ctx.beginPath();ctx.ellipse(cx+69,GROUND_LEVEL-2,1,0.5,0,0,Math.PI*2);ctx.fill();
+      }
+    }
+    // Dust speckles
+    for(let dx=Math.floor(camera.x/25)*25-25; dx<camera.x+canvas.width+25; dx+=25){
+      const ds=Math.sin(dx*0.17)*0.5+0.5;
+      ctx.fillStyle=`rgba(70,70,80,${0.18+ds*0.15})`;
+      ctx.fillRect(dx,GROUND_LEVEL+3+ds*10,2,1);
+    }
+    // --- Flag (fixed world position, rigid — no wind on airless moon) ---
+    const flagX=worldWidth*0.5;
+    if(flagX>camera.x-120 && flagX<camera.x+canvas.width+120){
+      // Footprint trail leading to flag
+      ctx.fillStyle='rgba(40,40,50,0.35)';
+      for(let fp=0;fp<8;fp++){
+        const fx=flagX-100+fp*14;
+        ctx.fillRect(fx,GROUND_LEVEL-1,4,1.5);
+        ctx.fillRect(fx+7,GROUND_LEVEL,4,1.5);
+      }
+      // Pole
+      ctx.fillStyle='#d8d8dc';
+      ctx.fillRect(flagX,GROUND_LEVEL-70,1.6,70);
+      // Pole tip
+      ctx.fillStyle='#f0f0f4';
+      ctx.beginPath();ctx.arc(flagX+0.8,GROUND_LEVEL-70,1.5,0,Math.PI*2);ctx.fill();
+      // Small base mound
+      ctx.fillStyle='#5a5a60';
+      ctx.beginPath();ctx.ellipse(flagX+1,GROUND_LEVEL,7,2,0,0,Math.PI*2);ctx.fill();
+      // Stiff flag (no wind)
+      ctx.fillStyle='#fff';ctx.fillRect(flagX+1.6,GROUND_LEVEL-70,22,14);
+      ctx.fillStyle='#c02030';
+      for(let s=1;s<7;s+=2){ctx.fillRect(flagX+1.6,GROUND_LEVEL-70+s*2,22,2);}
+      ctx.fillStyle='#1a3a8a';ctx.fillRect(flagX+1.6,GROUND_LEVEL-70,9,7);
+      // Tiny stars on canton
+      ctx.fillStyle='#fff';
+      for(let sx=0;sx<3;sx++) for(let sy=0;sy<2;sy++){
+        ctx.fillRect(flagX+3+sx*3, GROUND_LEVEL-68+sy*3, 0.8, 0.8);
+      }
+    }
+    // --- Lone weird moon creature (wanders slowly) ---
+    if(!p._moonCreature){ p._moonCreature={x:worldWidth*0.65, vx:0.25, phase:Math.random()*6, sadT:Math.random()*240}; }
+    const mc=p._moonCreature;
+    mc.phase+=0.03; mc.x+=mc.vx*0.5; mc.sadT--;
+    if(mc.x>worldWidth-250||mc.x<250) mc.vx=-mc.vx;
+    if(mc.sadT<=0) mc.sadT=180+Math.random()*300;
+    if(mc.x>camera.x-80 && mc.x<camera.x+canvas.width+80){
+      const hop=Math.abs(Math.sin(mc.phase))*3;
+      const cy=GROUND_LEVEL-14-hop;
+      // Ground shadow
+      ctx.fillStyle='rgba(15,15,20,0.5)';
+      ctx.beginPath();ctx.ellipse(mc.x,GROUND_LEVEL,10,2,0,0,Math.PI*2);ctx.fill();
+      // Soft halo
+      ctx.fillStyle='rgba(180,200,255,0.18)';
+      ctx.beginPath();ctx.ellipse(mc.x,cy,15,12,0,0,Math.PI*2);ctx.fill();
+      // Body (pale translucent blob)
+      ctx.fillStyle='#d8d4e8';
+      ctx.beginPath();ctx.ellipse(mc.x,cy,10,8,0,0,Math.PI*2);ctx.fill();
+      // Belly gradient
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.beginPath();ctx.ellipse(mc.x-2,cy-2,5,3,0,0,Math.PI*2);ctx.fill();
+      // Drooping tentacles
+      ctx.strokeStyle='#b8b4c8';ctx.lineWidth=2;ctx.lineCap='round';
+      for(let t=0;t<3;t++){
+        const tx=mc.x-6+t*6;
+        const ty=cy+5;
+        const swing=Math.sin(mc.phase+t*1.3)*1.5;
+        ctx.beginPath();ctx.moveTo(tx,ty);
+        ctx.quadraticCurveTo(tx+swing,ty+4,tx+swing,ty+8);ctx.stroke();
+      }
+      // Two big sad eyes
+      const blink=Math.sin(mc.phase*0.4)>0.95?0.1:1;
+      ctx.fillStyle='#111';
+      ctx.beginPath();ctx.ellipse(mc.x-3,cy-1,1.8,1.8*blink,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(mc.x+3,cy-1,1.8,1.8*blink,0,0,Math.PI*2);ctx.fill();
+      // Eye glints
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.arc(mc.x-3.4,cy-1.4,0.5,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(mc.x+2.6,cy-1.4,0.5,0,Math.PI*2);ctx.fill();
+      // Small antenna with dot
+      ctx.strokeStyle='#b8b4c8';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(mc.x,cy-7);ctx.lineTo(mc.x+Math.sin(mc.phase*2)*1.5,cy-12);ctx.stroke();
+      ctx.fillStyle='#f0e0ff';
+      ctx.beginPath();ctx.arc(mc.x+Math.sin(mc.phase*2)*1.5,cy-12.5,1.2,0,Math.PI*2);ctx.fill();
+      // Occasional silent mood
+      if(mc.sadT<60){
+        ctx.fillStyle='rgba(200,200,255,0.7)';ctx.font='10px monospace';ctx.textAlign='center';
+        ctx.fillText('...', mc.x, cy-17);
+      }
+    }
   }else{
     ctx.fillStyle=_getBiomeGroundGrad({id:'planet_'+p.id,groundColor:p.groundColor});ctx.fillRect(camera.x-200,GROUND_LEVEL,canvas.width+400,canvas.height+Math.abs(camera.y));
     ctx.strokeStyle=p.grassColor;for(let gx=Math.floor(camera.x/30)*30;gx<camera.x+canvas.width;gx+=30){ctx.beginPath();ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx-3,GROUND_LEVEL-5);ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx+3,GROUND_LEVEL-6);ctx.stroke();}
@@ -11989,11 +12312,7 @@ function drawPlanet(){
 
   // --- MISSION HUD --- (removed per user request — exploration-focused game)
 
-  // --- UPGRADE PROMPT ---
-  if(score>=10&&playerMode==='ship'){
-    ctx.fillStyle='rgba(0,255,0,0.6)';ctx.font='11px monospace';ctx.textAlign='center';
-    ctx.fillText(tr('hud.upgradePrompt'),canvas.width/2,canvas.height-15);
-  }
+  // --- UPGRADE PROMPT --- (removed per user request)
   // --- EXPLOSION FLASHES ---
   if(window._explosionFlashes){
     window._explosionFlashes.forEach(ef=>{
@@ -12303,6 +12622,180 @@ function drawShipBody(pc,pa,pt,type){
     ctx.fillStyle=`rgba(255,170,80,${0.6+Math.sin(ship.lightPhase)*0.3})`;
     ctx.beginPath(); ctx.arc(-30,-4,2,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(-30,4,2,0,Math.PI*2); ctx.fill();
+  } else if(type==='viper'){
+    // Colonial viper — sleek forward-swept fighter with twin ring engines
+    // Fuselage
+    ctx.fillStyle=pc;
+    ctx.beginPath();
+    ctx.moveTo(32,0); ctx.lineTo(24,-3); ctx.lineTo(-22,-4); ctx.lineTo(-26,0); ctx.lineTo(-22,4); ctx.lineTo(24,3); ctx.closePath();
+    ctx.fill();
+    // Forward canards
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(14,-3); ctx.lineTo(20,-9); ctx.lineTo(8,-3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(14,3); ctx.lineTo(20,9); ctx.lineTo(8,3); ctx.closePath(); ctx.fill();
+    // Main swept wings
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(-20,-14); ctx.lineTo(-10,-14); ctx.lineTo(6,-3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4,3); ctx.lineTo(-20,14); ctx.lineTo(-10,14); ctx.lineTo(6,3); ctx.closePath(); ctx.fill();
+    // Cockpit
+    ctx.fillStyle='#224'; ctx.beginPath(); ctx.ellipse(14,-1,5,2.2,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(180,220,255,${0.5+Math.sin(ship.lightPhase)*0.2})`;
+    ctx.beginPath(); ctx.ellipse(14,-1.3,3,1,0,0,Math.PI*2); ctx.fill();
+    // Ring engines (twin)
+    ctx.strokeStyle=pa; ctx.lineWidth=2;
+    [-9,9].forEach(y=>{ ctx.beginPath(); ctx.arc(-22,y,4,0,Math.PI*2); ctx.stroke(); });
+    ctx.fillStyle=`rgba(255,120,50,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    [-9,9].forEach(y=>{ ctx.beginPath(); ctx.arc(-22,y,2.5,0,Math.PI*2); ctx.fill(); });
+  } else if(type==='sphere'){
+    // Orb ship — spherical translucent shell with pulsing core + orbital ring
+    const pulse=0.5+Math.sin(ship.lightPhase*2)*0.5;
+    // Orbital ring (tilted ellipse behind)
+    ctx.strokeStyle=pa; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(0,0,28,9,0,0,Math.PI*2); ctx.stroke();
+    // Ring highlight
+    ctx.strokeStyle=`rgba(255,255,255,${0.35+pulse*0.3})`; ctx.lineWidth=0.8;
+    ctx.beginPath(); ctx.ellipse(0,-0.5,27,8.5,0,Math.PI,Math.PI*2); ctx.stroke();
+    // Outer shell (translucent)
+    const sg=ctx.createRadialGradient(-4,-4,2,0,0,16);
+    sg.addColorStop(0, pc);
+    sg.addColorStop(0.6, pa);
+    sg.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle=sg;
+    ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+    // Inner core (pulsing)
+    ctx.fillStyle=`rgba(255,240,200,${0.3+pulse*0.5})`;
+    ctx.beginPath(); ctx.arc(0,0,7+pulse*2,0,Math.PI*2); ctx.fill();
+    // Orbiting satellites
+    for(let i=0;i<3;i++){
+      const a=ship.lightPhase*1.5 + i*Math.PI*2/3;
+      const ox=Math.cos(a)*26, oy=Math.sin(a)*8;
+      ctx.fillStyle=pa;
+      ctx.beginPath(); ctx.arc(ox,oy,2,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=`rgba(255,255,200,${0.5+pulse*0.4})`;
+      ctx.beginPath(); ctx.arc(ox,oy,0.8,0,Math.PI*2); ctx.fill();
+    }
+    // Equator belt
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=0.6;
+    ctx.beginPath(); ctx.ellipse(0,0,15,4,0,0,Math.PI*2); ctx.stroke();
+  } else if(type==='needle'){
+    // Needle ship — ultra-long pencil fuselage with bulb tip
+    // Body
+    const ng=ctx.createLinearGradient(0,-3,0,3);
+    ng.addColorStop(0,pc); ng.addColorStop(0.5,pa); ng.addColorStop(1,pc);
+    ctx.fillStyle=ng;
+    ctx.beginPath();
+    ctx.moveTo(42,0); ctx.lineTo(28,-2); ctx.lineTo(-28,-3); ctx.lineTo(-34,0); ctx.lineTo(-28,3); ctx.lineTo(28,2); ctx.closePath();
+    ctx.fill();
+    // Bulb tip (front)
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(40,0,5,3,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,220,180,${0.4+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.ellipse(40,0,3,2,0,0,Math.PI*2); ctx.fill();
+    // Three slim fins near rear
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(-14,-3); ctx.lineTo(-24,-10); ctx.lineTo(-22,-3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-14,3); ctx.lineTo(-24,10); ctx.lineTo(-22,3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.35)';
+    ctx.fillRect(-18,-0.5,8,1);
+    // Windows along spine
+    ctx.fillStyle=`rgba(200,230,255,${0.35+Math.sin(ship.lightPhase)*0.15})`;
+    for(let i=-4;i<=4;i++){ ctx.fillRect(i*6, -1, 3, 0.8); }
+    // Single rear engine
+    ctx.fillStyle=`rgba(100,220,255,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-34,0,3,0,Math.PI*2); ctx.fill();
+  } else if(type==='swarm'){
+    // Drone swarm — central core with small drones orbiting
+    const pulse=0.5+Math.sin(ship.lightPhase*2)*0.5;
+    // Central core
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=pc;
+    ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,80,255,${0.4+pulse*0.4})`;
+    ctx.beginPath(); ctx.arc(0,0,2.5,0,Math.PI*2); ctx.fill();
+    // Drones orbiting at varying radii
+    const droneCount=7;
+    for(let i=0;i<droneCount;i++){
+      const a=ship.lightPhase*(i%2===0?1.5:-1.2) + i*Math.PI*2/droneCount;
+      const r=14+(i%3)*6;
+      const dx=Math.cos(a)*r, dy=Math.sin(a)*r*0.55;
+      // Drone body
+      ctx.fillStyle=pa;
+      ctx.beginPath(); ctx.ellipse(dx,dy,3.5,2,a,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=pc;
+      ctx.beginPath(); ctx.ellipse(dx,dy,2,1.2,a,0,Math.PI*2); ctx.fill();
+      // Drone glow tail
+      ctx.fillStyle=`rgba(255,180,100,${0.4+pulse*0.3})`;
+      ctx.beginPath();
+      ctx.ellipse(dx-Math.cos(a)*3, dy-Math.sin(a)*1.5, 2, 0.8, a, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Energy link lines from core to nearest drones
+    ctx.strokeStyle=`rgba(255,200,255,${0.2+pulse*0.2})`;
+    ctx.lineWidth=0.6;
+    for(let i=0;i<3;i++){
+      const a=ship.lightPhase*1.5 + i*Math.PI*2/3;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*14, Math.sin(a)*8); ctx.stroke();
+    }
+  } else if(type==='warbird'){
+    // Bird-of-prey style — central body with wings swept downward like a raptor
+    // Wings (large, downward-swept)
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(-2,-3); ctx.lineTo(-18,-4); ctx.lineTo(-26,12); ctx.lineTo(-10,4); ctx.lineTo(4,2);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-2,3); ctx.lineTo(-18,4); ctx.lineTo(-26,-12); ctx.lineTo(-10,-4); ctx.lineTo(4,-2);
+    ctx.closePath(); ctx.fill();
+    // Body
+    ctx.fillStyle=pc;
+    ctx.beginPath();
+    ctx.moveTo(32,0); ctx.lineTo(18,-4); ctx.lineTo(-14,-5); ctx.lineTo(-18,0); ctx.lineTo(-14,5); ctx.lineTo(18,4);
+    ctx.closePath(); ctx.fill();
+    // Neck/head
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(26,0,8,3,0,0,Math.PI*2); ctx.fill();
+    // Cockpit eye
+    ctx.fillStyle='#400';
+    ctx.beginPath(); ctx.ellipse(26,0,3,1.5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,80,60,${0.5+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.ellipse(26,0,1.8,0.8,0,0,Math.PI*2); ctx.fill();
+    // Wing talons (cannon tips)
+    ctx.fillStyle=pc;
+    ctx.fillRect(-28,11,4,2); ctx.fillRect(-28,-13,4,2);
+    // Twin rear thrusters
+    ctx.fillStyle=`rgba(120,255,120,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-18,-2,2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-18,2,2,0,Math.PI*2); ctx.fill();
+  } else if(type==='eggufo'){
+    // Egg UFO — vertical egg-shape with thin saucer ring (variation on classic saucer)
+    // Lower ring
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(0,4,32,4,0,0,Math.PI*2); ctx.fill();
+    // Egg body (taller)
+    const eg=ctx.createLinearGradient(0,-18,0,6);
+    eg.addColorStop(0,pc); eg.addColorStop(0.7,pa); eg.addColorStop(1,pa);
+    ctx.fillStyle=eg;
+    ctx.beginPath(); ctx.ellipse(0,-5,14,16,0,0,Math.PI*2); ctx.fill();
+    // Big panoramic window
+    ctx.fillStyle='#113';
+    ctx.beginPath(); ctx.ellipse(0,-8,10,5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(120,230,180,${0.35+Math.sin(ship.lightPhase)*0.2})`;
+    ctx.beginPath(); ctx.ellipse(0,-8,8,3.5,0,0,Math.PI*2); ctx.fill();
+    // Antenna dome
+    ctx.fillStyle=pa;
+    ctx.fillRect(-0.8,-24,1.6,6);
+    ctx.fillStyle=`rgba(255,200,80,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(0,-24,1.8,0,Math.PI*2); ctx.fill();
+    // Lights ring
+    for(let i=0;i<8;i++){
+      const a=(i/8)*Math.PI*2+ship.lightPhase;
+      ctx.fillStyle=i%2===0?pt:'#fa0';
+      ctx.beginPath(); ctx.arc(Math.cos(a)*28,Math.sin(a)*3.5+4,1.5,0,Math.PI*2); ctx.fill();
+    }
+    // Tripod legs (little extended landers)
+    ctx.strokeStyle=pa; ctx.lineWidth=1;
+    [-18,0,18].forEach(lx=>{ ctx.beginPath(); ctx.moveTo(lx*0.6, 5); ctx.lineTo(lx, 9); ctx.stroke(); });
   } else {
     // Classic saucer (default)
     ctx.fillStyle=pa;ctx.beginPath();ctx.ellipse(0,0,35,10,0,0,Math.PI*2);ctx.fill();
@@ -12354,8 +12847,232 @@ function drawShip(){
 }
 
 // --- HELPERS ---
+function renderDino(h){
+  const s=h.scale||1, dir=h.walkDir>=0?1:-1, kind=h.dinoKind;
+  const col=h.color, dark=h.skinColor;
+  const cx=h.bodyX, cy=h.bodyY;
+  // Feet: use physics-driven positions so ragdoll/beam feel right.
+  const f1x=h.footLX, f1y=h.footLY, f2x=h.footRX, f2y=h.footRY;
+  // Ground shadow
+  ctx.fillStyle='rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(cx,GROUND_LEVEL,14*s,3*s,0,0,Math.PI*2); ctx.fill();
+
+  const walkT = (h.walkTimer||0);
+  const bob = h.grounded?Math.sin(walkT*0.18)*1.2*s:0;
+
+  if(kind==='trex'){
+    // Tail (long, tapered, behind)
+    ctx.strokeStyle=col; ctx.lineCap='round';
+    ctx.lineWidth=10*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*2*s,cy+bob);
+    ctx.quadraticCurveTo(cx-dir*22*s,cy-6*s+bob,cx-dir*34*s,cy-2*s+bob); ctx.stroke();
+    ctx.lineWidth=4*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*30*s,cy-3*s+bob); ctx.lineTo(cx-dir*42*s,cy+2*s+bob); ctx.stroke();
+    // Body
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,18*s,11*s,0,0,Math.PI*2); ctx.fill();
+    // Legs (2, powerful) — use physics feet
+    ctx.strokeStyle=col; ctx.lineWidth=6*s;
+    ctx.beginPath(); ctx.moveTo(cx-3*s,cy+8*s+bob); ctx.lineTo(f1x,f1y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+3*s,cy+8*s+bob); ctx.lineTo(f2x,f2y); ctx.stroke();
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.ellipse(f1x+dir*3*s,f1y,5*s,2*s,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(f2x+dir*3*s,f2y,5*s,2*s,0,0,Math.PI*2); ctx.fill();
+    // Tiny arms
+    ctx.strokeStyle=col; ctx.lineWidth=2*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*10*s,cy+bob); ctx.lineTo(cx+dir*16*s,cy+3*s+bob); ctx.stroke();
+    // Head on short thick neck, facing dir
+    const hx=cx+dir*22*s, hy=cy-10*s+bob;
+    ctx.strokeStyle=col; ctx.lineWidth=9*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*12*s,cy-4*s+bob); ctx.lineTo(hx-dir*3*s,hy+2*s); ctx.stroke();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(hx,hy,12*s,7*s,dir*0.1,0,Math.PI*2); ctx.fill();
+    // Jaw
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.moveTo(hx+dir*6*s,hy+3*s); ctx.lineTo(hx+dir*14*s,hy+5*s); ctx.lineTo(hx+dir*3*s,hy+6*s); ctx.closePath(); ctx.fill();
+    // Teeth
+    ctx.fillStyle='#fff';
+    for(let i=0;i<5;i++){ ctx.fillRect(hx+dir*(4+i*2)*s, hy+4*s, 1*s, 2*s); }
+    // Eye
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx+dir*4*s,hy-1*s,1.2*s,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=h.crying?'#f44':'#fc0';
+    ctx.beginPath(); ctx.arc(hx+dir*4*s,hy-1*s,0.5*s,0,Math.PI*2); ctx.fill();
+  } else if(kind==='raptor'){
+    ctx.strokeStyle=col; ctx.lineCap='round';
+    // Tail (straight, balance)
+    ctx.lineWidth=4*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*2*s,cy+bob); ctx.lineTo(cx-dir*22*s,cy-4*s+bob); ctx.stroke();
+    // Body
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,10*s,6*s,0,0,Math.PI*2); ctx.fill();
+    // Legs
+    ctx.strokeStyle=col; ctx.lineWidth=3*s;
+    ctx.beginPath(); ctx.moveTo(cx-2*s,cy+4*s+bob); ctx.lineTo(f1x,f1y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+2*s,cy+4*s+bob); ctx.lineTo(f2x,f2y); ctx.stroke();
+    // Sickle claw on leading foot
+    ctx.strokeStyle='#eee'; ctx.lineWidth=1.5*s;
+    ctx.beginPath(); ctx.moveTo(f2x+dir*3*s,f2y); ctx.quadraticCurveTo(f2x+dir*6*s,f2y-4*s,f2x+dir*4*s,f2y-5*s); ctx.stroke();
+    // Arms with claws
+    ctx.strokeStyle=col; ctx.lineWidth=1.8*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*5*s,cy-1*s+bob); ctx.lineTo(cx+dir*10*s,cy+4*s+bob); ctx.stroke();
+    // Head
+    const hx=cx+dir*14*s, hy=cy-6*s+bob;
+    ctx.strokeStyle=col; ctx.lineWidth=4*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*6*s,cy-3*s+bob); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(hx,hy,7*s,4*s,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.moveTo(hx+dir*3*s,hy+1*s); ctx.lineTo(hx+dir*9*s,hy+3*s); ctx.lineTo(hx+dir*2*s,hy+3*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx+dir*2*s,hy-1*s,1*s,0,Math.PI*2); ctx.fill();
+  } else if(kind==='stego'){
+    // Quadruped + back plates
+    const footY=GROUND_LEVEL;
+    ctx.strokeStyle=col; ctx.lineCap='round';
+    // Tail
+    ctx.lineWidth=5*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*12*s,cy+bob); ctx.lineTo(cx-dir*26*s,cy+4*s+bob); ctx.stroke();
+    // Spikes on tail tip (thagomizer)
+    ctx.fillStyle='#eee';
+    for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(cx-dir*(22+i*2)*s,cy+2*s+bob); ctx.lineTo(cx-dir*(24+i*2)*s,cy-3*s+bob); ctx.lineTo(cx-dir*(20+i*2)*s,cy+1*s+bob); ctx.closePath(); ctx.fill(); }
+    // Body
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,18*s,9*s,0,0,Math.PI*2); ctx.fill();
+    // Plates along the back
+    ctx.fillStyle=dark;
+    for(let i=-2;i<=2;i++){
+      const px=cx+i*5*s, py=cy-8*s+bob-Math.abs(i)*1*s;
+      ctx.beginPath(); ctx.moveTo(px-3*s,py+4*s); ctx.lineTo(px,py-6*s); ctx.lineTo(px+3*s,py+4*s); ctx.closePath(); ctx.fill();
+    }
+    // Four legs (use feet + synthesize 2 more at arm positions)
+    ctx.strokeStyle=col; ctx.lineWidth=4*s;
+    ctx.beginPath(); ctx.moveTo(cx-10*s,cy+7*s+bob); ctx.lineTo(cx-10*s+Math.sin(walkT*0.2)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-3*s,cy+7*s+bob); ctx.lineTo(cx-3*s-Math.sin(walkT*0.2)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+3*s,cy+7*s+bob); ctx.lineTo(cx+3*s+Math.sin(walkT*0.2+1)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+10*s,cy+7*s+bob); ctx.lineTo(cx+10*s-Math.sin(walkT*0.2+1)*2*s,footY); ctx.stroke();
+    // Small head
+    const hx=cx+dir*16*s, hy=cy+bob;
+    ctx.strokeStyle=col; ctx.lineWidth=5*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*10*s,cy-2*s+bob); ctx.lineTo(hx,hy+1*s); ctx.stroke();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(hx,hy,5*s,3.5*s,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx+dir*2*s,hy-1*s,0.9*s,0,Math.PI*2); ctx.fill();
+  } else if(kind==='tricera'){
+    const footY=GROUND_LEVEL;
+    ctx.strokeStyle=col; ctx.lineCap='round';
+    // Tail
+    ctx.lineWidth=5*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*12*s,cy+bob); ctx.lineTo(cx-dir*22*s,cy+3*s+bob); ctx.stroke();
+    // Body
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,16*s,9*s,0,0,Math.PI*2); ctx.fill();
+    // 4 legs
+    ctx.strokeStyle=col; ctx.lineWidth=5*s;
+    ctx.beginPath(); ctx.moveTo(cx-9*s,cy+7*s+bob); ctx.lineTo(cx-9*s+Math.sin(walkT*0.2)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-3*s,cy+7*s+bob); ctx.lineTo(cx-3*s-Math.sin(walkT*0.2)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+3*s,cy+7*s+bob); ctx.lineTo(cx+3*s+Math.sin(walkT*0.2+1)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+9*s,cy+7*s+bob); ctx.lineTo(cx+9*s-Math.sin(walkT*0.2+1)*2*s,footY); ctx.stroke();
+    // Head with big frill + 3 horns
+    const hx=cx+dir*16*s, hy=cy+2*s+bob;
+    // Frill
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.ellipse(hx-dir*3*s,hy-2*s,8*s,9*s,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(hx,hy,8*s,5*s,0,0,Math.PI*2); ctx.fill();
+    // Horns
+    ctx.fillStyle='#f0ead8';
+    // Nose horn
+    ctx.beginPath(); ctx.moveTo(hx+dir*5*s,hy-1*s); ctx.lineTo(hx+dir*9*s,hy-6*s); ctx.lineTo(hx+dir*5*s,hy-3*s); ctx.closePath(); ctx.fill();
+    // Brow horns
+    ctx.beginPath(); ctx.moveTo(hx+dir*2*s,hy-4*s); ctx.lineTo(hx+dir*4*s,hy-11*s); ctx.lineTo(hx+dir*1*s,hy-5*s); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(hx+dir*-1*s,hy-4*s); ctx.lineTo(hx+dir*-3*s,hy-11*s); ctx.lineTo(hx+dir*-2*s,hy-5*s); ctx.closePath(); ctx.fill();
+    // Eye
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx+dir*2*s,hy-1*s,1*s,0,Math.PI*2); ctx.fill();
+  } else if(kind==='bronto'){
+    const footY=GROUND_LEVEL;
+    ctx.strokeStyle=col; ctx.lineCap='round';
+    // Long tail
+    ctx.lineWidth=6*s;
+    ctx.beginPath(); ctx.moveTo(cx-dir*14*s,cy+bob);
+    ctx.quadraticCurveTo(cx-dir*30*s,cy-2*s+bob,cx-dir*46*s,cy+6*s+bob); ctx.stroke();
+    // Body
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,22*s,11*s,0,0,Math.PI*2); ctx.fill();
+    // 4 legs (columnar)
+    ctx.strokeStyle=col; ctx.lineWidth=7*s;
+    ctx.beginPath(); ctx.moveTo(cx-12*s,cy+8*s+bob); ctx.lineTo(cx-12*s+Math.sin(walkT*0.15)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-4*s,cy+8*s+bob); ctx.lineTo(cx-4*s-Math.sin(walkT*0.15)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+4*s,cy+8*s+bob); ctx.lineTo(cx+4*s+Math.sin(walkT*0.15+1)*2*s,footY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+12*s,cy+8*s+bob); ctx.lineTo(cx+12*s-Math.sin(walkT*0.15+1)*2*s,footY); ctx.stroke();
+    // Long neck
+    ctx.strokeStyle=col; ctx.lineWidth=6*s;
+    ctx.beginPath(); ctx.moveTo(cx+dir*15*s,cy-4*s+bob);
+    ctx.quadraticCurveTo(cx+dir*28*s,cy-22*s+bob,cx+dir*38*s,cy-26*s+bob); ctx.stroke();
+    // Small head
+    const hx=cx+dir*40*s, hy=cy-26*s+bob;
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(hx,hy,5*s,3*s,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx+dir*2*s,hy-1*s,0.8*s,0,Math.PI*2); ctx.fill();
+  } else if(kind==='ptero'){
+    // Airborne silhouette (even on ground — hops)
+    ctx.fillStyle=col;
+    // Body
+    ctx.beginPath(); ctx.ellipse(cx,cy+bob,5*s,3*s,0,0,Math.PI*2); ctx.fill();
+    // Wings
+    const wingPh=Math.sin(walkT*0.4)*6*s;
+    ctx.strokeStyle=col; ctx.lineWidth=2*s;
+    ctx.beginPath();
+    ctx.moveTo(cx-1*s,cy+bob);
+    ctx.quadraticCurveTo(cx-12*s,cy-8*s+bob+wingPh,cx-22*s,cy-2*s+bob+wingPh);
+    ctx.lineTo(cx-2*s,cy+2*s+bob);
+    ctx.closePath(); ctx.fillStyle=dark; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx+1*s,cy+bob);
+    ctx.quadraticCurveTo(cx+12*s,cy-8*s+bob+wingPh,cx+22*s,cy-2*s+bob+wingPh);
+    ctx.lineTo(cx+2*s,cy+2*s+bob);
+    ctx.closePath(); ctx.fill();
+    // Long beaked head
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.moveTo(cx+dir*4*s,cy-2*s+bob); ctx.lineTo(cx+dir*14*s,cy-4*s+bob); ctx.lineTo(cx+dir*4*s,cy+1*s+bob); ctx.closePath(); ctx.fill();
+    // Crest
+    ctx.beginPath(); ctx.moveTo(cx+dir*3*s,cy-3*s+bob); ctx.lineTo(cx-dir*1*s,cy-9*s+bob); ctx.lineTo(cx+dir*1*s,cy-3*s+bob); ctx.closePath(); ctx.fill();
+    // Eye
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(cx+dir*5*s,cy-3*s+bob,0.7*s,0,Math.PI*2); ctx.fill();
+  }
+
+  if(h.beingBeamed){
+    ctx.fillStyle='rgba(0,255,0,0.8)'; ctx.font='9px monospace'; ctx.textAlign='center';
+    ctx.fillText(h.label,cx,cy-20*s);
+  }
+  if(h.onFire){
+    const bt=frameNow*0.006+cx*0.13;
+    for(let fi=0;fi<4;fi++){
+      const fx=cx+Math.sin(bt*2+fi*2.1)*10*s;
+      const fh=(1+Math.sin(bt*3+fi*1.7)*0.4)*12*s;
+      ctx.fillStyle=`hsla(${fi===0?15:fi===1?30:50},100%,${50+fi*10}%,${0.5-fi*0.1})`;
+      ctx.beginPath(); ctx.moveTo(fx-3*s,cy+bob);
+      ctx.quadraticCurveTo(fx,cy-fh+bob,fx+3*s,cy+bob); ctx.fill();
+    }
+  }
+}
+
 function renderHuman(h){
   ctx.lineCap='round';
+  // Dinosaur render path (prehistoric Earth) — totally different silhouette
+  if(h.isDino){ renderDino(h); return; }
+  // Floating creatures (Saturn gas giant natives): render with gentle vertical bob above ground
+  let _floatApplied=false;
+  if(h.float && !h.ragdoll && !h.beingBeamed && !h.grabbed){
+    h.floatPhase = (h.floatPhase||0) + 0.03;
+    const lift = 40 + Math.sin(h.floatPhase)*8;
+    ctx.save(); ctx.translate(0,-lift);
+    _floatApplied=true;
+  }
   // Mirror horizontally when walking left so direction is readable at a glance.
   // Flip around bodyX so the character stays in place. Skip when ragdolled/beamed
   // because limb positions are driven by physics, not walk cycle.
@@ -12447,6 +13164,7 @@ function renderHuman(h){
     });
   }
   if(flipDir)ctx.restore();
+  if(_floatApplied) ctx.restore();
 }
 
 function renderCow(c){
@@ -12530,6 +13248,72 @@ function renderCow(c){
     ctx.quadraticCurveTo(cx-dir*18*s,by-5*s+Math.sin(tt)*4*s,cx-dir*15*s,by-15*s+Math.sin(tt*0.8)*3*s);
     ctx.stroke();
     ctx.beginPath();ctx.arc(cx-dir*15*s,by-15*s+Math.sin(tt*0.8)*3*s,2*s,0,Math.PI*2);ctx.fill();
+    if(c.beingBeamed){ctx.fillStyle='rgba(0,255,0,0.7)';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(c.label,cx,by-24*s);}
+    return;
+  }
+
+  if(c.wack==='camel'){
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.22)';ctx.beginPath();ctx.ellipse(cx,GROUND_LEVEL,18*s,4*s,0,0,Math.PI*2);ctx.fill();
+    // Long stilty legs
+    ctx.strokeStyle=c.color;ctx.lineWidth=2.5*s;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cx-8*s,by+5*s);ctx.lineTo(cx-9*s+Math.sin(wt)*2*s,legY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-3*s,by+5*s);ctx.lineTo(cx-3*s-Math.sin(wt)*2*s,legY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+3*s,by+5*s);ctx.lineTo(cx+3*s+Math.sin(wt+1)*2*s,legY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+8*s,by+5*s);ctx.lineTo(cx+9*s-Math.sin(wt+1)*2*s,legY);ctx.stroke();
+    // Hoof dust at feet
+    ctx.fillStyle='#6a5238';
+    [cx-9*s+Math.sin(wt)*2*s,cx-3*s-Math.sin(wt)*2*s,cx+3*s+Math.sin(wt+1)*2*s,cx+9*s-Math.sin(wt+1)*2*s].forEach(fx=>{
+      ctx.beginPath();ctx.ellipse(fx,legY,1.8*s,1.1*s,0,0,Math.PI*2);ctx.fill();
+    });
+    // Body
+    ctx.fillStyle=c.color;
+    ctx.beginPath();ctx.ellipse(cx,by,16*s,8*s,0,0,Math.PI*2);ctx.fill();
+    // Belly tone
+    ctx.fillStyle=c.spots;
+    ctx.beginPath();ctx.ellipse(cx,by+3*s,12*s,3*s,0,0,Math.PI*2);ctx.fill();
+    // Two humps (dromedary/bactrian)
+    ctx.fillStyle=c.color;
+    ctx.beginPath();ctx.ellipse(cx-5*s,by-6*s,6*s,6*s,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+5*s,by-6*s,6*s,6*s,0,0,Math.PI*2);ctx.fill();
+    // Hump highlights
+    ctx.fillStyle='rgba(255,220,170,0.25)';
+    ctx.beginPath();ctx.ellipse(cx-5*s,by-8*s,3*s,2*s,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+5*s,by-8*s,3*s,2*s,0,0,Math.PI*2);ctx.fill();
+    // Long curved neck
+    ctx.strokeStyle=c.color;ctx.lineWidth=5.5*s;ctx.lineCap='round';
+    const neckStartX=cx+dir*10*s, neckStartY=by-4*s;
+    const neckEndX=cx+dir*18*s, neckEndY=by-14*s;
+    ctx.beginPath();
+    ctx.moveTo(neckStartX,neckStartY);
+    ctx.quadraticCurveTo(cx+dir*16*s,by-4*s,neckEndX,neckEndY);
+    ctx.stroke();
+    // Head
+    const hx=cx+dir*22*s, hy=by-16*s;
+    ctx.fillStyle=c.color;
+    ctx.beginPath();ctx.ellipse(hx,hy,5*s,4*s,dir*0.2,0,Math.PI*2);ctx.fill();
+    // Snout
+    ctx.beginPath();ctx.ellipse(hx+dir*4*s,hy+1.5*s,3*s,2.2*s,0,0,Math.PI*2);ctx.fill();
+    // Nostril + mouth line
+    ctx.fillStyle='#2a1a0a';
+    ctx.beginPath();ctx.arc(hx+dir*5*s,hy+1*s,0.6*s,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#3a2a1a';ctx.lineWidth=0.8*s;
+    ctx.beginPath();ctx.moveTo(hx+dir*3*s,hy+2.5*s);ctx.lineTo(hx+dir*5.5*s,hy+2.5*s);ctx.stroke();
+    // Eye (half-lidded — sleepy camel)
+    ctx.fillStyle='#111';
+    ctx.beginPath();ctx.ellipse(hx+dir*1*s,hy-1*s,1.2*s,0.8*s,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#4a3218';ctx.lineWidth=0.7*s;
+    ctx.beginPath();ctx.moveTo(hx+dir*-0.2*s,hy-1.8*s);ctx.lineTo(hx+dir*2.2*s,hy-1.8*s);ctx.stroke();
+    // Ears
+    ctx.fillStyle=c.spots;
+    ctx.beginPath();ctx.ellipse(hx-dir*1*s,hy-4*s,1.3*s,2*s,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(hx+dir*1*s,hy-4*s,1.3*s,2*s,0,0,Math.PI*2);ctx.fill();
+    // Short tufted tail
+    ctx.strokeStyle=c.color;ctx.lineWidth=2*s;
+    const tailX=cx-dir*15*s, tailY=by-2*s;
+    ctx.beginPath();ctx.moveTo(tailX,tailY);ctx.quadraticCurveTo(tailX-dir*3*s,tailY+4*s+Math.sin(tt)*1.5*s,tailX-dir*2*s,tailY+8*s);ctx.stroke();
+    ctx.fillStyle=c.spots;
+    ctx.beginPath();ctx.arc(tailX-dir*2*s,tailY+8*s,1.8*s,0,Math.PI*2);ctx.fill();
     if(c.beingBeamed){ctx.fillStyle='rgba(0,255,0,0.7)';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(c.label,cx,by-24*s);}
     return;
   }
@@ -13410,6 +14194,11 @@ function startGame(isContinue){
 // Build a catalog of unit types that spawn on a given planet, grouped by category.
 function getDebugUnitCatalog(planet){
   const groups = [];
+  // Earth in the Cretaceous: only dinosaurs, no modern inhabitants/vehicles/cows
+  if(planet.id==='earth' && window._debugPrehistoric){
+    groups.push({cat:'Cretaceous Era (68M yrs ago)', units:prehistoricHumanTypes});
+    return groups;
+  }
   if(planet.id==='earth'){
     groups.push({cat:'City',     units:earthHumanTypes});
     groups.push({cat:'Suburbs',  units:suburbHumanTypes});
@@ -13625,8 +14414,6 @@ function drawMainMenu(){
     const items=[];
     if(hasSave) items.push({label:'CONTINUE', action:'continue'});
     items.push({label:'NEW GAME', action:'new'});
-    items.push({label:'ALIEN SKINS', action:'skins'});
-    items.push({label:'SHIP SKINS', action:'shipskins'});
     items.push({label:'SETTINGS', action:'settings'});
     items.push({label:'DEBUG', action:'debug'});
     items.push({label:'EXIT', action:'exit'});
@@ -13672,7 +14459,7 @@ function drawMainMenu(){
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
     ctx.fillText(window._mmNewGame?'NEW GAME — STEP 1 OF 3: CHOOSE YOUR RACE':'CHOOSE YOUR RACE',cw/2,ch*0.12);
 
-    const cols=4, cardW=200, cardH=230, gap=18;
+    const cols=5, cardW=175, cardH=195, gap=14;
     const totalW=cols*(cardW+gap)-gap;
     const startX=cw/2-totalW/2;
     const startY=ch*0.18;
@@ -13688,7 +14475,7 @@ function drawMainMenu(){
       if(isCur){ctx.strokeStyle='rgba(255,215,0,0.7)';ctx.lineWidth=1.5;roundRect(ctx,sx+3,sy+3,cardW-6,cardH-6,6);ctx.stroke();}
       // Preview: show first skin of race (larger)
       const previewSkin=race.skins[0];
-      drawAlienPreview(sx+cardW/2, sy+cardH*0.72, 2.6, previewSkin, 1, t*2+i);
+      drawAlienPreview(sx+cardW/2, sy+cardH*0.72, 2.2, previewSkin, 1, t*2+i);
       // Race name
       ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
       ctx.font='bold 16px monospace';ctx.textAlign='center';
@@ -13887,12 +14674,14 @@ function drawMainMenu(){
     });
   }
   else if(mainMenuMode==='debug'){
-    // Top-level debug menu: WORLD / SANDBOX
+    // Top-level debug menu
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
     ctx.fillText('DEBUG',cw/2,ch*0.18);
     const items=[
       {label:'WORLD', sub:'Jump into any planet with any unit'},
       {label:'SANDBOX', sub:'Preview scenes, caves, and systems'},
+      {label:'ALIEN SKINS', sub:'Pick your alien race and appearance'},
+      {label:'SHIP SKINS', sub:'Pick your ship type and paint'},
     ];
     mainMenuSel=((mainMenuSel%items.length)+items.length)%items.length;
     const menuY=ch*0.42;
@@ -14966,13 +15755,21 @@ function drawMainMenu(){
       ctx.font='bold 14px monospace';ctx.textAlign='center';
       ctx.fillText((p.name||p.id).toUpperCase(),sx+cardW/2,sy+cardH-14);
     });
+    // Era toggle indicator (only relevant for Earth, but shown always for consistency)
+    const era = window._debugPrehistoric ? '68,000,000 YRS AGO — CRETACEOUS' : 'PRESENT DAY';
+    const eraCol = window._debugPrehistoric ? 'rgba(255,180,80,0.85)' : 'rgba(120,220,255,0.85)';
+    ctx.fillStyle=eraCol;ctx.font='bold 13px monospace';ctx.textAlign='center';
+    ctx.fillText('ERA: '+era, cw/2, ch-42);
     ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
-    ctx.fillText('WASD/Arrows to browse  |  ENTER/SPACE to view units  |  ESC to back',cw/2,ch-20);
+    ctx.fillText('WASD/Arrows browse  |  ENTER view units  |  E toggle era  |  ESC back',cw/2,ch-20);
   }
   else if(mainMenuMode==='debugUnits' && debugSelectedPlanet){
     // Unit list for the chosen planet — grouped by category, scrollable
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
-    ctx.fillText('UNITS ON '+(debugSelectedPlanet.name||debugSelectedPlanet.id).toUpperCase(),cw/2,ch*0.08);
+    {
+      const _eraSuffix = (debugSelectedPlanet.id==='earth' && window._debugPrehistoric) ? '  [CRETACEOUS]' : '';
+      ctx.fillText('UNITS ON '+(debugSelectedPlanet.name||debugSelectedPlanet.id).toUpperCase()+_eraSuffix,cw/2,ch*0.08);
+    }
     const groups=getDebugUnitCatalog(debugSelectedPlanet);
     const flat=flattenUnitCatalog(groups);
     if(flat.length===0){
@@ -15062,7 +15859,7 @@ function updateMainMenu(){
     const hasSave=hasSaveGame();
     const items=[];
     if(hasSave) items.push('continue');
-    items.push('new','skins','shipskins','settings','debug','exit');
+    items.push('new','settings','debug','exit');
 
     if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=10;}
     if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=10;}
@@ -15095,7 +15892,7 @@ function updateMainMenu(){
   }
   else if(mainMenuMode==='skins'){
     // Race selection
-    const cols=3;
+    const cols=5;
     if(keys['a']||keys['arrowleft']){mainMenuSel--;window._mmCool=8;}
     if(keys['d']||keys['arrowright']){mainMenuSel++;window._mmCool=8;}
     if(keys['w']||keys['arrowup']){mainMenuSel-=cols;window._mmCool=8;}
@@ -15112,7 +15909,12 @@ function updateMainMenu(){
       const curIdx=race.skins.findIndex(s=>s.id===selectedSkin);
       mainMenuSel=curIdx>=0?curIdx:0;
     }
-    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;window._mmNewGame=false;}
+    if(keys['escape']){
+      keys['escape']=false;
+      if(window._mmFromDebug){ window._mmFromDebug=false; mainMenuMode='debug'; mainMenuSel=2; }
+      else { mainMenuMode='menu'; mainMenuSel=0; window._mmNewGame=false; }
+      window._mmCool=10;
+    }
   }
   else if(mainMenuMode==='raceskins'){
     if(window._mmRaceIdx===undefined) window._mmRaceIdx=0;
@@ -15154,7 +15956,13 @@ function updateMainMenu(){
       mainMenuSel=curIdx>=0?curIdx:0;
       mainMenuMode='shipVariants';
     }
-    if(keys['escape']){keys['escape']=false;mainMenuMode=window._mmNewGame?'skins':'menu';mainMenuSel=0;window._mmCool=10;}
+    if(keys['escape']){
+      keys['escape']=false;
+      if(window._mmNewGame) mainMenuMode='skins';
+      else if(window._mmFromDebug){ window._mmFromDebug=false; mainMenuMode='debug'; mainMenuSel=3; }
+      else mainMenuMode='menu';
+      mainMenuSel=0; window._mmCool=10;
+    }
   }
   else if(mainMenuMode==='shipVariants'){
     const typeIdx=window._mmShipTypeIdx||0;
@@ -15217,14 +16025,26 @@ function updateMainMenu(){
     if(keys['escape'] && !window._mmAwaitBind){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
   }
   else if(mainMenuMode==='debug'){
-    const n=2;
+    const n=4;
     if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=8;}
     if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=8;}
     mainMenuSel=((mainMenuSel%n)+n)%n;
     if(keys['enter']||keys[' ']){
       keys['enter']=false;keys[' ']=false;window._mmCool=15;
       if(mainMenuSel===0){mainMenuMode='debugPlanet';mainMenuSel=0;}
-      else {mainMenuMode='sandbox';mainMenuSel=0;}
+      else if(mainMenuSel===1){mainMenuMode='sandbox';mainMenuSel=0;}
+      else if(mainMenuSel===2){
+        window._mmFromDebug=true;
+        mainMenuMode='skins';
+        mainMenuSel=ALIEN_RACES.findIndex(r=>r.id===selectedRace);
+        if(mainMenuSel<0) mainMenuSel=0;
+      }
+      else if(mainMenuSel===3){
+        window._mmFromDebug=true;
+        mainMenuMode='shipskins';
+        mainMenuSel=SHIP_TYPES.findIndex(st=>st.id===(shipPaint.ship||'saucer'));
+        if(mainMenuSel<0) mainMenuSel=0;
+      }
     }
     if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
   }
@@ -15294,6 +16114,8 @@ function updateMainMenu(){
     if(keys['w']||keys['arrowup']){mainMenuSel-=cols;window._mmCool=8;}
     if(keys['s']||keys['arrowdown']){mainMenuSel+=cols;window._mmCool=8;}
     mainMenuSel=((mainMenuSel%planetDefs.length)+planetDefs.length)%planetDefs.length;
+    // Era toggle — only meaningful for Earth; flip between Now and 68M yrs ago (Cretaceous)
+    if(keys['e']){ keys['e']=false; window._debugPrehistoric=!window._debugPrehistoric; window._mmCool=10; }
     if(keys['enter']||keys[' ']){
       keys['enter']=false;keys[' ']=false;window._mmCool=15;
       debugSelectedPlanet=planetDefs[mainMenuSel];

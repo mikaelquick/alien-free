@@ -1,10 +1,10 @@
 ---
-name: Code and docs in English
-description: User wants all code, comments, and documentation written in English — conversation can be in German
+name: Everything in English
+description: User wants code, docs, AND conversation in English
 type: feedback
 ---
 
-Always write code, comments, and documentation in English.
+Write everything in English — code, comments, documentation, and chat responses.
 
-**Why:** User explicitly requested it.
-**How to apply:** Conversation/chat can remain in German, but any code output, comments, commit messages, and docs must be in English.
+**Why:** User corrected the earlier "chat in German" preference on 2026-04-18 and asked for English chat too.
+**How to apply:** Default to English for all output. If the user switches languages mid-conversation, follow their lead.

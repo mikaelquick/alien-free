@@ -14,6 +14,12 @@ export const SHIP_TYPES = [
   {id:'crystal', name:'Crystal Ship', description:'Faceted crystalline hull'},
   {id:'arrowhead',name:'Arrowhead',   description:'Sharp triangular raider'},
   {id:'cargo',   name:'Cargo Hauler', description:'Blocky industrial transport'},
+  {id:'viper',   name:'Viper',        description:'Colonial forward-swept fighter'},
+  {id:'sphere',  name:'Orb',          description:'Translucent orbital sphere'},
+  {id:'needle',  name:'Needle',       description:'Ultra-long pencil cruiser'},
+  {id:'swarm',   name:'Drone Swarm',  description:'Modular drone cluster'},
+  {id:'warbird', name:'Warbird',      description:'Bird-of-prey raider'},
+  {id:'eggufo',  name:'Egg UFO',      description:'Classic ovoid UFO'},
 ];
 
 export const SHIP_PAINTS = [
@@ -50,4 +56,22 @@ export const SHIP_PAINTS = [
   // Cargo
   {id:'cargo_rust',name:'Rusty Hauler',color:'#a62',accent:'#531',trail:'#fa0',cost:0,ship:'cargo'},
   {id:'cargo_blue',name:'Navy Hauler',color:'#468',accent:'#235',trail:'#6af',cost:0,ship:'cargo'},
+  // Viper
+  {id:'viper_std',name:'Colonial Viper',color:'#dcd4c0',accent:'#5a5a60',trail:'#fa4',cost:0,ship:'viper'},
+  {id:'viper_red',name:'Crimson Viper',color:'#e8a0a0',accent:'#6a2828',trail:'#f44',cost:0,ship:'viper'},
+  // Sphere / Orb
+  {id:'sphere_gold',name:'Golden Orb',color:'#f8d870',accent:'#a87820',trail:'#fea',cost:0,ship:'sphere'},
+  {id:'sphere_void',name:'Void Orb',color:'#8a6acc',accent:'#3a2874',trail:'#c8f',cost:0,ship:'sphere'},
+  // Needle
+  {id:'needle_white',name:'White Needle',color:'#f0f0f0',accent:'#8a8a90',trail:'#8cf',cost:0,ship:'needle'},
+  {id:'needle_black',name:'Obsidian Needle',color:'#2a2a2e',accent:'#5a5a60',trail:'#fa4',cost:0,ship:'needle'},
+  // Drone Swarm
+  {id:'swarm_amber',name:'Amber Swarm',color:'#f8a850',accent:'#805018',trail:'#fc4',cost:0,ship:'swarm'},
+  {id:'swarm_cyan',name:'Cyan Swarm',color:'#6ae8e8',accent:'#186a80',trail:'#4ff',cost:0,ship:'swarm'},
+  // Warbird
+  {id:'warbird_green',name:'Emerald Warbird',color:'#4a6a3a',accent:'#1a3018',trail:'#4f4',cost:0,ship:'warbird'},
+  {id:'warbird_bronze',name:'Bronze Warbird',color:'#a87840',accent:'#503018',trail:'#fa4',cost:0,ship:'warbird'},
+  // Egg UFO
+  {id:'eggufo_chrome',name:'Chrome Egg',color:'#d8d8e0',accent:'#686878',trail:'#0fa',cost:0,ship:'eggufo'},
+  {id:'eggufo_green',name:'Little Green Egg',color:'#a8d890',accent:'#3a6a28',trail:'#cf8',cost:0,ship:'eggufo'},
 ];

@@ -61,6 +61,30 @@ export const ALIEN_RACES = [
       {id:'cos_stars',  name:'Stardust',       body:'#e0d0ff',  head:'#fff0ff',  eyes:'#fff', glow:'#fff', accent:'#c0b0e0'},
       {id:'cos_void',   name:'Void Born',      body:'#101030',  head:'#202050',  eyes:'#f0f', glow:'#80f', accent:'#080820'},
   ]},
+  { id:'crystalline', name:'Crystalline', description:'Faceted living gemstones',   bodyType:'insect', skins:[
+      {id:'cry_clear',  name:'Diamond Shard',  body:'#e8f4ff',  head:'#f8fcff',  eyes:'#08f', glow:'#cff', accent:'#a0c8e0'},
+      {id:'cry_ruby',   name:'Ruby Matron',    body:'#c02040',  head:'#e04060',  eyes:'#fff', glow:'#f68', accent:'#801020'},
+      {id:'cry_sapph',  name:'Sapphire Seer',  body:'#2040a0',  head:'#3060d0',  eyes:'#ff0', glow:'#8cf', accent:'#102078'},
+      {id:'cry_opal',   name:'Opal Dancer',    body:'#f0e0ff',  head:'#ffc0f0',  eyes:'#0ff', glow:'#fcf', accent:'#c0a0e0'},
+  ]},
+  { id:'wraith',    name:'Wraith',    description:'Phantom spirits of dead stars', bodyType:'energy', skins:[
+      {id:'wraith_pale', name:'Pale Haunt',    body:'#a8a8c0',  head:'#c0c0d8',  eyes:'#400', glow:'#cce', accent:'#808098'},
+      {id:'wraith_bone', name:'Bone Shade',    body:'#ebe4c8',  head:'#f4ecd0',  eyes:'#0f0', glow:'#fe8', accent:'#a89860'},
+      {id:'wraith_ash',  name:'Ash Revenant',  body:'#403a48',  head:'#5a5260',  eyes:'#f40', glow:'#f86', accent:'#2a2430'},
+      {id:'wraith_vngnc',name:'Vengeful',      body:'#1a0818',  head:'#3a1838',  eyes:'#0ff', glow:'#f0f', accent:'#0a000a'},
+  ]},
+  { id:'titan',     name:'Titan',     description:'Colossal armored constructs',   bodyType:'robot',  skins:[
+      {id:'titan_iron', name:'Iron Guardian', body:'#606068',  head:'#78787e',  eyes:'#f80', glow:'#fc8', accent:'#40404a', cyber:true},
+      {id:'titan_bronze',name:'Bronze Sentinel',body:'#8a5a2a',head:'#a87040',  eyes:'#0f0', glow:'#ff8', accent:'#603a1a', cyber:true},
+      {id:'titan_gold', name:'Gilded Colossus',body:'#c8a040', head:'#e8c060',  eyes:'#f0f', glow:'#ff4', accent:'#806828', cyber:true},
+      {id:'titan_obsd', name:'Obsidian Wall',  body:'#181820',  head:'#2a2a32',  eyes:'#f00', glow:'#f44', accent:'#0a0a0e', cyber:true},
+  ]},
+  { id:'dryad',     name:'Dryad',     description:'Woodland plant-folk of the deep forests', bodyType:'mushroom', skins:[
+      {id:'dryad_oak',  name:'Oak Keeper',    body:'#a08048',  head:'#407a30',  eyes:'#ff0', glow:'#cf8', accent:'#6a5028'},
+      {id:'dryad_moss', name:'Moss Child',    body:'#808858',  head:'#4a8038',  eyes:'#fff', glow:'#bf6', accent:'#4a5028'},
+      {id:'dryad_fall', name:'Autumn Witch',  body:'#c86030',  head:'#a82818',  eyes:'#fff', glow:'#fa4', accent:'#783820'},
+      {id:'dryad_bloom',name:'Bloom Queen',   body:'#d8a0c8',  head:'#ffa0d0',  eyes:'#080', glow:'#fcf', accent:'#906088'},
+  ]},
 ];
 // Mutate each skin in-place so race.skins[i] also has bodyType + race (used by preview rendering).
 ALIEN_RACES.forEach(r => { r.skins.forEach(s => { s.bodyType = r.bodyType; s.race = r.id; }); });
