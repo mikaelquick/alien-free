@@ -8,6 +8,7 @@
 - [Feedback: Game dev brainstorm](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
 - [Feedback: Visual polish](feedback_visual_polish.md) — use real renderers for captured units, specialised per-element visuals, no generic placeholders
 - [Feedback: Mothership NPCs](feedback_mothership_npcs.md) — no children in mothership; varied adult roles (officer/scientist/engineer/guard/medic) + bots
+- [Feedback: Power fantasy](feedback_power_fantasy.md) — player is the threat, don't hedge decisions around player safety
 - [Feedback: Exploration focus](feedback_exploration_focus.md) — game is adventure/exploration first; hidden themed interiors per planet; auto-equip gear
 - [Project: Earth Design](project_earth.md) — Earth biome layout, population, caves, mountains
 - [Project: Game Systems](project_systems.md) — Skins, save/load, menus, cave system, vehicles

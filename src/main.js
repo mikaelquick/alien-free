@@ -909,6 +909,8 @@ const planetMissions = {
 
 // --- PLAYER ALIEN (on-foot mode) ---
 let playerMode = 'ship'; // 'ship' or 'onfoot'
+// Camera zoom: eases to 1.25x on foot for a more intimate view, 1.0x in ship.
+let worldZoom = 1;
 const alien = {
   x:0, y:GROUND_LEVEL-30, vx:0, vy:0,
   facing:1, // 1=right, -1=left
@@ -8458,6 +8460,9 @@ function updatePlanetShared(){
     camera.x=ship.x-canvas.width/2+screenShake.x;
     camera.y=ship.y-canvas.height/2+screenShake.y;
   }
+  // Smooth zoom: closeup on foot, normal in ship. Lerps over ~30 frames.
+  const _zoomTarget = playerMode==='onfoot' ? 1.9 : 1;
+  worldZoom += (_zoomTarget - worldZoom) * 0.08;
   // Wrap entities seamlessly around the player
   const hw=worldWidth/2,sx=playerMode==='onfoot'?alien.x:ship.x;
   for(let i=0;i<humans.length;i++){const h=humans[i];if(h.collected)continue;const d=h.bodyX-sx;
@@ -10207,7 +10212,14 @@ function drawPlanet(){
     ctx.fillStyle=`rgba(0,0,20,${(0.3-sunVis)*0.5})`;ctx.fillRect(0,0,canvas.width,canvas.height);
   }
 
-  ctx.save();ctx.translate(-camera.x,-camera.y);
+  ctx.save();
+  // Apply zoom around screen center before translating into world space.
+  if(Math.abs(worldZoom-1)>0.001){
+    ctx.translate(canvas.width/2,canvas.height/2);
+    ctx.scale(worldZoom,worldZoom);
+    ctx.translate(-canvas.width/2,-canvas.height/2);
+  }
+  ctx.translate(-camera.x,-camera.y);
   // --- Puffy clouds (unified silhouette, no visible seams) ---
   clouds.forEach(c=>{
     const a = 0.88 * Math.min(1, sunVis*1.4 + 0.4);
@@ -12178,8 +12190,10 @@ function drawPlanet(){
 
   // --- SHIP ARROW INDICATOR (screen space, on-foot only) ---
   if(playerMode==='onfoot'){
-    // Ship position in screen space
-    const ssx=ship.x-camera.x, ssy=ship.y-camera.y;
+    // Ship position in screen space (account for world zoom applied during planet draw)
+    const _zw=worldZoom;
+    const ssx=(ship.x-camera.x-canvas.width/2)*_zw+canvas.width/2;
+    const ssy=(ship.y-camera.y-canvas.height/2)*_zw+canvas.height/2;
     const shipOnScreen=ssx>-40&&ssx<canvas.width+40&&ssy>-40&&ssy<canvas.height+40;
     const shipD=dist(alien.x,alien.y,ship.x,ship.y);
 
