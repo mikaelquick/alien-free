@@ -20,6 +20,11 @@ export const SHIP_TYPES = [
   {id:'swarm',   name:'Drone Swarm',  description:'Modular drone cluster'},
   {id:'warbird', name:'Warbird',      description:'Bird-of-prey raider'},
   {id:'eggufo',  name:'Egg UFO',      description:'Classic ovoid UFO'},
+  {id:'manta',   name:'Manta Glider',  description:'Flat wing-glider with a long tail spine'},
+  {id:'jellybell',name:'Jelly Probe',  description:'Translucent bell with dangling sensor tendrils'},
+  {id:'dagger',  name:'Diamond Dagger',description:'Angular rhombus with swept razor fins'},
+  {id:'wheelship',name:'Spoked Wheel', description:'Rotating spoked ring with central pod'},
+  {id:'beetlepod',name:'Beetle Pod',   description:'Segmented carapace shell with six stub legs'},
 ];
 
 export const SHIP_PAINTS = [
@@ -74,4 +79,19 @@ export const SHIP_PAINTS = [
   // Egg UFO
   {id:'eggufo_chrome',name:'Chrome Egg',color:'#d8d8e0',accent:'#686878',trail:'#0fa',cost:0,ship:'eggufo'},
   {id:'eggufo_green',name:'Little Green Egg',color:'#a8d890',accent:'#3a6a28',trail:'#cf8',cost:0,ship:'eggufo'},
+  // Manta Glider
+  {id:'manta_abyss',name:'Abyss Manta',color:'#2a3a58',accent:'#1a2038',trail:'#68a8ff',cost:0,ship:'manta'},
+  {id:'manta_sand', name:'Sand Manta', color:'#c0a868',accent:'#705828',trail:'#fde090',cost:0,ship:'manta'},
+  // Jelly Probe
+  {id:'jelly_rose', name:'Rose Jelly', color:'#f0a0d0',accent:'#a04080',trail:'#ff80ff',cost:0,ship:'jellybell'},
+  {id:'jelly_azure',name:'Azure Jelly',color:'#a0d8f0',accent:'#306080',trail:'#80f0ff',cost:0,ship:'jellybell'},
+  // Diamond Dagger
+  {id:'dagger_obsd',name:'Obsidian Dagger',color:'#1a1a20',accent:'#80808c',trail:'#ff3070',cost:0,ship:'dagger'},
+  {id:'dagger_gold',name:'Gilded Dagger',   color:'#d8b040',accent:'#8a6020',trail:'#ffe060',cost:0,ship:'dagger'},
+  // Spoked Wheel
+  {id:'wheel_iron', name:'Iron Wheel',   color:'#808088',accent:'#30303a',trail:'#fa4020',cost:0,ship:'wheelship'},
+  {id:'wheel_neon', name:'Neon Wheel',   color:'#2a2a38',accent:'#60f0ff',trail:'#ff40a0',cost:0,ship:'wheelship'},
+  // Beetle Pod
+  {id:'beetle_emer',name:'Emerald Beetle',color:'#2a7048',accent:'#104028',trail:'#60ff90',cost:0,ship:'beetlepod'},
+  {id:'beetle_amber',name:'Amber Beetle', color:'#c08028',accent:'#704010',trail:'#ffc040',cost:0,ship:'beetlepod'},
 ];

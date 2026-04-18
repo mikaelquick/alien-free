@@ -57,6 +57,12 @@ window.addEventListener('resize', () => { canvas.width = window.innerWidth; canv
 
 let selectedSkin = localStorage.getItem('sadabduction_skin') || 'classic';
 let selectedRace = localStorage.getItem('sadabduction_race') || (ALIEN_SKINS.find(s=>s.id===selectedSkin)||{race:'grey'}).race;
+// Migration: if stored race no longer exists (e.g. removed titan/dinosaur), derive from skin.
+if(!ALIEN_RACES.find(r=>r.id===selectedRace)){
+  const _sk = ALIEN_SKINS.find(s=>s.id===selectedSkin);
+  selectedRace = _sk ? _sk.race : 'grey';
+  localStorage.setItem('sadabduction_race', selectedRace);
+}
 
 // --- KEY BINDINGS (rebindable in Settings) ---
 // Each action has a canonical key (what the game code reads) and a user-bound physical key.
@@ -282,7 +288,6 @@ const RACE_LOADOUTS = {
   cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
   cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
   southpark: ['stunner','wail','rocket','acid','swarm','chainsaw'],
-  dinosaur:  ['plasma','acid','wail','rocket','stunner','chainsaw'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -3672,8 +3677,9 @@ function loadPlanet(planet) {
         }
       }
     }
-    // Moon: spawn 1-4 astronauts + one SpaceX Starship
-    if(planet.id==='moon'){
+    // Moon: spawn 1-4 astronauts + one SpaceX Starship — only in the modern era.
+    // 68M years ago there were no humans or spacecraft on the Moon.
+    if(planet.id==='moon' && !window.prehistoricEra){
       const shipX = worldWidth*0.5;
       // Starship building (tall narrow rocket)
       const shW=80, shH=260;
@@ -3837,6 +3843,8 @@ function spawnMilitary(){
   const hpMult=(1+getDifficultyLevel()*0.15)*genocideMult;
 
   if(p.id==='earth'){
+    // No armies 68M years ago — prehistoric Earth never spawns military.
+    if(window.prehistoricEra) return;
     // Earth: military spawns FROM bases, not randomly near player
     if(wantedLevel>=1&&earthMilitaryBases.length>0){
       // Pick nearest base to spawn from
@@ -7638,6 +7646,18 @@ function leavePlanet() {
     leavingPlanet.savedState = { blocks:[...blocks], buildings:[...buildings], humans:[...humans], fires:[...fires], cows:[...cows], underwaterObjects:[...underwaterObjects], underwaterCaves:[...underwaterCaves], caveCreatures:[...caveCreatures], initialPop:initialPopulation };
     ship.x = leavingPlanet.spaceX;
     ship.y = leavingPlanet.spaceY - leavingPlanet.radius - 120;
+    // Snap Earth-orbiting bodies (the moon) to their correct orbital positions BEFORE
+    // the first space frame renders. Without this the moon flashes on top of Earth for
+    // a moment because orbit tick doesn't run during the leaving transition.
+    const _earthP = planets.find(pp=>pp.id==='earth');
+    if(_earthP){
+      planets.forEach(pp=>{
+        if(!pp.orbitsEarth) return;
+        const ang = (pp.orbitAngle!=null) ? pp.orbitAngle : (pp.initOrbitAngle||0);
+        pp.spaceX = _earthP.spaceX + Math.cos(ang) * pp.orbitRadius;
+        pp.spaceY = _earthP.spaceY + Math.sin(ang) * pp.orbitRadius;
+      });
+    }
   }
   gameMode = 'space';
   playerMode = 'ship';
@@ -7721,7 +7741,7 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&e.key==='F4'){window._perfMode=!window._perfMode;showMessage(window._perfMode?'Performance mode ON':'Performance mode OFF');e.preventDefault();return;}
   if(!keys[k]&&k==='l'){flashlightOn=!flashlightOn;showMessage(flashlightOn?'Flashlight ON':'Flashlight OFF');return;}
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
-    [spaceAmbience,flameSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
+    [spaceAmbience,flameSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -8119,6 +8139,7 @@ function playSound(type){
   else if(type==='talkBuzz'){osc.type='square';const f=150+Math.random()*80;osc.frequency.setValueAtTime(f,now);for(let i=0;i<6;i++)osc.frequency.setValueAtTime(f+Math.random()*60-30,now+i*0.04);gain.gain.setValueAtTime(0.03,now);gain.gain.exponentialRampToValueAtTime(0.01,now+0.25);osc.start(now);osc.stop(now+0.25);}
   else if(type==='talkMech'){osc.type='triangle';const f=200+Math.random()*100;osc.frequency.setValueAtTime(f,now);osc.frequency.setValueAtTime(f*0.5,now+0.1);osc.frequency.setValueAtTime(f*0.8,now+0.2);gain.gain.setValueAtTime(0.04,now);gain.gain.exponentialRampToValueAtTime(0.01,now+0.3);osc.start(now);osc.stop(now+0.3);}
   else if(type==='collect'){osc.type='sine';osc.frequency.setValueAtTime(500,now);osc.frequency.exponentialRampToValueAtTime(1200,now+0.15);gain.gain.setValueAtTime(0.1,now);gain.gain.exponentialRampToValueAtTime(0.01,now+0.2);osc.start(now);osc.stop(now+0.2);}
+  else if(type==='splat'){const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.2,audioCtx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/d.length*12);const src=audioCtx.createBufferSource();src.buffer=buf;const g=audioCtx.createGain();g.gain.setValueAtTime(0.18,now);g.gain.exponentialRampToValueAtTime(0.01,now+0.2);src.connect(g);g.connect(audioCtx.destination);src.start(now);return;}
   }catch(e){}
 }
 function fireMissile(){if(!gameStarted||gameMode==='space')return;missileCooldown=20;missiles.push({x:ship.x,y:ship.y+15,vx:ship.vx*0.3,vy:5,life:300,trail:[]});playSound('missile');}
@@ -8891,8 +8912,8 @@ function updatePlanetShared(){
   // Camera follows alien when on foot, ship otherwise
   if(playerMode==='onfoot'){
     camera.x=alien.x-canvas.width/2+screenShake.x;
-    // Driving: raise camera (less ground, more horizon) because vehicle + zoom fill the frame
-    const _yOff = alien.drivingVehicle ? -80 : 100;
+    // Raise camera (less ground, more horizon) — both on foot and driving.
+    const _yOff = alien.drivingVehicle ? -80 : -60;
     camera.y=alien.y-canvas.height/2+_yOff+screenShake.y;
   }else{
     camera.x=ship.x-canvas.width/2+screenShake.x;
@@ -9113,7 +9134,18 @@ function updatePlanetShared(){
         if(h.eatTimer<=0){ h.collected=true; return; }
       }
       const parts=['head','body','legL','legR','armL','armR','footL','footR'];
+      // Capture incoming vertical velocity before integration — used for splatter fall-damage.
+      const _preFallVY = h.bodyVY||0;
       parts.forEach(pt=>{if(!h.beingBeamed)h[pt+'VY']+=GRAVITY*0.8;h[pt+'VX']*=0.99;h[pt+'VY']*=0.99;h[pt+'X']+=h[pt+'VX'];h[pt+'Y']+=h[pt+'VY'];if(h[pt+'Y']>GROUND_LEVEL){h[pt+'Y']=GROUND_LEVEL;h[pt+'VY']*=-0.3;h[pt+'VX']*=0.8;}if(h[pt+'Y']<-2000){h[pt+'Y']=-2000;h[pt+'VY']*=-0.3;}});
+      // Splatter: if dropped from high enough (fast impact), the unit dies in a gore burst.
+      if(!h.beingBeamed && !h.splatted && !h.collected && _preFallVY > 12 && h.bodyY >= GROUND_LEVEL - 2){
+        h.splatted = true;
+        try { spawnGibs(h, 0, -2, 2.2 + Math.min(2, (_preFallVY-12)*0.2)); } catch(e){}
+        try { bleedEffect(h, 0, 1, 2); } catch(e){}
+        playSound && playSound('splat');
+        // Collect after a brief moment so the gore is visible.
+        h.ragdollTimer = 418; // will flip to collected in the very-near-future check below
+      }
       // Ragdoll death: if lying still on ground for ~5 sec, mark as dead
       if(!h.beingBeamed){
         const vel=Math.abs(h.headVX||0)+Math.abs(h.headVY||0)+Math.abs(h.bodyVX||0)+Math.abs(h.bodyVY||0);
@@ -9806,6 +9838,7 @@ function updateAlienOnFoot(){
           h.collected=true;
           triggerShake(Math.min(4, 2.5 + s*0.3));
           planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
         }
         // Skid marks while moving
         if(Math.abs(v.vx)>3 && Math.random()<0.3){
@@ -10247,7 +10280,15 @@ function updatePlanetSystems(){
   humans.forEach(h=>{if(h.collected)return;
     if(h.ragdoll){
       const parts=['head','body','legL','legR','armL','armR','footL','footR'];
+      const _preFallVY2 = h.bodyVY||0;
       parts.forEach(pt=>{if(!h.beingBeamed)h[pt+'VY']+=GRAVITY*0.8;h[pt+'VX']*=0.99;h[pt+'VY']*=0.99;h[pt+'X']+=h[pt+'VX'];h[pt+'Y']+=h[pt+'VY'];if(h[pt+'Y']>GROUND_LEVEL){h[pt+'Y']=GROUND_LEVEL;h[pt+'VY']*=-0.3;h[pt+'VX']*=0.8;}if(h[pt+'Y']<-2000){h[pt+'Y']=-2000;h[pt+'VY']*=-0.3;}});
+      if(!h.beingBeamed && !h.splatted && !h.collected && _preFallVY2 > 12 && h.bodyY >= GROUND_LEVEL - 2){
+        h.splatted = true;
+        try { spawnGibs(h, 0, -2, 2.2 + Math.min(2, (_preFallVY2-12)*0.2)); } catch(e){}
+        try { bleedEffect(h, 0, 1, 2); } catch(e){}
+        playSound && playSound('splat');
+        h.ragdollTimer = 418;
+      }
       const s=h.scale||1;const ac=(p1,p2,l)=>{const c=constrainDist(h[p1+'X'],h[p1+'Y'],h[p2+'X'],h[p2+'Y'],l,0.4);h[p1+'X']+=c.dx*0.5;h[p1+'Y']+=c.dy*0.5;h[p2+'X']-=c.dx*0.5;h[p2+'Y']-=c.dy*0.5;};
       ac('head','body',12*s);ac('body','legL',18*s);ac('body','legR',18*s);ac('body','armL',14*s);ac('body','armR',14*s);ac('legL','footL',14*s);ac('legR','footR',14*s);
       if(h.crying&&Math.random()>0.7)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY,vx:(Math.random()-0.5)*0.5,vy:Math.random()*0.5+0.5,life:40,size:Math.random()*2+1});
@@ -10293,6 +10334,51 @@ function updatePlanetSystems(){
   if(messageTimer>0){messageTimer--;if(messageTimer===0)document.getElementById('message').style.opacity=0;}
 }
 
+// Execute the era swap + reposition ship near Earth. Called at the end of the wormhole intro.
+function doWormholeWarp(wh){
+  window.prehistoricEra=!window.prehistoricEra; // toggle: through once = past, through again = present
+  // Snap the entire solar system back to its starting layout so planets stay reachable.
+  const sunP = planets.find(p=>p.isSun);
+  const sunSX = sunP ? sunP.spaceX : 0, sunSY = sunP ? sunP.spaceY : 0;
+  planets.forEach(p=>{
+    if(!p.orbits) return;
+    if(p.orbitsEarth) return;
+    if(p.initOrbitAngle!=null){
+      p.orbitAngle = p.initOrbitAngle;
+      p.spaceX = sunSX + Math.cos(p.orbitAngle) * p.orbitRadius;
+      p.spaceY = sunSY + Math.sin(p.orbitAngle) * p.orbitRadius;
+    }
+  });
+  const e=planets.find(p=>p.id==='earth');
+  planets.forEach(p=>{
+    if(!p.orbitsEarth || !e) return;
+    if(p.initOrbitAngle!=null){
+      p.orbitAngle = p.initOrbitAngle;
+      p.spaceX = e.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
+      p.spaceY = e.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
+    }
+  });
+  if(e){
+    const dropAng=Math.random()*Math.PI*2;
+    ship.x=e.spaceX+Math.cos(dropAng)*(e.radius+300);
+    ship.y=e.spaceY+Math.sin(dropAng)*(e.radius+300);
+    ship.vx=Math.cos(dropAng)*2; ship.vy=Math.sin(dropAng)*2;
+    e.savedState=null;
+    const _mn = planets.find(pp=>pp.id==='moon');
+    if(_mn) _mn.savedState = null;
+  } else if(wh) {
+    const ejAng=Math.atan2(ship.y-wh.spaceY,ship.x-wh.spaceX);
+    ship.x=wh.spaceX+Math.cos(ejAng)*(wh.radius*2+60);
+    ship.y=wh.spaceY+Math.sin(ejAng)*(wh.radius*2+60);
+    ship.vx=Math.cos(ejAng)*4; ship.vy=Math.sin(ejAng)*4;
+  }
+  if(window.prehistoricEra){
+    showMessage("68,000,000 YEARS AGO — THE CRETACEOUS. Earth belongs to the dinosaurs now...");
+  } else {
+    showMessage("Back to the present day. Earth is as you left it.");
+  }
+}
+
 // --- SPACE UPDATE ---
 function updateSpace(){
   // During landing transition, don't move ship normally
@@ -10312,6 +10398,24 @@ function updateSpace(){
       const e=easeOut(t);
       transition.zoom=6-e*5;
       if(t>=1){transition.active=false;transition.zoom=1;}
+    }else if(transition.type==='wormholeIn'){
+      // Dive into the wormhole: pull ship to its center, zoom in.
+      const e=easeInOut(t);
+      transition.zoom=1+e*7;
+      const pull=0.03+e*0.09;
+      ship.x+=(transition.planet.spaceX-ship.x)*pull;
+      ship.y+=(transition.planet.spaceY-ship.y)*pull;
+      ship.vx*=0.9;ship.vy*=0.9;
+      if(t>=1){
+        // Execute the era warp and reposition ship near Earth, then play a landing transition.
+        doWormholeWarp(transition.planet);
+        const _e=planets.find(pp=>pp.id==='earth');
+        if(_e){
+          transition={active:true,type:'landing',timer:0,duration:100,planet:_e,zoom:1};
+        }else{
+          transition.active=false;transition.zoom=1;
+        }
+      }
     }
     camera.x=ship.x-canvas.width/2;camera.y=ship.y-canvas.height/2;
     if(messageTimer>0){messageTimer--;if(messageTimer===0)document.getElementById('message').style.opacity=0;}
@@ -10383,49 +10487,10 @@ function updateSpace(){
     if(wh && !transition.active){
       const whDist=dist(ship.x,ship.y,wh.spaceX,wh.spaceY);
       if(whDist<wh.radius*0.5){
-        window.prehistoricEra=!window.prehistoricEra; // toggle: through once = past, through again = present
-        // Snap the entire solar system back to its starting layout — so all planets are
-        // reachable from wherever we drop the ship. Otherwise long-running orbits may
-        // scatter planets behind the Sun or outside ship range.
-        const sunP = planets.find(p=>p.isSun);
-        const sunSX = sunP ? sunP.spaceX : 0, sunSY = sunP ? sunP.spaceY : 0;
-        planets.forEach(p=>{
-          if(!p.orbits) return;
-          if(p.orbitsEarth) return; // moon fixed up after earth below
-          if(p.initOrbitAngle!=null){
-            p.orbitAngle = p.initOrbitAngle;
-            p.spaceX = sunSX + Math.cos(p.orbitAngle) * p.orbitRadius;
-            p.spaceY = sunSY + Math.sin(p.orbitAngle) * p.orbitRadius;
-          }
-        });
-        const e=planets.find(p=>p.id==='earth');
-        planets.forEach(p=>{
-          if(!p.orbitsEarth || !e) return;
-          if(p.initOrbitAngle!=null){
-            p.orbitAngle = p.initOrbitAngle;
-            p.spaceX = e.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
-            p.spaceY = e.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
-          }
-        });
-        // Drop ship near Earth in its now-restored starting position.
-        if(e){
-          const dropAng=Math.random()*Math.PI*2;
-          ship.x=e.spaceX+Math.cos(dropAng)*(e.radius+300);
-          ship.y=e.spaceY+Math.sin(dropAng)*(e.radius+300);
-          ship.vx=Math.cos(dropAng)*2; ship.vy=Math.sin(dropAng)*2;
-          // Invalidate saved Earth state — it must regenerate for the new era
-          e.savedState=null;
-        } else {
-          const ejAng=Math.atan2(ship.y-wh.spaceY,ship.x-wh.spaceX);
-          ship.x=wh.spaceX+Math.cos(ejAng)*(wh.radius*2+60);
-          ship.y=wh.spaceY+Math.sin(ejAng)*(wh.radius*2+60);
-          ship.vx=Math.cos(ejAng)*4; ship.vy=Math.sin(ejAng)*4;
-        }
-        if(window.prehistoricEra){
-          showMessage("68,000,000 YEARS AGO — THE CRETACEOUS. Earth belongs to the dinosaurs now...");
-        } else {
-          showMessage("Back to the present day. Earth is as you left it.");
-        }
+        // Kick off the cinematic wormhole intro; the warp + era swap happens on completion,
+        // then a standard landing transition onto Earth fires to arrive cinematically.
+        transition={active:true,type:'wormholeIn',timer:0,duration:80,planet:wh,zoom:1};
+        showMessage("Entering the wormhole...");
       }
     }
   }
@@ -10632,6 +10697,55 @@ function drawSpace(){
     }else if(transition.type==='leaving'){
       const e=easeOut(t);
       ctx.fillStyle=`rgba(255,255,255,${(1-e)*0.85})`;ctx.fillRect(0,0,canvas.width,canvas.height);
+    }else if(transition.type==='wormholeIn'){
+      // Swirling purple/cyan vortex drawn as concentric rotating arcs around screen center.
+      const cx=canvas.width/2, cy=canvas.height/2;
+      const e=easeIn(t);
+      // Darken background
+      ctx.fillStyle=`rgba(8,2,22,${0.25+e*0.55})`;ctx.fillRect(0,0,canvas.width,canvas.height);
+      const maxR=Math.hypot(cx,cy)*1.1;
+      const rings=18;
+      const baseAng=transition.timer*0.18;
+      ctx.save();
+      ctx.translate(cx,cy);
+      for(let i=0;i<rings;i++){
+        const rt=i/rings;
+        const r=maxR*(rt+e*0.6)%maxR;
+        const ang=baseAng+i*0.6;
+        const hue=260+Math.sin(i*0.8+transition.timer*0.05)*60;
+        ctx.strokeStyle=`hsla(${hue},85%,${50+rt*30}%,${0.18+(1-rt)*0.35})`;
+        ctx.lineWidth=4+rt*6;
+        ctx.beginPath();
+        for(let a=0;a<Math.PI*2;a+=0.12){
+          const wob=Math.sin(a*4+transition.timer*0.1+i)*12;
+          const rx=(r+wob)*Math.cos(a+ang);
+          const ry=(r+wob)*Math.sin(a+ang)*0.9;
+          if(a===0)ctx.moveTo(rx,ry); else ctx.lineTo(rx,ry);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+      // Central bright core punches through near the end
+      const coreR=40+e*220;
+      const coreGrad=ctx.createRadialGradient(0,0,0,0,0,coreR);
+      coreGrad.addColorStop(0,`rgba(255,240,255,${0.2+e*0.75})`);
+      coreGrad.addColorStop(0.5,`rgba(180,120,255,${0.2+e*0.45})`);
+      coreGrad.addColorStop(1,'rgba(20,0,40,0)');
+      ctx.fillStyle=coreGrad;
+      ctx.beginPath();ctx.arc(0,0,coreR,0,Math.PI*2);ctx.fill();
+      // Streaks radiating outward
+      ctx.strokeStyle=`rgba(255,255,255,${0.25+e*0.5})`;
+      ctx.lineWidth=2;
+      for(let i=0;i<24;i++){
+        const a=i*(Math.PI*2/24)+baseAng*0.5;
+        const inner=30+e*80;
+        const outer=inner+80+e*300;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*inner,Math.sin(a)*inner);
+        ctx.lineTo(Math.cos(a)*outer,Math.sin(a)*outer);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 
@@ -13142,7 +13256,21 @@ function drawPlanet(){
     ctx.fillText(alien.diveSuit?'OXYGEN (SUIT)':'OXYGEN',canvas.width/2,oy-3);
   }
 
-  // --- MISSION HUD --- (removed per user request — exploration-focused game)
+  // --- MISSION HUD --- (bottom-center; minimal, since missions aren't the focus yet)
+  if(currentMission && !missionComplete){
+    const mx = canvas.width/2;
+    const my = canvas.height - 55;
+    const label = currentMission.desc;
+    const prog = (currentMission.target>0) ? ` [${currentMission.progress}/${currentMission.target}]` : '';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    const txt = label + prog;
+    const tw = ctx.measureText(txt).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(mx - tw/2 - 10, my - 10, tw + 20, 16);
+    ctx.fillStyle = 'rgba(255,200,80,0.85)';
+    ctx.fillText(txt, mx, my + 2);
+  }
 
   // --- UPGRADE PROMPT --- (removed per user request)
   // --- EXPLOSION FLASHES ---
@@ -13628,6 +13756,215 @@ function drawShipBody(pc,pa,pt,type){
     // Tripod legs (little extended landers)
     ctx.strokeStyle=pa; ctx.lineWidth=1;
     [-18,0,18].forEach(lx=>{ ctx.beginPath(); ctx.moveTo(lx*0.6, 5); ctx.lineTo(lx, 9); ctx.stroke(); });
+  } else if(type==='manta'){
+    // Manta Glider — flat diamond wings with a long tail spine
+    const tailWave = Math.sin(ship.lightPhase*2)*2;
+    // Wings (wide shallow diamond, top+bottom halves for shading)
+    ctx.fillStyle=pc;
+    ctx.beginPath();
+    ctx.moveTo(22,0);
+    ctx.quadraticCurveTo(8,-5,-4,-20);
+    ctx.quadraticCurveTo(-22,-10,-28,-2);
+    ctx.lineTo(-28,2);
+    ctx.quadraticCurveTo(-22,10,-4,20);
+    ctx.quadraticCurveTo(8,5,22,0);
+    ctx.closePath(); ctx.fill();
+    // Shaded lower half
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(22,0);
+    ctx.quadraticCurveTo(8,5,-4,20);
+    ctx.quadraticCurveTo(-22,10,-28,2);
+    ctx.lineTo(-28,0);
+    ctx.closePath(); ctx.fill();
+    // Leading edge highlight
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(22,0); ctx.quadraticCurveTo(8,-5,-4,-20); ctx.quadraticCurveTo(-22,-10,-28,0); ctx.stroke();
+    // Tail spine (undulating)
+    ctx.strokeStyle=pa; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(-28,0); ctx.quadraticCurveTo(-38,tailWave,-46,tailWave*0.5); ctx.stroke();
+    // Barb
+    ctx.fillStyle=pt;
+    ctx.beginPath(); ctx.moveTo(-46,tailWave*0.5-2); ctx.lineTo(-50,tailWave*0.5); ctx.lineTo(-46,tailWave*0.5+2); ctx.closePath(); ctx.fill();
+    // Cockpit bulge (central)
+    const mg=ctx.createRadialGradient(4,-2,1,4,0,10);
+    mg.addColorStop(0,'rgba(255,255,255,0.4)'); mg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=mg;
+    ctx.beginPath(); ctx.ellipse(4,0,10,4,0,0,Math.PI*2); ctx.fill();
+    // Eye-like intakes on the wing edges
+    ctx.fillStyle=pt;
+    ctx.beginPath(); ctx.arc(8,-6,1.6,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(8, 6,1.6,0,Math.PI*2); ctx.fill();
+  } else if(type==='jellybell'){
+    // Jelly Probe — translucent dome bell + dangling tendrils
+    const puff = 1 + Math.sin(ship.lightPhase*2)*0.07;
+    // Outer glow aura
+    const ag=ctx.createRadialGradient(0,-4,2,0,-4,30);
+    ag.addColorStop(0,`${pt}cc`); ag.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=ag;
+    ctx.fillRect(-30,-30,60,50);
+    // Bell (translucent dome)
+    ctx.fillStyle=pc;
+    ctx.globalAlpha=0.78;
+    ctx.beginPath();
+    ctx.ellipse(0,-2,22*puff,18*puff,0,Math.PI,0);
+    ctx.fill();
+    ctx.globalAlpha=1;
+    // Bell rim (accent)
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(0,-2,22*puff,3,0,0,Math.PI*2); ctx.fill();
+    // Inner organs / core (pulsing glow)
+    const coreG=ctx.createRadialGradient(0,-6,1,0,-6,10);
+    coreG.addColorStop(0,`rgba(255,255,255,0.9)`); coreG.addColorStop(1,`${pt}22`);
+    ctx.fillStyle=coreG;
+    ctx.beginPath(); ctx.arc(0,-6,6,0,Math.PI*2); ctx.fill();
+    // Ribbing on the bell
+    ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=0.8;
+    for(let i=-2;i<=2;i++){
+      ctx.beginPath();
+      ctx.moveTo(i*5,-18*puff);
+      ctx.quadraticCurveTo(i*6,-10, i*7, -2);
+      ctx.stroke();
+    }
+    // Dangling tendrils
+    ctx.strokeStyle=pa; ctx.lineWidth=1.2; ctx.lineCap='round';
+    for(let i=-3;i<=3;i++){
+      const tx = i*5;
+      const w = Math.sin(ship.lightPhase*3 + i)*2;
+      ctx.beginPath();
+      ctx.moveTo(tx,-1);
+      ctx.quadraticCurveTo(tx+w, 10, tx+w*1.3, 22+Math.abs(i));
+      ctx.stroke();
+    }
+    // Stinger dots at tendril tips
+    ctx.fillStyle=pt;
+    for(let i=-3;i<=3;i++){
+      const tx = i*5;
+      const w = Math.sin(ship.lightPhase*3 + i)*2;
+      ctx.beginPath(); ctx.arc(tx+w*1.3, 22+Math.abs(i), 1.1, 0, Math.PI*2); ctx.fill();
+    }
+  } else if(type==='dagger'){
+    // Diamond Dagger — angular rhombus with swept razor fins
+    // Main rhombus body
+    ctx.fillStyle=pc;
+    ctx.beginPath();
+    ctx.moveTo(34,0); ctx.lineTo(4,-8); ctx.lineTo(-26,-4);
+    ctx.lineTo(-26,4); ctx.lineTo(4,8);
+    ctx.closePath(); ctx.fill();
+    // Shaded underbelly
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(34,0); ctx.lineTo(4,8); ctx.lineTo(-26,4); ctx.lineTo(-26,0);
+    ctx.closePath(); ctx.fill();
+    // Centerline keel (highlight)
+    ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=0.8;
+    ctx.beginPath(); ctx.moveTo(34,0); ctx.lineTo(-26,0); ctx.stroke();
+    // Swept razor fins (top + bottom, sharp triangles)
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(-4,-6); ctx.lineTo(-18,-18); ctx.lineTo(-22,-4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4, 6); ctx.lineTo(-18, 18); ctx.lineTo(-22, 4); ctx.closePath(); ctx.fill();
+    // Fin edges
+    ctx.strokeStyle=pt; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(-4,-6); ctx.lineTo(-18,-18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4, 6); ctx.lineTo(-18, 18); ctx.stroke();
+    // Razor tip gem
+    const tipG=ctx.createRadialGradient(30,0,0,30,0,8);
+    tipG.addColorStop(0,'rgba(255,255,255,0.9)'); tipG.addColorStop(1,`${pt}`);
+    ctx.fillStyle=tipG;
+    ctx.beginPath(); ctx.moveTo(34,0); ctx.lineTo(26,-3); ctx.lineTo(26,3); ctx.closePath(); ctx.fill();
+    // Twin engine glow on rear
+    const gP=0.6+Math.sin(ship.lightPhase*3)*0.3;
+    ctx.fillStyle=`${pt}`;
+    ctx.globalAlpha=gP;
+    ctx.beginPath(); ctx.arc(-26,-2,2.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-26, 2,2.2,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    // Cockpit slit
+    ctx.fillStyle='rgba(180,220,255,0.7)';
+    ctx.fillRect(0,-1.2,12,2.4);
+  } else if(type==='wheelship'){
+    // Spoked Wheel — rotating outer ring with central pod
+    const rot = ship.lightPhase*1.5;
+    // Outer ring
+    ctx.strokeStyle=pc; ctx.lineWidth=3.5;
+    ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.stroke();
+    // Inner ring (darker)
+    ctx.strokeStyle=pa; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.stroke();
+    // Spokes
+    ctx.strokeStyle=pa; ctx.lineWidth=2; ctx.lineCap='round';
+    for(let i=0;i<8;i++){
+      const a = rot + i*(Math.PI*2/8);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*8, Math.sin(a)*8);
+      ctx.lineTo(Math.cos(a)*22, Math.sin(a)*22);
+      ctx.stroke();
+    }
+    // Running lights embedded in outer ring
+    for(let i=0;i<12;i++){
+      const a = rot*0.3 + i*(Math.PI*2/12);
+      ctx.fillStyle = (i%3===0) ? pt : 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.arc(Math.cos(a)*24, Math.sin(a)*24, 1.1, 0, Math.PI*2); ctx.fill();
+    }
+    // Central pod
+    const ph=ctx.createRadialGradient(-2,-2,1,0,0,9);
+    ph.addColorStop(0,pc); ph.addColorStop(1,pa);
+    ctx.fillStyle=ph;
+    ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
+    // Pod window
+    ctx.fillStyle='rgba(120,200,255,0.75)';
+    ctx.beginPath(); ctx.ellipse(0,-1,5,3,0,0,Math.PI*2); ctx.fill();
+    // Pod highlight
+    ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.arc(-2,-2,1.4,0,Math.PI*2); ctx.fill();
+  } else if(type==='beetlepod'){
+    // Beetle Pod — segmented domed carapace with six stub legs
+    // Belly shadow
+    ctx.fillStyle='rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.ellipse(0,6,24,3,0,0,Math.PI*2); ctx.fill();
+    // Underbelly plate
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(0,4,22,5,0,0,Math.PI*2); ctx.fill();
+    // Main shell (top dome)
+    const shG = ctx.createRadialGradient(-4,-6,2,0,0,22);
+    shG.addColorStop(0,pc); shG.addColorStop(1,pa);
+    ctx.fillStyle=shG;
+    ctx.beginPath();
+    ctx.ellipse(0,0,24,11,0,Math.PI,0);
+    ctx.fill();
+    // Central seam (elytra split)
+    ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(22,0); ctx.stroke();
+    // Segment ridges across the shell
+    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=0.7;
+    for(let i=-2;i<=2;i++){
+      ctx.beginPath();
+      ctx.moveTo(i*6,-10);
+      ctx.quadraticCurveTo(i*6+1,-4, i*6, 0);
+      ctx.stroke();
+    }
+    // Head/eye bulb up front
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.ellipse(20,-2,5,4,0,0,Math.PI*2); ctx.fill();
+    // Glowing eye
+    const eg=0.6+Math.sin(ship.lightPhase*2)*0.3;
+    ctx.fillStyle=pt; ctx.globalAlpha=eg;
+    ctx.beginPath(); ctx.arc(22,-2,2,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    // Antennae (waving)
+    const aw=Math.sin(ship.lightPhase*3)*2;
+    ctx.strokeStyle=pa; ctx.lineWidth=1; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(22,-4); ctx.quadraticCurveTo(28,-10+aw,30,-12+aw); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(22, 0); ctx.quadraticCurveTo(28,-6-aw,30,-8-aw); ctx.stroke();
+    // Six stub legs (3 per side, tiny)
+    ctx.strokeStyle=pa; ctx.lineWidth=1.5;
+    const legSway = Math.sin(ship.lightPhase*4);
+    [-14,-2,10].forEach((lx,i)=>{
+      const s = (i%2===0?1:-1)*legSway;
+      ctx.beginPath(); ctx.moveTo(lx,4); ctx.lineTo(lx-2,9+s*0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(lx,4); ctx.lineTo(lx+2,9-s*0.5); ctx.stroke();
+    });
   } else {
     // Classic saucer (default)
     ctx.fillStyle=pa;ctx.beginPath();ctx.ellipse(0,0,35,10,0,0,Math.PI*2);ctx.fill();
@@ -14685,12 +15022,24 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=eg;ctx.fillRect(ax-25*s,ay-35*s,50*s,40*s);
   }
 
-  // Back arm (skip for limbless body types; southpark draws its own mittens)
-  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug' && !(bt==='humanoid' && skin.outfit==='southpark')){
+  // Back arm (skip for limbless body types; southpark draws its own mittens; energy draws wispy tendrils)
+  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug' && bt!=='energy' && !(bt==='humanoid' && skin.outfit==='southpark')){
     ctx.strokeStyle=_sb2(0x8a);ctx.lineWidth=1.8*s;ctx.lineCap='round';ctx.lineJoin='round';
     ctx.beginPath();ctx.moveTo(ax-f*4*s,ay-16*s);ctx.quadraticCurveTo(ax-f*9*s,ay-10*s,ax-f*11*s,ay-6*s);ctx.stroke();
     ctx.lineWidth=0.8*s;
     for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax-f*11*s,ay-6*s);ctx.lineTo(ax-f*(12.5+Math.abs(i)*0.5)*s,ay+(-4+i*2)*s);ctx.stroke();}
+  } else if(bt==='energy'){
+    // Wispy back-tendril — fades out, drifts with time
+    const drift1 = Math.sin(t2*1.5)*2*s;
+    const gradArm = ctx.createLinearGradient(ax-f*4*s, ay-16*s, ax-f*14*s, ay-6*s);
+    const bc = (skin.body==='rainbow') ? 'rgba(220,200,255,' : `rgba(${skin.glow==='#fff'?'220,210,240':'200,170,240'},`;
+    gradArm.addColorStop(0, bc+'0.7)');
+    gradArm.addColorStop(1, bc+'0)');
+    ctx.strokeStyle = gradArm; ctx.lineWidth = 2.5*s; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(ax-f*3*s, ay-18*s);
+    ctx.quadraticCurveTo(ax-f*9*s, ay-12*s+drift1, ax-f*13*s, ay-5*s-drift1);
+    ctx.stroke();
   }
 
   // --- LEGS (vary by body type) ---
@@ -14732,18 +15081,55 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.beginPath();ctx.moveTo(rfx,ay);ctx.lineTo(rfx+(Math.random()*2-1)*s,ay+1.5*s);ctx.stroke();
     }
   } else if(bt==='robot'){
-    // Boxy mechanical legs
-    ctx.fillStyle=_sa2(0x99);
-    ctx.fillRect(ax-5*s, ay-8*s, 3.5*s, 5*s);
-    ctx.fillRect(ax+1.5*s, ay-8*s, 3.5*s, 5*s);
-    // Feet pads
-    ctx.fillStyle=_sa2(0x66);
-    ctx.fillRect(ax-6*s+lo*0.4, ay-3*s, 5.5*s, 2.5*s);
-    ctx.fillRect(ax+0.5*s-lo*0.4, ay-3*s, 5.5*s, 2.5*s);
-    // Joint bolts
-    ctx.fillStyle='#999';
-    ctx.beginPath();ctx.arc(ax-3.3*s,ay-8*s,0.9*s,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(ax+3.3*s,ay-8*s,0.9*s,0,Math.PI*2);ctx.fill();
+    // Tank-tread undercarriage with rolling wheels — a killer machine on treads.
+    // lo drives locomotion animation; use it to rotate wheels.
+    const trackTop = ay - 9*s;
+    const trackBot = ay - 1*s;
+    const trackL = ax - 9*s;
+    const trackR = ax + 9*s;
+    // Track skirt (armored side plate)
+    ctx.fillStyle=_sa2(0x44);
+    ctx.fillRect(trackL, trackTop, trackR-trackL, trackBot-trackTop);
+    // Tread outline
+    ctx.strokeStyle='#111'; ctx.lineWidth=0.6*s;
+    ctx.strokeRect(trackL, trackTop, trackR-trackL, trackBot-trackTop);
+    // Tread plate pattern (animated — scrolls with motion)
+    const spin = (lo*0.8) % (2*s);
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    for(let ti = trackL - 2*s; ti < trackR + 2*s; ti += 2*s){
+      const tx = ti + spin;
+      if(tx > trackL - 1*s && tx < trackR - 0.5*s){
+        ctx.fillRect(tx, trackTop+0.5*s, 0.8*s, 1.2*s);
+        ctx.fillRect(tx, trackBot-1.7*s, 0.8*s, 1.2*s);
+      }
+    }
+    // Three drive wheels (rotate via lo)
+    const wheelY = (trackTop+trackBot)/2;
+    const wheelR = 2.6*s;
+    const wheelXs = [ax - 6*s, ax, ax + 6*s];
+    const wheelRot = lo * 0.4;
+    for(const wx of wheelXs){
+      // Wheel body
+      ctx.fillStyle=_sa2(0x55);
+      ctx.beginPath(); ctx.arc(wx, wheelY, wheelR, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#111'; ctx.lineWidth=0.6*s;
+      ctx.beginPath(); ctx.arc(wx, wheelY, wheelR, 0, Math.PI*2); ctx.stroke();
+      // Hub
+      ctx.fillStyle='#222';
+      ctx.beginPath(); ctx.arc(wx, wheelY, wheelR*0.35, 0, Math.PI*2); ctx.fill();
+      // Spokes (rotate with lo for motion feel)
+      ctx.strokeStyle='#777'; ctx.lineWidth=0.5*s;
+      for(let sp=0; sp<4; sp++){
+        const a = wheelRot + sp*(Math.PI/2);
+        ctx.beginPath();
+        ctx.moveTo(wx, wheelY);
+        ctx.lineTo(wx + Math.cos(a)*wheelR*0.8, wheelY + Math.sin(a)*wheelR*0.8);
+        ctx.stroke();
+      }
+    }
+    // Front-most hazard light (flickers red)
+    ctx.fillStyle=`rgba(255,40,40,${0.5+Math.sin(t2*9)*0.35})`;
+    ctx.beginPath(); ctx.arc(ax+8.5*s, trackTop+1.2*s, 0.7*s, 0, Math.PI*2); ctx.fill();
   } else if(bt==='insect'){
     // 4 thin legs (two pairs)
     ctx.strokeStyle=_sa2(0x77);ctx.lineWidth=1.4*s;ctx.lineCap='round';
@@ -14888,21 +15274,71 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.beginPath();ctx.ellipse(ax+Math.sin(t2*3+seg)*1.5*s,sy2+3*s,sw2*0.9,1.2*s,0,0,Math.PI*2);ctx.stroke();
     }
   } else if(bt==='robot'){
-    // Boxy torso with panels
+    // Armored tank-chassis torso — slanted plating and menacing details.
+    // Main hull (trapezoidal armor)
     ctx.fillStyle=_sb2(0xa0);
-    ctx.fillRect(ax-5*s,ay-20*s,10*s,13*s);
-    // Chest panel
-    ctx.fillStyle=_sb2(0x70);
-    ctx.fillRect(ax-3*s,ay-17*s,6*s,7*s);
-    // Status light
-    ctx.fillStyle=`rgba(255,60,60,${0.6+Math.sin(t2*5)*0.3})`;
-    ctx.beginPath();ctx.arc(ax,ay-13*s,1*s,0,Math.PI*2);ctx.fill();
-    // Bolts at corners
-    ctx.fillStyle='#888';
-    for(let bl=0;bl<4;bl++){
-      const bxC=ax+(bl%2?4:-4)*s, byC=ay+(bl<2?-19:-8)*s;
-      ctx.beginPath();ctx.arc(bxC,byC,0.8*s,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(ax-8*s, ay-9*s);
+    ctx.lineTo(ax+8*s, ay-9*s);
+    ctx.lineTo(ax+7*s, ay-22*s);
+    ctx.lineTo(ax-7*s, ay-22*s);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='#111'; ctx.lineWidth=0.7*s;
+    ctx.stroke();
+    // Sloped glacis plate (top)
+    ctx.fillStyle=_sb2(0x80);
+    ctx.beginPath();
+    ctx.moveTo(ax-7*s, ay-22*s);
+    ctx.lineTo(ax+7*s, ay-22*s);
+    ctx.lineTo(ax+5*s, ay-25*s);
+    ctx.lineTo(ax-5*s, ay-25*s);
+    ctx.closePath(); ctx.fill();
+    ctx.stroke();
+    // Armor panel seams (vertical)
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=0.5*s;
+    ctx.beginPath(); ctx.moveTo(ax-3*s, ay-22*s); ctx.lineTo(ax-3*s, ay-9*s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax+3*s, ay-22*s); ctx.lineTo(ax+3*s, ay-9*s); ctx.stroke();
+    // Rivet bolts around the hull edge
+    ctx.fillStyle='#222';
+    const rivets = [
+      [ax-6.5*s, ay-21*s],[ax+6.5*s, ay-21*s],
+      [ax-6.5*s, ay-10*s],[ax+6.5*s, ay-10*s],
+      [ax-6.5*s, ay-15*s],[ax+6.5*s, ay-15*s],
+      [ax-4*s,  ay-24*s],[ax+4*s,  ay-24*s],
+    ];
+    for(const [rx,ry] of rivets){ ctx.beginPath(); ctx.arc(rx,ry,0.7*s,0,Math.PI*2); ctx.fill(); }
+    // Exhaust vents (twin grilles on the shoulders)
+    ctx.fillStyle='#111';
+    ctx.fillRect(ax-7*s, ay-19*s, 2*s, 1.2*s);
+    ctx.fillRect(ax+5*s, ay-19*s, 2*s, 1.2*s);
+    ctx.fillRect(ax-7*s, ay-17*s, 2*s, 1.2*s);
+    ctx.fillRect(ax+5*s, ay-17*s, 2*s, 1.2*s);
+    // Warning chevrons on the belly plate
+    ctx.fillStyle='rgba(255,180,0,0.65)';
+    for(let ci=0; ci<3; ci++){
+      const cyV = ay-12*s + ci*1.6*s;
+      ctx.beginPath();
+      ctx.moveTo(ax-2.2*s, cyV);
+      ctx.lineTo(ax, cyV+1*s);
+      ctx.lineTo(ax+2.2*s, cyV);
+      ctx.lineTo(ax+2.2*s, cyV+0.6*s);
+      ctx.lineTo(ax, cyV+1.6*s);
+      ctx.lineTo(ax-2.2*s, cyV+0.6*s);
+      ctx.closePath(); ctx.fill();
     }
+    // Central targeting eye / status reactor (pulsing)
+    const reactorP = 0.5 + Math.sin(t2*5)*0.4;
+    ctx.fillStyle=`rgba(255,40,40,${reactorP})`;
+    ctx.beginPath(); ctx.arc(ax, ay-16*s, 1.4*s, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#500'; ctx.lineWidth=0.5*s;
+    ctx.beginPath(); ctx.arc(ax, ay-16*s, 1.9*s, 0, Math.PI*2); ctx.stroke();
+    // Shoulder pauldrons — heavy armor lumps
+    ctx.fillStyle=_sa2(0x55);
+    ctx.beginPath(); ctx.arc(ax-7.5*s, ay-21*s, 2*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ax+7.5*s, ay-21*s, 2*s, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#111'; ctx.lineWidth=0.5*s;
+    ctx.beginPath(); ctx.arc(ax-7.5*s, ay-21*s, 2*s, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(ax+7.5*s, ay-21*s, 2*s, 0, Math.PI*2); ctx.stroke();
   } else if(bt==='humanoid'){
     // Taller humanoid torso. If skin has an `outfit`, render clothing; else draw bare-chest fallback.
     const outfit=skin.outfit, oa=skin.outfitA||'#666', ob=skin.outfitB||'#333';
@@ -15184,6 +15620,72 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     // Wing stubs
     ctx.fillStyle=`rgba(${skin.glow==='#fff'?'255,255,255':'180,180,255'},0.3)`;
     ctx.beginPath();ctx.ellipse(ax-f*6*s,ay-16*s,4*s,7*s,-0.3,0,Math.PI*2);ctx.fill();
+  } else if(bt==='energy'){
+    // --- COSMIC GHOST BODY ---
+    // Wavy sheet-like torso that fades to a tattered wisp where legs would be.
+    const sway = Math.sin(t2*2)*1.5*s;
+    const sway2 = Math.cos(t2*2.3)*1.2*s;
+    // Core body color — rainbow cosmic uses a soft lavender, otherwise derive from body color.
+    const isRainbow = skin.body==='rainbow';
+    const rgbPre = isRainbow ? '220,200,255' : (skin.glow==='#fff' ? '230,220,255' : '200,170,240');
+    // Outer aura glow (larger, very soft)
+    const auraGrad = ctx.createRadialGradient(ax, ay-18*s, 2*s, ax, ay-18*s, 26*s);
+    auraGrad.addColorStop(0, `rgba(${rgbPre},0.35)`);
+    auraGrad.addColorStop(1, `rgba(${rgbPre},0)`);
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath(); ctx.ellipse(ax, ay-18*s, 22*s, 28*s, 0, 0, Math.PI*2); ctx.fill();
+    // Main ghost silhouette — hooded teardrop shape with tattered hem.
+    const bodyGrad = ctx.createLinearGradient(ax, ay-32*s, ax, ay+3*s);
+    bodyGrad.addColorStop(0, `rgba(${rgbPre},0.85)`);
+    bodyGrad.addColorStop(0.55, `rgba(${rgbPre},0.55)`);
+    bodyGrad.addColorStop(1, `rgba(${rgbPre},0)`);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    // Top of head-hood
+    ctx.moveTo(ax-10*s+sway*0.2, ay-24*s);
+    ctx.quadraticCurveTo(ax-12*s+sway, ay-30*s, ax-4*s, ay-33*s);
+    ctx.quadraticCurveTo(ax+4*s, ay-34*s, ax+12*s-sway, ay-30*s);
+    ctx.quadraticCurveTo(ax+13*s-sway, ay-22*s, ax+11*s, ay-14*s);
+    // Right-side drape curve
+    ctx.quadraticCurveTo(ax+13*s+sway2, ay-6*s, ax+10*s+sway2, ay-2*s);
+    // Tattered hem — 6 little pointy tabs fading into nothing
+    for(let tj=0; tj<7; tj++){
+      const tx = ax + 10*s - tj*(20*s/6) + Math.sin(t2*3+tj*0.7)*0.6*s;
+      const dip = (tj%2===0) ? 2*s : -1*s;
+      ctx.lineTo(tx, ay + dip + Math.sin(t2*4+tj)*0.8*s);
+    }
+    // Left-side drape curve back up
+    ctx.quadraticCurveTo(ax-13*s+sway2, ay-6*s, ax-11*s, ay-14*s);
+    ctx.quadraticCurveTo(ax-13*s+sway, ay-22*s, ax-10*s+sway*0.2, ay-24*s);
+    ctx.closePath();
+    ctx.fill();
+    // Inner shadow folds (robe creases)
+    ctx.strokeStyle = `rgba(${rgbPre.split(',').map(n=>Math.max(0,parseInt(n)-40)).join(',')},0.35)`;
+    ctx.lineWidth = 0.7*s;
+    ctx.beginPath();
+    ctx.moveTo(ax-5*s, ay-24*s);
+    ctx.quadraticCurveTo(ax-6*s+sway2, ay-14*s, ax-4*s+sway2, ay-4*s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ax+5*s, ay-24*s);
+    ctx.quadraticCurveTo(ax+6*s-sway2, ay-14*s, ax+4*s-sway2, ay-4*s);
+    ctx.stroke();
+    // Central glowing "heart" / soul-orb
+    const soulP = 0.45 + Math.sin(t2*2.5)*0.2;
+    const soulGrad = ctx.createRadialGradient(ax, ay-16*s, 0, ax, ay-16*s, 4*s);
+    soulGrad.addColorStop(0, `rgba(255,255,255,${soulP})`);
+    soulGrad.addColorStop(1, `rgba(${rgbPre},0)`);
+    ctx.fillStyle = soulGrad;
+    ctx.beginPath(); ctx.arc(ax, ay-16*s, 4*s, 0, Math.PI*2); ctx.fill();
+    // Floating soul particles around the ghost
+    for(let gp=0; gp<5; gp++){
+      const ga = t2*1.3 + gp*1.26;
+      const gr = 8*s + Math.sin(t2*2+gp)*3*s;
+      ctx.fillStyle = `rgba(255,255,255,${0.3+Math.sin(t2*3+gp)*0.2})`;
+      ctx.beginPath();
+      ctx.arc(ax + Math.cos(ga)*gr, ay-18*s + Math.sin(ga)*gr*0.6, (0.8 + Math.sin(ga*2)*0.4)*s, 0, Math.PI*2);
+      ctx.fill();
+    }
   } else {
     // GREY / REPTILE default torso
     const tg2=ctx.createLinearGradient(ax-5*s,ay-22*s,ax+5*s,ay-6*s);
@@ -15506,6 +16008,54 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     // Cap underside edge
     ctx.strokeStyle=_sh2(0x50);ctx.lineWidth=0.6*s;
     ctx.beginPath();ctx.moveTo(hx2-12*s,hy2+4*s);ctx.quadraticCurveTo(hx2,hy2+7*s,hx2+12*s,hy2+4*s);ctx.stroke();
+  } else if(bt==='energy'){
+    // Ghostly hollow skull — translucent, with void eye sockets that glow.
+    const isRainbowH = skin.body==='rainbow';
+    const rgbH = isRainbowH ? '230,210,255' : (skin.glow==='#fff' ? '235,225,255' : '210,180,245');
+    // Hood/skull outline (slightly taller than a normal head)
+    const hg3 = ctx.createRadialGradient(hx2-2*s, hy2-3*s, 1*s, hx2, hy2, 13*s);
+    hg3.addColorStop(0, `rgba(${rgbH},0.85)`);
+    hg3.addColorStop(0.6, `rgba(${rgbH},0.55)`);
+    hg3.addColorStop(1, `rgba(${rgbH},0.25)`);
+    ctx.fillStyle = hg3;
+    ctx.beginPath();
+    ctx.moveTo(hx2-9*s, hy2+6*s);
+    ctx.quadraticCurveTo(hx2-11*s, hy2-4*s, hx2-8*s, hy2-10*s);
+    ctx.quadraticCurveTo(hx2, hy2-14*s, hx2+8*s, hy2-10*s);
+    ctx.quadraticCurveTo(hx2+11*s, hy2-4*s, hx2+9*s, hy2+6*s);
+    ctx.quadraticCurveTo(hx2+2*s, hy2+8*s, hx2, hy2+8*s);
+    ctx.quadraticCurveTo(hx2-2*s, hy2+8*s, hx2-9*s, hy2+6*s);
+    ctx.closePath();
+    ctx.fill();
+    // Hollow void eye sockets
+    ctx.fillStyle = 'rgba(8,4,20,0.85)';
+    ctx.beginPath(); ctx.ellipse(hx2-3.5*s, hy2-1*s, 2.2*s, 2.8*s, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx2+3.5*s, hy2-1*s, 2.2*s, 2.8*s, 0, 0, Math.PI*2); ctx.fill();
+    // Glowing pinprick eyes deep in the sockets
+    const eyeGlow = 0.55 + Math.sin(t2*3)*0.3;
+    const eCol = skin.eyes || '#fff';
+    ctx.fillStyle = eCol;
+    ctx.globalAlpha = eyeGlow;
+    ctx.beginPath(); ctx.arc(hx2-3.5*s + f*0.5*s, hy2-0.5*s, 1*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx2+3.5*s + f*0.5*s, hy2-0.5*s, 1*s, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // Outer eye glow haze
+    for(const ex of [-3.5, 3.5]){
+      const ggrad = ctx.createRadialGradient(hx2+ex*s + f*0.5*s, hy2-0.5*s, 0, hx2+ex*s + f*0.5*s, hy2-0.5*s, 3.5*s);
+      ggrad.addColorStop(0, `rgba(${rgbH},${0.4*eyeGlow})`);
+      ggrad.addColorStop(1, `rgba(${rgbH},0)`);
+      ctx.fillStyle = ggrad;
+      ctx.beginPath(); ctx.arc(hx2+ex*s + f*0.5*s, hy2-0.5*s, 3.5*s, 0, Math.PI*2); ctx.fill();
+    }
+    // Gaping gasp mouth (small dark oval)
+    ctx.fillStyle = 'rgba(8,4,20,0.65)';
+    ctx.beginPath(); ctx.ellipse(hx2, hy2+5*s, 1.6*s, (1+Math.sin(t2*2))*1*s + 1*s, 0, 0, Math.PI*2); ctx.fill();
+    // Hood brim highlight
+    ctx.strokeStyle = `rgba(${rgbH},0.45)`; ctx.lineWidth = 0.7*s;
+    ctx.beginPath();
+    ctx.moveTo(hx2-8*s, hy2-10*s);
+    ctx.quadraticCurveTo(hx2, hy2-14*s, hx2+8*s, hy2-10*s);
+    ctx.stroke();
   } else {
     const hg2=ctx.createRadialGradient(hx2-2*s,hy2-3*s,1*s,hx2,hy2,11*s);
     hg2.addColorStop(0,_sh2(0xcc));hg2.addColorStop(0.6,_sh2(0xb0));hg2.addColorStop(1,_sh2(0x90));
@@ -15661,11 +16211,26 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   // Front arm + gun (skip for limbless types)
   if(bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='larva' && bt!=='spider' && bt!=='slug'){
     const spOutfit = bt==='humanoid' && skin.outfit==='southpark';
-    if(!spOutfit){
+    const isGhost = bt==='energy';
+    if(!spOutfit && !isGhost){
       ctx.strokeStyle=_sb2(0xaa);ctx.lineWidth=1.8*s;
       ctx.beginPath();ctx.moveTo(ax+f*4*s,ay-17*s);ctx.quadraticCurveTo(ax+f*9*s,ay-14*s,ax+f*13*s,ay-12*s);ctx.stroke();
       ctx.lineWidth=0.8*s;ctx.strokeStyle=_sb2(0x99);
       for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax+f*13*s,ay-12*s);ctx.lineTo(ax+f*14*s,ay+(-12.5+i*1.5)*s);ctx.stroke();}
+    } else if(isGhost){
+      // Wispy front tendril leading to the gun hand
+      const isRainbowG = skin.body==='rainbow';
+      const rgbG = isRainbowG ? '220,200,255' : (skin.glow==='#fff' ? '230,220,255' : '200,170,240');
+      const gradArm2 = ctx.createLinearGradient(ax+f*3*s, ay-18*s, ax+f*14*s, ay-12*s);
+      gradArm2.addColorStop(0, `rgba(${rgbG},0)`);
+      gradArm2.addColorStop(0.4, `rgba(${rgbG},0.55)`);
+      gradArm2.addColorStop(1, `rgba(${rgbG},0.9)`);
+      ctx.strokeStyle = gradArm2; ctx.lineWidth = 2.2*s; ctx.lineCap='round';
+      const wobble = Math.sin(t2*2.5)*1.2*s;
+      ctx.beginPath();
+      ctx.moveTo(ax+f*3*s, ay-18*s);
+      ctx.quadraticCurveTo(ax+f*9*s, ay-15*s+wobble, ax+f*13*s, ay-12*s);
+      ctx.stroke();
     }
     // Gun — position above the mitten for southpark, else from the default arm hand
     const gunX = spOutfit ? ax + f*10*s : ax + f*13*s;
@@ -15706,18 +16271,47 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.beginPath();ctx.moveTo(hx2-2.5*s,hy2+6*s);ctx.lineTo(hx2-4*s,hy2+8*s);ctx.stroke();
     ctx.beginPath();ctx.moveTo(hx2+2.5*s,hy2+6*s);ctx.lineTo(hx2+4*s,hy2+8*s);ctx.stroke();
   } else if(bt==='robot'){
-    // Single antenna with blinking light
+    // Twin sensor antennae + scanning laser on top — killer-machine silhouette
     ctx.strokeStyle='#666';ctx.lineWidth=1.2*s;
-    ctx.beginPath();ctx.moveTo(hx2,hy2-12*s);ctx.lineTo(hx2,hy2-20*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hx2-3*s,hy2-10*s);ctx.lineTo(hx2-4*s,hy2-18*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hx2+3*s,hy2-10*s);ctx.lineTo(hx2+4*s,hy2-18*s);ctx.stroke();
     ctx.fillStyle=`rgba(255,50,50,${0.4+Math.sin(t2*8)*0.4})`;
-    ctx.beginPath();ctx.arc(hx2,hy2-21*s,1.5*s,0,Math.PI*2);ctx.fill();
-    // Ear speakers
+    ctx.beginPath();ctx.arc(hx2-4*s,hy2-19*s,1.2*s,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgba(255,180,50,${0.4+Math.cos(t2*8)*0.4})`;
+    ctx.beginPath();ctx.arc(hx2+4*s,hy2-19*s,1.2*s,0,Math.PI*2);ctx.fill();
+    // Cyclopean visor slit — horizontal band of scanner eyes across the face
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(hx2-8*s, hy2-2*s, 16*s, 3.5*s);
+    const scanX = hx2 + Math.sin(t2*2)*6*s;
+    ctx.fillStyle=`rgba(255,40,40,${0.7+Math.sin(t2*10)*0.25})`;
+    ctx.beginPath(); ctx.arc(scanX, hy2-0.5*s, 1.3*s, 0, Math.PI*2); ctx.fill();
+    // Bolted visor frame
+    ctx.strokeStyle='#111'; ctx.lineWidth=0.6*s;
+    ctx.strokeRect(hx2-8*s, hy2-2*s, 16*s, 3.5*s);
+    ctx.fillStyle='#222';
+    ctx.beginPath(); ctx.arc(hx2-7.3*s, hy2-1*s, 0.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx2+7.3*s, hy2-1*s, 0.5*s, 0, Math.PI*2); ctx.fill();
+    // Heavy armored jaw — vented grille (intake)
+    ctx.fillStyle='#1a1a1a';
+    ctx.fillRect(hx2-5*s, hy2+4*s, 10*s, 3*s);
+    ctx.strokeStyle='#444'; ctx.lineWidth=0.4*s;
+    for(let gv=0; gv<5; gv++){
+      const gx = hx2-4*s + gv*2*s;
+      ctx.beginPath(); ctx.moveTo(gx, hy2+4*s); ctx.lineTo(gx, hy2+7*s); ctx.stroke();
+    }
+    // Side communication speakers (horn-like)
     ctx.fillStyle='#333';
-    ctx.fillRect(hx2-11*s,hy2-3*s,2*s,6*s);
-    ctx.fillRect(hx2+9*s,hy2-3*s,2*s,6*s);
-    // Metallic sheen
+    ctx.beginPath();
+    ctx.moveTo(hx2-11*s, hy2-3*s); ctx.lineTo(hx2-13*s, hy2-5*s);
+    ctx.lineTo(hx2-13*s, hy2+3*s); ctx.lineTo(hx2-11*s, hy2+1*s);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(hx2+11*s, hy2-3*s); ctx.lineTo(hx2+13*s, hy2-5*s);
+    ctx.lineTo(hx2+13*s, hy2+3*s); ctx.lineTo(hx2+11*s, hy2+1*s);
+    ctx.closePath(); ctx.fill();
+    // Metallic highlight
     ctx.fillStyle='rgba(255,255,255,0.1)';
-    ctx.fillRect(hx2-8*s,hy2-10*s,3*s,15*s);
+    ctx.fillRect(hx2-8*s,hy2-10*s,3*s,8*s);
   } else if(bt==='energy'){
     // Shimmering particle halo around head
     for(let ph=0;ph<8;ph++){
@@ -15748,10 +16342,14 @@ function mkAudio(src,vol,loop){const a=new Audio();a.preload='none';a.src=src;a.
 const spaceAmbience=mkAudio('space-ambience.mp3',0,true);
 const flameSfx=mkAudio('flame-sound.mp3',0.03,true);
 const planetMusic={earth:mkAudio('earth-music.wav',0,true),asteroid:mkAudio('eerie-music.mp3',0,true)};
+// Prehistoric Earth ambient track — swapped in when window.prehistoricEra is true on Earth.
+const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
 const missileSfx=mkAudio('missile-sfx.wav',0.4,false);
 const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
+// Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
+const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
 const underwaterSfx=mkAudio('underwater-ambience.wav',0,true);
 spaceAmbience.loop=true;spaceAmbience.volume=0;
 underwaterSfx.loop=true;underwaterSfx.volume=0;
@@ -15782,16 +16380,22 @@ function updateAmbience(){
     if(mothershipMusic.paused)mothershipMusic.play().catch(()=>{});
     mothershipMusic.volume=Math.min(0.02,mothershipMusic.volume+0.002);
   }else{mothershipMusic.volume=Math.max(0,mothershipMusic.volume-0.01);if(mothershipMusic.volume<0.01&&!mothershipMusic.paused)mothershipMusic.pause();}
-  // Planet music
-  const wantMusic=(gameMode==='planet'&&currentPlanet)?planetMusic[currentPlanet.id]:null;
-  // Fade out wrong music
-  Object.entries(planetMusic).forEach(([id,audio])=>{
+  // Planet music — on prehistoric Earth, swap in the prehistoric ambient track instead of earth-music.
+  const isPrehistoricEarth = gameMode==='planet' && currentPlanet && currentPlanet.id==='earth' && window.prehistoricEra;
+  const wantMusic = isPrehistoricEarth ? prehistoricMusic
+                  : (gameMode==='planet' && currentPlanet) ? planetMusic[currentPlanet.id]
+                  : null;
+  // Fade out wrong music (all planet tracks + the prehistoric track)
+  const allMusicTracks = [...Object.values(planetMusic), prehistoricMusic];
+  allMusicTracks.forEach(audio=>{
     if(audio!==wantMusic){audio.volume=Math.max(0,audio.volume-0.01);if(audio.volume<0.01&&!audio.paused)audio.pause();}
   });
-  // Fade in correct music
+  // Fade in correct music (prehistoric track kept much quieter per user request)
   if(wantMusic){
     if(wantMusic.paused){wantMusic.currentTime=0;wantMusic.play().catch(()=>{});}
-    wantMusic.volume=Math.min(0.02,wantMusic.volume+0.002);
+    const maxVol = (wantMusic===prehistoricMusic) ? 0.006 : 0.02;
+    const step   = (wantMusic===prehistoricMusic) ? 0.0006 : 0.002;
+    wantMusic.volume=Math.min(maxVol, wantMusic.volume+step);
   }
 }
 
