@@ -57,6 +57,56 @@ window.addEventListener('resize', () => { canvas.width = window.innerWidth; canv
 
 let selectedSkin = localStorage.getItem('sadabduction_skin') || 'classic';
 let selectedRace = localStorage.getItem('sadabduction_race') || (ALIEN_SKINS.find(s=>s.id===selectedSkin)||{race:'grey'}).race;
+
+// --- KEY BINDINGS (rebindable in Settings) ---
+// Each action has a canonical key (what the game code reads) and a user-bound physical key.
+// When the user presses a physical key, we translate it to its canonical action key.
+// context: 'ship' (only in spaceship), 'foot' (only when walking on foot), 'both' (works in both)
+const KEY_ACTIONS = [
+  {id:'moveLeft',    label:'Move Left',          canonical:'a',     context:'both'},
+  {id:'moveRight',   label:'Move Right',         canonical:'d',     context:'both'},
+  {id:'moveUp',      label:'Move Up / Ship Up',  canonical:'w',     context:'both'},
+  {id:'moveDown',    label:'Move Down / Land',   canonical:'s',     context:'both'},
+  {id:'jump',        label:'Jump',               canonical:' ',     context:'foot'},
+  {id:'fire',        label:'Fire Weapon',        canonical:'q',     context:'foot'},
+  {id:'interact',    label:'Interact / Enter',   canonical:'e',     context:'foot'},
+  {id:'jetpack',     label:'Jetpack',            canonical:'shift', context:'foot'},
+  {id:'grapple',     label:'Grappling Hook',     canonical:'g',     context:'foot'},
+  {id:'switchWeap',  label:'Next Weapon',        canonical:'tab',   context:'foot'},
+  {id:'toggleMode',  label:'Enter/Exit Ship',    canonical:'enter', context:'both'},
+  {id:'cloak',       label:'Cloak',              canonical:'c',     context:'ship'},
+  {id:'lasso',       label:'Lasso',              canonical:'h',     context:'ship'},
+  {id:'nuke',        label:'Nuke',               canonical:'n',     context:'ship'},
+  {id:'repulsor',    label:'Repulsor',           canonical:'e',     context:'ship'},
+  {id:'flashlight',  label:'Flashlight',         canonical:'l',     context:'both'},
+  {id:'mute',        label:'Mute Audio',         canonical:'m',     context:'both'},
+];
+let keyBindings = (()=>{
+  try{
+    const saved=JSON.parse(localStorage.getItem('sadabduction_keybinds')||'{}');
+    const out={}; KEY_ACTIONS.forEach(a=>{ out[a.id]=saved[a.id]||a.canonical; });
+    return out;
+  }catch(e){ const out={}; KEY_ACTIONS.forEach(a=>out[a.id]=a.canonical); return out; }
+})();
+function saveKeyBindings(){ localStorage.setItem('sadabduction_keybinds',JSON.stringify(keyBindings)); }
+function keyLabel(k){
+  if(k===' ')return 'SPACE';
+  if(k==='arrowup')return '\u2191';
+  if(k==='arrowdown')return '\u2193';
+  if(k==='arrowleft')return '\u2190';
+  if(k==='arrowright')return '\u2192';
+  return (k||'').toUpperCase();
+}
+// Build physical→canonical map from bindings (used in keydown/keyup)
+function buildPhysicalToCanonical(){
+  const m={};
+  KEY_ACTIONS.forEach(a=>{
+    const phys=keyBindings[a.id]||a.canonical;
+    if(phys!==a.canonical){ m[phys]=a.canonical; }
+  });
+  return m;
+}
+let _physToCanon = buildPhysicalToCanonical();
 function getAlienSkin(){ return ALIEN_SKINS.find(s=>s.id===selectedSkin) || ALIEN_SKINS[0]; }
 function getRace(id){ return ALIEN_RACES.find(r=>r.id===id) || ALIEN_RACES[0]; }
 
@@ -1190,7 +1240,7 @@ function initSpacePlanets() {
     {x:1500,y:-1500},{x:4000,y:-2500},{x:6500,y:-1800},{x:3000,y:-4200},{x:5500,y:-3800},{x:7500,y:-4500},
     {x:9800,y:-5400}, // Khet — pyramid tomb world
     {x:-2000,y:-6500},
-    {x:22000,y:-16000}, // Sun — very far away, must travel to discover
+    {x:60000,y:-48000}, // Sun (Helion) — VERY far away; travel long to discover
   ];
   planetDefs.forEach((def,i) => {
     planets.push({ ...def, spaceX:positions[i].x, spaceY:positions[i].y, visited:false, savedState:null });
@@ -7070,9 +7120,23 @@ function initWorld() {
 
 // --- INPUT ---
 document.addEventListener('keydown', e => {
+  // Rebinding capture: if a settings binding is waiting, consume this key as the new binding
+  if(window._mmAwaitBind){
+    const raw=e.key.toLowerCase();
+    if(raw!=='escape' && raw!=='tab'){ // allow ESC to cancel; tab reserved but allowed if user chooses
+      keyBindings[window._mmAwaitBind]=raw;
+      saveKeyBindings();
+      _physToCanon=buildPhysicalToCanonical();
+    }
+    window._mmAwaitBind=null;
+    e.preventDefault();
+    return;
+  }
   if (mainMenuMode) { keys[e.key.toLowerCase()]=true; if(e.key==='Enter')keys['enter']=true; e.preventDefault(); return; }
   if (pauseMenu.active) { keys[e.key.toLowerCase()]=true; if(e.key==='Enter')keys['enter']=true; if(e.key==='Escape')keys['escape']=true; e.preventDefault(); return; }
-  const k=e.key.toLowerCase();
+  let k=e.key.toLowerCase();
+  // Translate physical→canonical for rebound keys
+  if(_physToCanon[k]) k=_physToCanon[k];
   // ESC opens pause menu (not in mothership — mothership has its own ESC handling)
   if(k==='escape'&&gameStarted&&!mothershipMode&&!pyramidInteriorMode){pauseMenu.active=true;pauseMenu.sel=0;pauseMenu._cool=10;e.preventDefault();keys[k]=true;return;}
   if (!keys[k]&&k==='enter'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&!pauseMenu.active) togglePlayerMode();
@@ -7099,7 +7163,13 @@ document.addEventListener('keydown', e => {
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
-document.addEventListener('keyup', e => { keys[e.key.toLowerCase()]=false; if(e.key==='Enter')keys['enter']=false; if(e.key.toLowerCase()==='g')ship.minigunFiring=false; });
+document.addEventListener('keyup', e => {
+  let k=e.key.toLowerCase();
+  if(_physToCanon[k]) k=_physToCanon[k];
+  keys[k]=false;
+  if(e.key==='Enter')keys['enter']=false;
+  if(k==='g')ship.minigunFiring=false;
+});
 
 // --- MOBILE / TOUCH CONTROLS ---
 const isTouchDevice=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
@@ -9445,8 +9515,8 @@ function updateSpace(){
     return;
   }
 
-  ship.x=Math.max(-4000,Math.min(spaceWidth+20000,ship.x));
-  ship.y=Math.max(-spaceHeight-18000,Math.min(500,ship.y));
+  ship.x=Math.max(-4000,Math.min(spaceWidth+60000,ship.x));
+  ship.y=Math.max(-spaceHeight-50000,Math.min(500,ship.y));
   camera.x=ship.x-canvas.width/2;camera.y=ship.y-canvas.height/2;
 
   // Sun discovery: if player gets within range, discover it
@@ -12083,6 +12153,156 @@ function drawShipBody(pc,pa,pt,type){
     // Thruster
     ctx.fillStyle=`rgba(255,220,100,${0.6+Math.sin(ship.lightPhase)*0.3})`;ctx.beginPath();ctx.arc(-28,-2,2.5,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.arc(-28,2,2.5,0,Math.PI*2);ctx.fill();
+  } else if(type==='scout'){
+    // Sleek dart — narrow pointed fuselage with slim wings
+    ctx.fillStyle=pc;
+    ctx.beginPath(); ctx.moveTo(36,0); ctx.lineTo(-20,-4); ctx.lineTo(-24,0); ctx.lineTo(-20,4); ctx.closePath(); ctx.fill();
+    // Wings
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(-22,-14); ctx.lineTo(-26,-3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4,3); ctx.lineTo(-22,14); ctx.lineTo(-26,3); ctx.closePath(); ctx.fill();
+    // Cockpit
+    ctx.fillStyle='#224'; ctx.beginPath(); ctx.ellipse(16,0,5,2,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(180,230,255,${0.45+Math.sin(ship.lightPhase)*0.2})`; ctx.beginPath(); ctx.ellipse(16,-0.5,3,1,0,0,Math.PI*2); ctx.fill();
+    // Engine glow
+    ctx.fillStyle=`rgba(100,220,255,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-24,0,2.5,0,Math.PI*2); ctx.fill();
+  } else if(type==='bomber'){
+    // Heavy bomber — wide fuselage + two engine pods below
+    ctx.fillStyle=pc;
+    ctx.beginPath(); ctx.ellipse(0,-2,30,8,0,0,Math.PI*2); ctx.fill();
+    // Cockpit bubble
+    ctx.fillStyle='#224'; ctx.beginPath(); ctx.ellipse(20,-3,4,3,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(120,200,255,${0.4+Math.sin(ship.lightPhase)*0.2})`; ctx.beginPath(); ctx.ellipse(20,-3,2.5,2,0,0,Math.PI*2); ctx.fill();
+    // Bomb-bay stripes
+    ctx.fillStyle=pa;
+    for(let i=-2;i<=2;i++){ ctx.fillRect(-14+i*7, -4, 3, 8); }
+    // Engine pods
+    ctx.fillStyle=pa;
+    [-10,10].forEach(y=>{ ctx.beginPath(); ctx.ellipse(-6, y, 18, 5, 0, 0, Math.PI*2); ctx.fill(); });
+    // Engine glow
+    ctx.fillStyle=`rgba(255,160,60,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    [-10,10].forEach(y=>{ ctx.beginPath(); ctx.arc(-24,y,2.5,0,Math.PI*2); ctx.fill(); });
+    // Bomb racks (little circles underneath)
+    ctx.fillStyle='#555';
+    for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.arc(i*7, 7, 1.8, 0, Math.PI*2); ctx.fill(); }
+  } else if(type==='organic'){
+    // Bio-ship — blob body with pulsing veins + tendrils
+    const pulse=0.5+Math.sin(ship.lightPhase*2)*0.5;
+    // Outer membrane
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(30,0);
+    for(let a=0;a<Math.PI*2;a+=Math.PI/12){
+      const r=18+Math.sin(a*3+ship.lightPhase)*4;
+      ctx.lineTo(Math.cos(a)*r*1.4, Math.sin(a)*r*0.75);
+    }
+    ctx.closePath(); ctx.fill();
+    // Inner glowing core
+    const bg=ctx.createRadialGradient(0,0,2,0,0,18);
+    bg.addColorStop(0, pc);
+    bg.addColorStop(0.7, pa);
+    bg.addColorStop(1, 'rgba(0,0,0,0.2)');
+    ctx.fillStyle=bg;
+    ctx.beginPath(); ctx.ellipse(0,0,22,10,0,0,Math.PI*2); ctx.fill();
+    // Glowing veins
+    ctx.strokeStyle=`rgba(255,200,255,${0.35+pulse*0.4})`;
+    ctx.lineWidth=1.2;
+    for(let i=0;i<5;i++){
+      const ang=i*Math.PI*2/5 + ship.lightPhase*0.2;
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.quadraticCurveTo(Math.cos(ang)*10, Math.sin(ang)*4, Math.cos(ang)*22, Math.sin(ang)*8);
+      ctx.stroke();
+    }
+    // Tendril trails
+    ctx.strokeStyle=pa; ctx.lineWidth=2;
+    [-6,0,6].forEach(y=>{
+      ctx.beginPath();
+      ctx.moveTo(-22,y);
+      ctx.quadraticCurveTo(-30,y+Math.sin(ship.lightPhase*2+y)*3, -36, y+Math.sin(ship.lightPhase*3+y)*4);
+      ctx.stroke();
+    });
+    // Eye-like sensor
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(18,0,2.5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(19,0,1.4,0,Math.PI*2); ctx.fill();
+  } else if(type==='crystal'){
+    // Crystalline faceted ship — angular gem shapes
+    const pulse=0.5+Math.sin(ship.lightPhase*2)*0.3;
+    // Main body — diamond with side crystals
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(32,0); ctx.lineTo(12,-12); ctx.lineTo(-24,-8); ctx.lineTo(-28,0); ctx.lineTo(-24,8); ctx.lineTo(12,12); ctx.closePath();
+    ctx.fill();
+    // Highlight facets
+    ctx.fillStyle=pc;
+    ctx.beginPath(); ctx.moveTo(32,0); ctx.lineTo(12,-12); ctx.lineTo(4,0); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-24,-8); ctx.lineTo(-28,0); ctx.lineTo(-10,-4); ctx.closePath(); ctx.fill();
+    // Side crystal spikes
+    ctx.fillStyle=pa;
+    ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(4,-20); ctx.lineTo(8,-10); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0,10); ctx.lineTo(4,20); ctx.lineTo(8,10); ctx.closePath(); ctx.fill();
+    // Shine highlight line
+    ctx.strokeStyle=`rgba(255,255,255,${0.4+pulse*0.4})`; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(10,-10); ctx.lineTo(28,0); ctx.stroke();
+    // Core glow
+    ctx.fillStyle=`rgba(200,240,255,${0.4+pulse*0.4})`;
+    ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+    // Engine glow
+    ctx.fillStyle=`rgba(200,240,255,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-28,0,2.5,0,Math.PI*2); ctx.fill();
+  } else if(type==='arrowhead'){
+    // Sharp triangular raider — angular and menacing
+    ctx.fillStyle=pc;
+    ctx.beginPath();
+    ctx.moveTo(38,0); ctx.lineTo(-22,-16); ctx.lineTo(-14,-4); ctx.lineTo(-14,4); ctx.lineTo(-22,16); ctx.closePath();
+    ctx.fill();
+    // Dark inlay
+    ctx.fillStyle=pa;
+    ctx.beginPath();
+    ctx.moveTo(30,0); ctx.lineTo(-14,-8); ctx.lineTo(-14,8); ctx.closePath();
+    ctx.fill();
+    // Cockpit slit
+    ctx.fillStyle='#000';
+    ctx.beginPath();
+    ctx.moveTo(18,-1); ctx.lineTo(28,0); ctx.lineTo(18,1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=`rgba(255,80,80,${0.4+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.ellipse(22,0,3,0.8,0,0,Math.PI*2); ctx.fill();
+    // Engine glow (twin)
+    ctx.fillStyle=`rgba(180,100,255,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-22,-10,2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-22,10,2,0,Math.PI*2); ctx.fill();
+    // Wing-tip cannons
+    ctx.fillStyle=pa;
+    ctx.fillRect(-20,-15,3,2); ctx.fillRect(-20,13,3,2);
+  } else if(type==='cargo'){
+    // Blocky industrial cargo hauler — rectangular with containers on top
+    // Main hull
+    ctx.fillStyle=pc;
+    ctx.fillRect(-26,-8, 50, 14);
+    ctx.fillStyle=pa;
+    ctx.fillRect(-26,2,50,4);
+    // Bridge / cockpit (front)
+    ctx.fillStyle=pa; ctx.fillRect(18,-12,8,8);
+    ctx.fillStyle='#224'; ctx.fillRect(19,-11,6,3);
+    ctx.fillStyle=`rgba(200,230,255,${0.4+Math.sin(ship.lightPhase)*0.2})`; ctx.fillRect(19,-10,6,1);
+    // Cargo containers
+    const containerColors=['#c63','#6a9','#aa3','#95c'];
+    for(let i=-2;i<=1;i++){
+      ctx.fillStyle=containerColors[(i+4)%containerColors.length];
+      ctx.fillRect(-20+i*10, -14, 9, 6);
+      ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=0.6;
+      ctx.strokeRect(-20+i*10, -14, 9, 6);
+    }
+    // Panel lines
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=0.6;
+    for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(i*10,-8); ctx.lineTo(i*10,6); ctx.stroke(); }
+    // Twin engine nozzles
+    ctx.fillStyle=pa;
+    ctx.fillRect(-30,-6,4,4); ctx.fillRect(-30,2,4,4);
+    ctx.fillStyle=`rgba(255,170,80,${0.6+Math.sin(ship.lightPhase)*0.3})`;
+    ctx.beginPath(); ctx.arc(-30,-4,2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-30,4,2,0,Math.PI*2); ctx.fill();
   } else {
     // Classic saucer (default)
     ctx.fillStyle=pa;ctx.beginPath();ctx.ellipse(0,0,35,10,0,0,Math.PI*2);ctx.fill();
@@ -13369,24 +13589,30 @@ function drawMainMenu(){
   const titleY=ch*0.55;
   // Hide logo in debug preview so both puppets are clearly visible.
   const hideLogo = mainMenuMode==='debugPreview' || mainMenuMode==='sandboxCaves' || mainMenuMode==='sandboxCaveWalk';
-  if(!hideLogo){
+  // Fade logo out when leaving the main menu (e.g. after pressing NEW GAME); fade back in when returning.
+  if(window._logoAlpha===undefined) window._logoAlpha=1;
+  const targetAlpha = (mainMenuMode==='menu' && !hideLogo) ? 1 : 0;
+  window._logoAlpha += (targetAlpha - window._logoAlpha) * 0.08;
+  if(!hideLogo && window._logoAlpha>0.01){
     if(!window._logoImg){window._logoImg=new Image();window._logoImg.src='logo.png';}
     const li=window._logoImg;
+    const la=window._logoAlpha;
+    // Slight downward drift + scale shrink as it fades
+    const driftY=(1-la)*18;
+    const scaleF=0.94+la*0.06;
+    ctx.save();
+    ctx.globalAlpha=la;
     if(li.complete&&li.naturalWidth>0){
-      const lh=Math.min(ch*0.42,360);
+      const lh=Math.min(ch*0.42,360)*scaleF;
       const lw=lh*(li.naturalWidth/li.naturalHeight);
-      ctx.save();
-      ctx.shadowColor='#0f0';ctx.shadowBlur=25+Math.sin(t*2)*10;
-      // Anchor logo so its bottom sits just above titleY (close to menu)
-      ctx.drawImage(li,cw/2-lw/2,titleY-lh,lw,lh);
-      ctx.restore();
+      ctx.shadowColor='#0f0';ctx.shadowBlur=(25+Math.sin(t*2)*10)*la;
+      ctx.drawImage(li,cw/2-lw/2,titleY-lh+driftY,lw,lh);
     }else{
-      ctx.save();
-      ctx.shadowColor='#0f0';ctx.shadowBlur=30+Math.sin(t*2)*10;
+      ctx.shadowColor='#0f0';ctx.shadowBlur=(30+Math.sin(t*2)*10)*la;
       ctx.fillStyle='#0f0';ctx.font='bold 52px monospace';ctx.textAlign='center';
-      ctx.fillText('space',cw/2,titleY);
-      ctx.restore();
+      ctx.fillText('space',cw/2,titleY+driftY);
     }
+    ctx.restore();
   }
 
   // Alien preview moved into the skin/race cards themselves (see below).
@@ -13401,6 +13627,7 @@ function drawMainMenu(){
     items.push({label:'NEW GAME', action:'new'});
     items.push({label:'ALIEN SKINS', action:'skins'});
     items.push({label:'SHIP SKINS', action:'shipskins'});
+    items.push({label:'SETTINGS', action:'settings'});
     items.push({label:'DEBUG', action:'debug'});
     items.push({label:'EXIT', action:'exit'});
     const menuY=ch*0.52;
@@ -13443,7 +13670,7 @@ function drawMainMenu(){
   else if(mainMenuMode==='skins'){
     // --- Step 1: RACE selector ---
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
-    ctx.fillText('CHOOSE YOUR RACE',cw/2,ch*0.12);
+    ctx.fillText(window._mmNewGame?'NEW GAME — STEP 1 OF 3: CHOOSE YOUR RACE':'CHOOSE YOUR RACE',cw/2,ch*0.12);
 
     const cols=4, cardW=200, cardH=230, gap=18;
     const totalW=cols*(cardW+gap)-gap;
@@ -13481,7 +13708,7 @@ function drawMainMenu(){
     // --- Step 2: SKIN variant selector for the race the user just drilled into ---
     const race=ALIEN_RACES[window._mmRaceIdx||0]||getRace(selectedRace);
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
-    ctx.fillText(race.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
+    ctx.fillText((window._mmNewGame?'STEP 1b — ':'')+race.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
     ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
     ctx.fillText(race.description,cw/2,ch*0.16);
 
@@ -13512,13 +13739,13 @@ function drawMainMenu(){
   else if(mainMenuMode==='shipskins'){
     // --- Step 1: SHIP TYPE selector ---
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
-    ctx.fillText('CHOOSE SHIP TYPE',cw/2,ch*0.12);
+    ctx.fillText(window._mmNewGame?'NEW GAME — STEP 2 OF 3: CHOOSE SHIP TYPE':'CHOOSE SHIP TYPE',cw/2,ch*0.12);
 
-    const cols=4, cardW=200, cardH=200, gap=18;
+    const cols=5, cardW=Math.min(180, (cw-80)/5), cardH=170, gap=12;
     const rows=Math.ceil(SHIP_TYPES.length/cols);
     const totalW=cols*(cardW+gap)-gap;
     const startX=cw/2-totalW/2;
-    const startY=ch*0.18;
+    const startY=ch*0.17;
     mainMenuSel=((mainMenuSel%SHIP_TYPES.length)+SHIP_TYPES.length)%SHIP_TYPES.length;
     SHIP_TYPES.forEach((st,i)=>{
       const col=i%cols, row=Math.floor(i/cols);
@@ -13558,7 +13785,7 @@ function drawMainMenu(){
     const type=SHIP_TYPES[typeIdx]||SHIP_TYPES[0];
     const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===type.id);
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
-    ctx.fillText(type.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
+    ctx.fillText((window._mmNewGame?'STEP 3 OF 3 — ':'')+type.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
     ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
     ctx.fillText(type.description,cw/2,ch*0.16);
 
@@ -13590,6 +13817,74 @@ function drawMainMenu(){
     });
     ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
     ctx.fillText('A/D to browse  |  ENTER/SPACE to equip  |  ESC to back to types',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='settings'){
+    const ctxMode=window._mmSettingsCtx||'all';
+    const filtered=KEY_ACTIONS.filter(a=>ctxMode==='all'||a.context==='both'||a.context===ctxMode);
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText('SETTINGS — CONTROLS',cw/2,ch*0.07);
+    ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
+    ctx.fillText('A/D: switch tab  |  W/S: select  |  ENTER: rebind  |  ESC: back',cw/2,ch*0.105);
+
+    // Tabs: ALL / SHIP / ON-FOOT
+    const tabs=[{id:'all',label:'ALL'},{id:'ship',label:'SHIP'},{id:'foot',label:'ON-FOOT'}];
+    const tabW=110, tabH=26, tabGap=8;
+    const tabsTotalW=tabs.length*tabW+(tabs.length-1)*tabGap;
+    const tabsX0=cw/2-tabsTotalW/2, tabsY=ch*0.135;
+    tabs.forEach((tb,ti)=>{
+      const tx=tabsX0+ti*(tabW+tabGap);
+      const active=tb.id===ctxMode;
+      ctx.fillStyle=active?'rgba(0,90,30,0.85)':'rgba(0,20,8,0.6)';
+      roundRect(ctx,tx,tabsY,tabW,tabH,6);ctx.fill();
+      if(active){ctx.strokeStyle=`rgba(0,255,0,${0.55+Math.sin(t*4)*0.25})`;ctx.lineWidth=2;roundRect(ctx,tx,tabsY,tabW,tabH,6);ctx.stroke();}
+      ctx.fillStyle=active?'#0f0':'rgba(0,200,0,0.55)';
+      ctx.font='bold 12px monospace';ctx.textAlign='center';
+      ctx.fillText(tb.label,tx+tabW/2,tabsY+17);
+    });
+
+    const rowH=26;
+    const listTop=ch*0.20;
+    const rowW=Math.min(520, cw-60);
+    const rowX=cw/2-rowW/2;
+
+    filtered.forEach((a,i)=>{
+      const y=listTop+i*rowH;
+      const sel=i===mainMenuSel;
+      const awaiting=window._mmAwaitBind===a.id;
+      ctx.fillStyle=sel?'rgba(0,60,20,0.85)':'rgba(0,15,5,0.45)';
+      roundRect(ctx,rowX,y,rowW,rowH-4,5); ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.5+Math.sin(t*4)*0.25})`;ctx.lineWidth=1.5;roundRect(ctx,rowX,y,rowW,rowH-4,5);ctx.stroke();}
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
+      ctx.font='13px monospace'; ctx.textAlign='left';
+      ctx.fillText(a.label, rowX+14, y+16);
+      // Context tag
+      if(ctxMode==='all'){
+        const tag=a.context==='ship'?'[SHIP]':a.context==='foot'?'[FOOT]':'[BOTH]';
+        ctx.fillStyle='rgba(120,200,150,0.45)';ctx.font='10px monospace';
+        ctx.fillText(tag, rowX+rowW*0.55, y+16);
+      }
+      // Current binding
+      const bind=keyBindings[a.id]||a.canonical;
+      const isDefault=bind===a.canonical;
+      let bindLabel=awaiting?'PRESS ANY KEY...':keyLabel(bind);
+      ctx.textAlign='right';
+      ctx.font='bold 13px monospace';
+      ctx.fillStyle=awaiting?`rgba(255,220,60,${0.6+Math.sin(t*8)*0.3})`:(isDefault?'rgba(180,220,180,0.75)':'#fd4');
+      ctx.fillText(bindLabel, rowX+rowW-14, y+16);
+    });
+    // Reset + Back rows
+    const resetI=filtered.length, backI=filtered.length+1;
+    const resetY=listTop+resetI*rowH+6;
+    const backY=listTop+backI*rowH+6;
+    [['RESET TO DEFAULTS',resetI,resetY],['BACK',backI,backY]].forEach(([lbl,idx,yy])=>{
+      const sel=idx===mainMenuSel;
+      ctx.fillStyle=sel?'rgba(0,70,25,0.85)':'rgba(0,15,5,0.45)';
+      roundRect(ctx,rowX,yy,rowW,rowH-4,5); ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.5+Math.sin(t*4)*0.25})`;ctx.lineWidth=1.5;roundRect(ctx,rowX,yy,rowW,rowH-4,5);ctx.stroke();}
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
+      ctx.font='bold 13px monospace'; ctx.textAlign='center';
+      ctx.fillText(lbl, cw/2, yy+17);
+    });
   }
   else if(mainMenuMode==='debug'){
     // Top-level debug menu: WORLD / SANDBOX
@@ -14767,7 +15062,7 @@ function updateMainMenu(){
     const hasSave=hasSaveGame();
     const items=[];
     if(hasSave) items.push('continue');
-    items.push('new','skins','shipskins','debug','exit');
+    items.push('new','skins','shipskins','settings','debug','exit');
 
     if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=10;}
     if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=10;}
@@ -14777,9 +15072,16 @@ function updateMainMenu(){
       keys['enter']=false;keys[' ']=false;window._mmCool=15;
       const action=items[mainMenuSel];
       if(action==='continue'){startGame(true);}
-      else if(action==='new'){startGame(false);}
+      else if(action==='new'){
+        // New game: funnel through race pick → ship type pick → ship variant pick → start
+        window._mmNewGame=true;
+        mainMenuMode='skins';
+        mainMenuSel=ALIEN_RACES.findIndex(r=>r.id===selectedRace);
+        if(mainMenuSel<0) mainMenuSel=0;
+      }
       else if(action==='skins'){mainMenuMode='skins';mainMenuSel=ALIEN_SKINS.findIndex(s=>s.id===selectedSkin)||0;}
       else if(action==='shipskins'){mainMenuMode='shipskins';mainMenuSel=SHIP_PAINTS.findIndex(s=>s.id===shipPaint.name)||0;}
+      else if(action==='settings'){mainMenuMode='settings';mainMenuSel=0;}
       else if(action==='debug'){mainMenuMode='debug';mainMenuSel=0;}
       else if(action==='exit'){
         // Show start-screen overlay and stop the game
@@ -14810,7 +15112,7 @@ function updateMainMenu(){
       const curIdx=race.skins.findIndex(s=>s.id===selectedSkin);
       mainMenuSel=curIdx>=0?curIdx:0;
     }
-    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;window._mmNewGame=false;}
   }
   else if(mainMenuMode==='raceskins'){
     if(window._mmRaceIdx===undefined) window._mmRaceIdx=0;
@@ -14828,14 +15130,20 @@ function updateMainMenu(){
       localStorage.setItem('sadabduction_skin',selectedSkin);
       localStorage.setItem('sadabduction_race',selectedRace);
       refreshAlienWeapons(); alien.weapon=0;
+      // In new-game flow, advance to ship-type picker
+      if(window._mmNewGame){
+        mainMenuMode='shipskins';
+        mainMenuSel=SHIP_TYPES.findIndex(st=>st.id===(shipPaint.ship||'saucer'));
+        if(mainMenuSel<0) mainMenuSel=0;
+      }
     }
     if(keys['escape']){keys['escape']=false;mainMenuMode='skins';mainMenuSel=window._mmRaceIdx||0;window._mmCool=10;}
   }
   else if(mainMenuMode==='shipskins'){
     if(keys['a']||keys['arrowleft']){mainMenuSel--;window._mmCool=8;}
     if(keys['d']||keys['arrowright']){mainMenuSel++;window._mmCool=8;}
-    if(keys['w']||keys['arrowup']){mainMenuSel-=4;window._mmCool=8;}
-    if(keys['s']||keys['arrowdown']){mainMenuSel+=4;window._mmCool=8;}
+    if(keys['w']||keys['arrowup']){mainMenuSel-=5;window._mmCool=8;}
+    if(keys['s']||keys['arrowdown']){mainMenuSel+=5;window._mmCool=8;}
     mainMenuSel=((mainMenuSel%SHIP_TYPES.length)+SHIP_TYPES.length)%SHIP_TYPES.length;
     if(keys['enter']||keys[' ']){
       keys['enter']=false;keys[' ']=false;window._mmCool=15;
@@ -14846,7 +15154,7 @@ function updateMainMenu(){
       mainMenuSel=curIdx>=0?curIdx:0;
       mainMenuMode='shipVariants';
     }
-    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+    if(keys['escape']){keys['escape']=false;mainMenuMode=window._mmNewGame?'skins':'menu';mainMenuSel=0;window._mmCool=10;}
   }
   else if(mainMenuMode==='shipVariants'){
     const typeIdx=window._mmShipTypeIdx||0;
@@ -14862,8 +15170,51 @@ function updateMainMenu(){
       const sp=variants[mainMenuSel];
       shipPaint={color:sp.color,accent:sp.accent,trail:sp.trail,name:sp.id,ship:sp.ship||'saucer'};
       localStorage.setItem('sadabduction_shippaint',JSON.stringify(shipPaint));
+      // In new-game flow, finalize and launch the game
+      if(window._mmNewGame){
+        window._mmNewGame=false;
+        startGame(false);
+      }
     }
     if(keys['escape']){keys['escape']=false;mainMenuMode='shipskins';mainMenuSel=window._mmShipTypeIdx||0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='settings'){
+    if(!window._mmSettingsCtx) window._mmSettingsCtx='all';
+    const tabs=['all','ship','foot'];
+    // Tab switch with A/D (only when not awaiting a bind)
+    if(!window._mmAwaitBind){
+      if(keys['a']||keys['arrowleft']){
+        const idx=tabs.indexOf(window._mmSettingsCtx);
+        window._mmSettingsCtx=tabs[(idx-1+tabs.length)%tabs.length];
+        mainMenuSel=0; window._mmCool=10;
+      }
+      if(keys['d']||keys['arrowright']){
+        const idx=tabs.indexOf(window._mmSettingsCtx);
+        window._mmSettingsCtx=tabs[(idx+1)%tabs.length];
+        mainMenuSel=0; window._mmCool=10;
+      }
+    }
+    const ctxMode=window._mmSettingsCtx;
+    const filtered=KEY_ACTIONS.filter(a=>ctxMode==='all'||a.context==='both'||a.context===ctxMode);
+    const n=filtered.length+2; // +2 for "Reset to defaults" and "Back"
+    if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=8;}
+    if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=8;}
+    mainMenuSel=((mainMenuSel%n)+n)%n;
+    if((keys['enter']||keys[' ']) && !window._mmAwaitBind){
+      keys['enter']=false;keys[' ']=false;window._mmCool=15;
+      if(mainMenuSel<filtered.length){
+        // Begin rebinding this action
+        window._mmAwaitBind=filtered[mainMenuSel].id;
+      } else if(mainMenuSel===filtered.length){
+        // Reset all to defaults
+        KEY_ACTIONS.forEach(a=>{ keyBindings[a.id]=a.canonical; });
+        saveKeyBindings();
+        _physToCanon=buildPhysicalToCanonical();
+      } else {
+        mainMenuMode='menu'; mainMenuSel=0;
+      }
+    }
+    if(keys['escape'] && !window._mmAwaitBind){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
   }
   else if(mainMenuMode==='debug'){
     const n=2;
