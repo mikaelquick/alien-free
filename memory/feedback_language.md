@@ -6,5 +6,5 @@ type: feedback
 
 Write everything in English — code, comments, documentation, and chat responses.
 
-**Why:** User corrected the earlier "chat in German" preference on 2026-04-18 and asked for English chat too.
-**How to apply:** Default to English for all output. If the user switches languages mid-conversation, follow their lead.
+**Why:** User corrected the earlier "chat in German" preference on 2026-04-18, and re-confirmed on 2026-04-19 ("speak english") after I drifted back into German.
+**How to apply:** Always default to English — code, comments, docs, and chat. Do NOT switch to German even if a prior user message was German. Only switch if the user explicitly asks for another language in the current turn.

@@ -248,6 +248,8 @@ let speechBubbles = [];
 let stars = [];
 let deepStars = [];
 let clouds = [];
+let ufoWrecks = []; // crashed UFO pickups — {x, y, scavenged, sparkT}
+let hiddenBunkers = []; // discovered bunker entrances — {x, w, h, revealed}
 let missiles = [];
 let fires = [];
 let ashPiles = []; // burned-down humans — {x, y, life, maxLife}
@@ -439,7 +441,7 @@ function damageBoss(amount,source){
   // Mercy mode
   if(hpPct<=0.05&&!boss.mercyAvailable){boss.mercyAvailable=true;}
   // Death
-  if(boss.hp<=0){defeatBoss(false);}
+  if(boss.hp<=0){triggerHitStop(18);triggerShake(18);defeatBoss(false);}
 }
 
 function defeatBoss(mercy){
@@ -953,6 +955,9 @@ const alien = {
 };
 
 function triggerShake(intensity){ screenShake.intensity=Math.max(screenShake.intensity,intensity); }
+// Hit-stop: skip `frames` game-update frames for impactful moments. Draw still runs, so the world "freezes".
+let hitStopFrames = 0;
+function triggerHitStop(frames){ hitStopFrames = Math.max(hitStopFrames, frames|0); }
 
 // --- PLANET / SPACE SYSTEM ---
 let gameMode = 'planet'; // 'planet' or 'space'
@@ -3707,7 +3712,8 @@ function loadPlanet(planet) {
     // Generate military bases on Earth (3 bases at fixed positions)
     // Skip during prehistoricEra — no armies 68M years ago
     earthMilitaryBases=[];
-    if(planet.id==='earth' && !window.prehistoricEra){
+    // Military bases on Earth disabled for now — will be reworked later.
+    if(false && planet.id==='earth' && !window.prehistoricEra){
       // Military bases in city, farmland-edge, mountains, landmarks
       const _cityB=earthBiomes.find(b=>b.id==='city');
       const _lmB=earthBiomes.find(b=>b.id==='landmarks');
@@ -3747,6 +3753,25 @@ function loadPlanet(planet) {
   }
   particles=[]; debris=[]; tears=[]; speechBubbles=[]; missiles=[];
   vehicles=[]; weather=[]; hazards=[]; turrets=[];
+  // Crashed UFO wrecks — 1-3 per planet, mysterious ancient hulks. Scavenge for bonus score & particles.
+  ufoWrecks=[];
+  hiddenBunkers=[];
+  if(planet.id!=='moon' || !window.prehistoricEra){
+    const nWrecks = 1 + Math.floor(Math.random()*3);
+    for(let i=0;i<nWrecks;i++){
+      let wx = 400 + Math.random()*(worldWidth-800);
+      // Avoid Earth oceans
+      if(planet.id==='earth' && typeof isOverOcean==='function'){ for(let tries=0;tries<6 && isOverOcean(wx);tries++) wx = 400 + Math.random()*(worldWidth-800); }
+      ufoWrecks.push({x:wx,y:GROUND_LEVEL-8,scavenged:false,sparkT:Math.random()*100});
+    }
+    // Hidden bunkers — 1-2 per planet, revealed only when within ~80px
+    const nBunkers = 1 + Math.floor(Math.random()*2);
+    for(let i=0;i<nBunkers;i++){
+      let bxx = 600 + Math.random()*(worldWidth-1200);
+      if(planet.id==='earth' && typeof isOverOcean==='function'){ for(let tries=0;tries<6 && isOverOcean(bxx);tries++) bxx = 600 + Math.random()*(worldWidth-1200); }
+      hiddenBunkers.push({x:bxx, w:80, h:24, revealed:false, looted:false});
+    }
+  }
   planetTerror=0;
   generateStars(); generateClouds(); generateWeather(); generateVehicles(); generateHazards();
   ship.x=worldWidth/2; ship.y=LEAVE_THRESHOLD+50; ship.vx=0; ship.vy=2;
@@ -3843,27 +3868,8 @@ function spawnMilitary(){
   const hpMult=(1+getDifficultyLevel()*0.15)*genocideMult;
 
   if(p.id==='earth'){
-    // No armies 68M years ago — prehistoric Earth never spawns military.
-    if(window.prehistoricEra) return;
-    // Earth: military spawns FROM bases, not randomly near player
-    if(wantedLevel>=1&&earthMilitaryBases.length>0){
-      // Pick nearest base to spawn from
-      const nearestBase=earthMilitaryBases.reduce((best,bx)=>Math.abs(bx-target.x)<Math.abs(best-target.x)?bx:best,earthMilitaryBases[0]);
-      if(military.filter(m=>m.type==='soldier'&&m.alive).length<wantedLevel*2+3){
-        const sx=nearestBase+Math.random()*120;
-        military.push({type:'soldier',x:sx,y:GROUND_LEVEL-20,vx:0,facing:1,
-          shootTimer:0,health:Math.ceil(3*hpMult),alive:true,color:'#363',gunColor:'#555',baseX:nearestBase});
-      }
-      if(wantedLevel>=3&&military.filter(m=>m.type==='police'&&m.alive).length<wantedLevel-1){
-        const sx=nearestBase+Math.random()*100;
-        military.push({type:'police',x:sx,y:GROUND_LEVEL-14,vx:(target.x>sx?2:-2),
-          w:45,h:20,alive:true,health:Math.ceil(5*hpMult),shootTimer:0,color:'#115'});
-      }
-      if(wantedLevel>=4&&!military.find(m=>m.type==='helicopter'&&m.alive)){
-        military.push({type:'helicopter',x:nearestBase,y:GROUND_LEVEL-500,vx:-1.5,vy:0,
-          alive:true,health:Math.ceil(8*hpMult),shootTimer:0,rotorAngle:0});
-      }
-    }
+    // Earth military is disabled for now — will be reworked later.
+    return;
   }
   if(p.id==='mars'){
     if(wantedLevel>=2&&military.filter(m=>m.type==='soldier').length<wantedLevel*2){
@@ -4178,7 +4184,13 @@ function enterMothership(){
   mi._eventCD=120+Math.random()*180;
   mi._nebulaPhase=Math.random()*1000;
   // Hub crew — varied NPC officers, scientists, engineers, bots (NO children)
-  const crewSkinPool=(typeof ALIEN_RACES!=='undefined'&&ALIEN_RACES.length)?ALIEN_RACES:[null];
+  // Flatten all race skins into one pool, excluding the player's current skin so crew looks different.
+  const playerSkin = (typeof getAlienSkin==='function') ? getAlienSkin() : null;
+  const playerSkinId = playerSkin && playerSkin.id;
+  const _allSkins=[];
+  if(typeof ALIEN_RACES!=='undefined' && ALIEN_RACES.length){
+    ALIEN_RACES.forEach(r=>{ (r.skins||[]).forEach(s=>{ if(s && s.id!==playerSkinId) _allSkins.push(s); }); });
+  }
   mi.hubCrew=[];
   const crewRoster=[
     {role:'officer',   accent:'#c44', scale:1.05, label:'Officer'},
@@ -4188,15 +4200,17 @@ function enterMothership(){
     {role:'medic',     accent:'#fff', scale:0.98, label:'Medic'},
     {role:'bot',       accent:'#8fa', scale:0.85, label:'Maint-Bot'},
   ];
+  // Shuffle the skin pool so each crew member gets a distinct alien species.
+  for(let i=_allSkins.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[_allSkins[i],_allSkins[j]]=[_allSkins[j],_allSkins[i]];}
   for(let i=0;i<crewRoster.length;i++){
     const r=crewRoster[i];
-    const sk=crewSkinPool[(i+1)%crewSkinPool.length];
+    const crewSkin = _allSkins.length ? _allSkins[i%_allSkins.length] : playerSkin;
     mi.hubCrew.push({
       role: r.role,
       accent: r.accent,
       label: r.label,
       x:200+i*260, vx:0, facing:i%2===0?1:-1, walkT:Math.random()*10,
-      skin: sk&&sk.skin?sk.skin:(typeof getAlienSkin==='function'?getAlienSkin():null),
+      skin: crewSkin,
       scale: r.scale,
       task: Math.random()<0.5?'walk':'work',
       taskT: 120+Math.random()*240,
@@ -5906,9 +5920,51 @@ function updateMothership(){
   // Animate
   {
     const zMin=30, zMax=(mi.zooWidth||260)-30;
-    (mi.zooCreatures||[]).forEach(c=>{c.walkTimer+=0.08;c.x+=c.walkDir*c.walkSpeed;
-      if(c.x<zMin||c.x>zMax)c.walkDir*=-1;if(Math.random()>0.99)c.walkDir*=-1;
-      if(c.feedAnim>0)c.feedAnim--;c.hunger=Math.max(0,c.hunger-0.005);c.happiness=Math.max(0,c.happiness-0.003);});
+    (mi.zooCreatures||[]).forEach((c,ci)=>{
+      c.walkTimer+=0.08;
+      // State machine: 'walk', 'sleep', 'fight', 'eat'. Transitions randomly every few seconds.
+      if(c._stateT==null){c._state='walk'; c._stateT=120+Math.random()*240;}
+      c._stateT--;
+      if(c._stateT<=0){
+        const r=Math.random();
+        if(r<0.55)c._state='walk';
+        else if(r<0.8)c._state='sleep';
+        else if(r<0.95)c._state='eat';
+        else c._state='fight';
+        c._stateT=120+Math.random()*300;
+        // Find a fight partner nearby (same enclosure)
+        if(c._state==='fight'){
+          const partners=mi.zooCreatures.filter(o=>o!==c&&o.enclosure===c.enclosure&&Math.abs(o.x-c.x)<140);
+          c._fightPartner = partners.length ? partners[Math.floor(Math.random()*partners.length)] : null;
+          if(c._fightPartner){c._fightPartner._state='fight';c._fightPartner._stateT=c._stateT;c._fightPartner._fightPartner=c;}
+          else c._state='walk';
+        }
+      }
+      if(c._state==='walk'){
+        c.x+=c.walkDir*c.walkSpeed;
+        if(c.x<zMin||c.x>zMax)c.walkDir*=-1;
+        if(Math.random()>0.99)c.walkDir*=-1;
+      } else if(c._state==='sleep'){
+        // Idle, tiny breathing bob handled via walkTimer in draw
+      } else if(c._state==='eat'){
+        // Wiggle toward food-bowl side
+        if(Math.random()>0.7)c.x += (c.walkDir)*0.05;
+      } else if(c._state==='fight' && c._fightPartner){
+        const p=c._fightPartner;
+        const dx=p.x-c.x;
+        if(Math.abs(dx)>10) c.x += Math.sign(dx)*0.6;
+        else if(Math.random()>0.85){
+          // Fight punch — small impact particles
+          if(typeof mi.ambientParticles!=='undefined' && mi.ambientParticles.length<60){
+            mi.ambientParticles.push({x:canvas.width/2,y:canvas.height/2,vx:0,vy:0,life:8,color:[255,240,80],size:2});
+          }
+          c.happiness=Math.max(0,c.happiness-0.5);
+        }
+      }
+      if(c.feedAnim>0)c.feedAnim--;
+      c.hunger=Math.max(0,c.hunger-0.005);
+      c.happiness=Math.max(0,c.happiness-0.003);
+    });
     (mi.milkCows||[]).forEach(c=>{c.walkTimer+=0.03;c.legAnim+=0.05;if(c.milkAnim>0)c.milkAnim--;
       c.x=(c.x==null?zMin+Math.random()*(zMax-zMin):c.x)+(c.walkDir||(c.walkDir=Math.random()<0.5?-1:1))*0.15;
       if(c.x<zMin||c.x>zMax)c.walkDir*=-1;
@@ -7071,6 +7127,50 @@ function drawMothership(){
   // ================================================================
   }else if(mi.screen==='bridge'){
     const selNPC=mi.npcs[mi.selectedItem%mi.npcs.length];
+
+    // === AMBIENT BRIDGE BACKGROUND ===
+    // Starfield viewport at the back
+    const vpY=60, vpH=ch*0.18, vpPad=40;
+    ctx.fillStyle='rgba(0,5,20,0.7)';ctx.fillRect(vpPad,vpY,cw-vpPad*2,vpH);
+    ctx.strokeStyle='rgba(80,180,255,0.2)';ctx.lineWidth=1;ctx.strokeRect(vpPad,vpY,cw-vpPad*2,vpH);
+    mi._bridgeStars = mi._bridgeStars || Array.from({length:60},(_,i)=>({x:Math.random(),y:Math.random(),sp:0.3+Math.random()*1.2}));
+    for(const s of mi._bridgeStars){
+      s.x -= s.sp*0.002;
+      if(s.x<0) s.x+=1;
+      const alpha = 0.3+s.sp*0.4;
+      ctx.fillStyle=`rgba(200,220,255,${alpha})`;
+      ctx.fillRect(vpPad+s.x*(cw-vpPad*2), vpY+s.y*vpH, 1.5, 1.5);
+    }
+    // Holographic rotating planet in viewport
+    const hpX=cw*0.82, hpY=vpY+vpH/2, hpR=vpH*0.35;
+    ctx.save();
+    ctx.globalAlpha=0.5;
+    ctx.fillStyle='rgba(60,180,255,0.25)';ctx.beginPath();ctx.arc(hpX,hpY,hpR,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(100,220,255,0.6)';ctx.lineWidth=1.2;
+    for(let i=0;i<4;i++){
+      const off=(t*0.3+i*0.5)%(Math.PI*2);
+      ctx.beginPath();ctx.ellipse(hpX,hpY,hpR,hpR*Math.abs(Math.cos(off)),0,0,Math.PI*2);ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(100,220,255,0.3)';ctx.beginPath();ctx.ellipse(hpX,hpY,hpR*1.4,hpR*0.3,0.3,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.fillStyle='rgba(150,220,255,0.5)';ctx.font='9px monospace';ctx.textAlign='center';
+    ctx.fillText('⊙ NAV: '+((currentPlanet&&currentPlanet.name)||'VOID'),hpX,hpY+hpR+14);
+    ctx.restore();
+    // Crew silhouettes at side consoles — two background crew working
+    const crewPos=[{x:vpPad+40,y:vpY+vpH-8},{x:cw-vpPad-80,y:vpY+vpH-8}];
+    crewPos.forEach((cp,ci)=>{
+      const bob=Math.sin(t*(1.5+ci*0.3))*1.5;
+      ctx.fillStyle='rgba(20,40,80,0.9)';
+      ctx.beginPath();ctx.ellipse(cp.x,cp.y+8,14,4,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(60,120,180,0.8)';
+      ctx.fillRect(cp.x-7,cp.y-18+bob,14,18);
+      ctx.fillStyle=ci===0?'rgba(180,140,220,0.85)':'rgba(120,200,150,0.85)';
+      ctx.beginPath();ctx.arc(cp.x,cp.y-22+bob,6,0,Math.PI*2);ctx.fill();
+      // Console lights
+      ctx.fillStyle=`rgba(100,220,255,${0.4+Math.sin(t*4+ci)*0.3})`;
+      ctx.fillRect(cp.x-10,cp.y+4,20,3);
+    });
+
     // Back hint
     ctx.fillStyle='rgba(50,150,255,0.3)';ctx.font='10px monospace';ctx.textAlign='left';ctx.fillText('\u25C0 ESC Back',15,25);
     ctx.fillStyle='rgba(50,150,255,0.6)';ctx.font='18px monospace';ctx.textAlign='center';ctx.fillText('COMMAND BRIDGE',cw/2,28);
@@ -7584,6 +7684,26 @@ function drawMothership(){
           ctx.strokeStyle=c._isCow?(c.color||'#fff'):(c.color||'#558');ctx.lineWidth=1*sz;
           ctx.beginPath();ctx.moveTo(px-1.5*sz,py);ctx.lineTo(px-2.5*sz+lo2,py+3.5*sz);ctx.stroke();
           ctx.beginPath();ctx.moveTo(px+1.5*sz,py);ctx.lineTo(px+2.5*sz-lo2,py+3.5*sz);ctx.stroke();
+          // Behavior state indicators
+          if(c._state==='sleep'){
+            ctx.fillStyle='rgba(180,220,255,0.8)';ctx.font=`${Math.round(6*sz+4)}px monospace`;ctx.textAlign='left';
+            const z=Math.sin(t*2)*2;
+            ctx.fillText('z',px+4*sz,py-12*sz+z);
+            ctx.fillText('Z',px+6*sz,py-16*sz+z*0.5);
+          } else if(c._state==='fight'){
+            // Red puff
+            ctx.fillStyle=`rgba(255,120,60,${0.5+Math.sin(t*8)*0.3})`;
+            ctx.beginPath();ctx.arc(px+Math.sin(t*10)*3*sz,py-12*sz,2.2*sz,0,Math.PI*2);ctx.fill();
+            ctx.fillStyle='rgba(255,255,120,0.9)';ctx.font=`bold ${Math.round(6*sz+3)}px monospace`;ctx.textAlign='center';
+            if(((t*6)|0)%2===0) ctx.fillText('!',px,py-14*sz);
+          } else if(c._state==='eat'){
+            ctx.fillStyle='rgba(160,120,80,0.7)';
+            ctx.beginPath();ctx.arc(px,py+1,2*sz,0,Math.PI*2);ctx.fill();
+            if(((t*4)|0)%2===0){
+              ctx.fillStyle='rgba(255,240,120,0.9)';ctx.font=`${Math.round(5*sz+3)}px monospace`;ctx.textAlign='center';
+              ctx.fillText('*',px,py-12*sz);
+            }
+          }
         });
         // Action hint
         if(sel){ctx.fillStyle=`rgba(${cc[0]},${cc[1]},${cc[2]},${0.5+Math.sin(t*4)*0.3})`;ctx.font='10px monospace';ctx.textAlign='right';
@@ -7902,6 +8022,7 @@ document.addEventListener('keydown', e => {
     else if(playerMode==='ship') ejectFromShipIntoVehicle();
   }
   if (!keys[k]&&k==='e'&&playerMode==='ship'&&!mothershipMode) repulsorBlast();
+  if (!keys[k]&&k==='e'&&playerMode==='onfoot'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){ interactScavenge(); }
   if (!keys[k]&&k==='n'&&gameMode==='planet'&&playerMode==='ship') nukeplanet();
   if (!keys[k]&&k==='v'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
@@ -7924,8 +8045,9 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&(e.key==='F3'||k==='`'||k==='§')){_fpsShow=!_fpsShow;e.preventDefault();return;}
   if(!keys[k]&&e.key==='F4'){window._perfMode=!window._perfMode;showMessage(window._perfMode?'Performance mode ON':'Performance mode OFF');e.preventDefault();return;}
   if(!keys[k]&&k==='l'){flashlightOn=!flashlightOn;showMessage(flashlightOn?'Flashlight ON':'Flashlight OFF');return;}
+  if(!keys[k]&&k==='t'&&playerMode==='onfoot'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){toggleMindControl();return;}
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
-    [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
+    [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,lassoSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -8269,6 +8391,76 @@ function evictInhabitant(h, b){
     life:25+Math.random()*15,size:Math.random()*2+1,color:b.color||'#888'});
 }
 
+// Mind control — hijack the nearest human. While controlled, A/D walks them, jumping with SPACE.
+// Toggle off (or they die) to release. Alien stays frozen in place while controlling.
+let mindControl = null; // {target, duration}
+function toggleMindControl(){
+  if(mindControl){
+    if(mindControl.target){mindControl.target.mindControlled=false;mindControl.target.panicLevel=10;}
+    mindControl=null; showMessage('Mind link severed'); return;
+  }
+  // Find nearest non-collected, non-ragdoll human within 260
+  let best=null, bestD=260;
+  for(const h of humans){
+    if(h.collected||h.hidden||h.ragdoll||h.isDino)continue;
+    const d=dist(alien.x,alien.y,h.bodyX,h.bodyY);
+    if(d<bestD){bestD=d; best=h;}
+  }
+  if(!best){showMessage('No target in range'); return;}
+  best.mindControlled=true; best.panicLevel=0; best.crying=false; best.stunTimer=0;
+  mindControl = {target:best, duration:600};
+  showMessage('Mind link established — A/D to walk the puppet');
+}
+
+// E-key on foot: scavenge UFO wrecks or breach hidden bunkers when near one.
+function interactScavenge(){
+  // UFO wreck
+  for(const w of ufoWrecks){
+    if(w.scavenged)continue;
+    if(Math.abs(alien.x-w.x)<50 && Math.abs(alien.y-w.y)<60){
+      w.scavenged=true;
+      const bonus=100+Math.floor(Math.random()*150);
+      score+=bonus;
+      document.getElementById('score').textContent=score;
+      // Effect
+      for(let i=0;i<18;i++){
+        const a=Math.random()*Math.PI*2;
+        particles.push({x:w.x,y:w.y-6,vx:Math.cos(a)*(1+Math.random()*3),vy:Math.sin(a)*(1+Math.random()*3)-1,life:30,color:['#8cf','#cef','#ff8'][Math.floor(Math.random()*3)],size:Math.random()*2+1});
+      }
+      playSound && playSound('collect');
+      triggerShake(2);
+      showMessage('Scavenged alien tech +'+bonus);
+      return;
+    }
+  }
+  // Bunker
+  for(const bk of hiddenBunkers){
+    if(bk.looted)continue;
+    if(Math.abs(alien.x-(bk.x+bk.w/2))<40){
+      bk.looted=true;
+      const bonus=250+Math.floor(Math.random()*300);
+      score+=bonus;
+      document.getElementById('score').textContent=score;
+      // Spawn 1-2 captive prisoners at the hatch that flee — quick abduction fodder
+      for(let i=0;i<2;i++){
+        if(typeof generateInhabitant==='function'){
+          generateInhabitant(bk.x+bk.w/2+(Math.random()-0.5)*30);
+          const h=humans[humans.length-1];
+          if(h){ h.panicLevel=10; h.crying=true; h.walkSpeed=2.5; h.walkDir=Math.random()<0.5?-1:1; h.label=(h.label||'Captive')+' (rescued)'; }
+        }
+      }
+      // Smoke + flash
+      for(let i=0;i<20;i++){
+        particles.push({x:bk.x+bk.w/2+(Math.random()-0.5)*bk.w,y:GROUND_LEVEL-10,vx:(Math.random()-0.5)*2,vy:-Math.random()*3,life:40,color:['#333','#555','#777','#fa4'][Math.floor(Math.random()*4)],size:Math.random()*3+2});
+      }
+      triggerShake(4);
+      playSound && playSound('explosion');
+      showMessage('Bunker breached! +'+bonus+' — prisoners released');
+      return;
+    }
+  }
+}
+
 // On first damage (not destruction) — small chance one hidden occupant bursts out.
 // Call this right before `b.cracked = true` so we only fire once per building.
 function maybeEvictFromDamage(b){
@@ -8332,11 +8524,26 @@ function fireMissile(){if(!gameStarted||gameMode==='space')return;missileCooldow
 function toggleLasso(){
   if(!gameStarted||gameMode!=='planet'||mothershipMode)return;
   if(ship.lasso){
-    // Release
-    if(ship.lasso.targetType==='block' && ship.lasso.target){ship.lasso.target.lassoed=false;}
-    if(ship.lasso.targetType==='human' && ship.lasso.target){ship.lasso.target.lassoed=false;}
+    // Release — hurl the target in the direction the ship is moving (telekinetic throw)
+    const l=ship.lasso, tgt=l.target;
+    if(tgt){
+      const throwVX = ship.vx*2.8, throwVY = ship.vy*2.8 - 4;
+      if(l.targetType==='block'){
+        tgt.lassoed=false;
+        tgt.vx=(tgt.vx||0)+throwVX; tgt.vy=(tgt.vy||0)+throwVY;
+        tgt.thrown=60;
+      } else if(l.targetType==='human'){
+        tgt.lassoed=false;
+        applyForce(tgt, throwVX, throwVY);
+        tgt.ragdoll=true; tgt.panicLevel=10;
+      } else if(l.targetType==='vehicle'){
+        tgt.lassoed=false;
+        tgt.vx=(tgt.vx||0)+throwVX; tgt.vy=(tgt.vy||0)+throwVY;
+        tgt.airborne=true;
+      }
+    }
     ship.lasso=null;
-    showMessage('Lasso released');
+    showMessage('Thrown!');
     return;
   }
   // Find closest target in range
@@ -8356,6 +8563,13 @@ function toggleLasso(){
     const d=Math.hypot(h.bodyX-ship.x, h.bodyY-ship.y);
     if(d<bestD){bestD=d; best={targetType:'human', target:h};}
   }
+  // Vehicles
+  for(const v of vehicles){
+    if(!v.alive)continue;
+    const vcx=v.x+(v.w||40)/2, vcy=v.y-(v.h||20)/2;
+    const d=Math.hypot(vcx-ship.x, vcy-ship.y);
+    if(d<bestD){bestD=d; best={targetType:'vehicle', target:v};}
+  }
   if(!best){showMessage('No lasso target in range');return;}
   if(best.targetType==='block'){
     const b=best.target;
@@ -8368,9 +8582,12 @@ function toggleLasso(){
     best.target.ragdoll=true;
     best.target.crying=true;
     best.target.panicLevel=10;
+  } else if(best.targetType==='vehicle'){
+    best.target.lassoed=true;
+    best.target.airborne=true;
   }
   ship.lasso={targetType:best.targetType, target:best.target};
-  playSound('beam');
+  try{lassoSfx.currentTime=0;lassoSfx.play().catch(()=>{});}catch(e){}
   showMessage('Lasso attached!');
 }
 
@@ -8379,9 +8596,10 @@ function updateLasso(){
   const l=ship.lasso; if(!l)return;
   const tgt=l.target;
   // Auto-release conditions
-  if(!tgt||tgt.dead||tgt.collected||tgt.hidden){ship.lasso=null;return;}
+  if(!tgt||tgt.dead||tgt.collected||tgt.hidden||(l.targetType==='vehicle'&&!tgt.alive)){ship.lasso=null;return;}
   let tx,ty;
   if(l.targetType==='block'){tx=tgt.x+tgt.w/2; ty=tgt.y+tgt.h/2;}
+  else if(l.targetType==='vehicle'){tx=tgt.x+(tgt.w||40)/2; ty=tgt.y-(tgt.h||20)/2;}
   else {tx=tgt.bodyX; ty=tgt.bodyY;}
   const dx=ship.x-tx, dy=(ship.y+20)-ty;
   const d=Math.hypot(dx,dy)||1;
@@ -8413,6 +8631,21 @@ function updateLasso(){
         }
       }
     });
+  } else if(l.targetType==='vehicle'){
+    tgt.vx = (tgt.vx||0) + ux*pull*1.2;
+    tgt.vy = (tgt.vy||0) + uy*pull*1.2 - 0.35;
+    tgt.vx*=0.94; tgt.vy*=0.94;
+    tgt.airborne=true;
+    // Slam damage to buildings on contact
+    blocks.forEach(o=>{
+      if(o.dead||!o.fixed)return;
+      if(tgt.x<o.x+o.w && tgt.x+tgt.w>o.x && tgt.y-tgt.h<o.y+o.h && tgt.y>o.y){
+        const speed=Math.hypot(tgt.vx,tgt.vy);
+        if(speed>3){
+          o.health-=speed*3; maybeEvictFromDamage(o); o.cracked=true; checkBuildingDestroyed(o);
+        }
+      }
+    });
   } else {
     // Human — pull all body parts
     const parts=['head','body','legL','legR','armL','armR','footL','footR'];
@@ -8426,7 +8659,7 @@ function updateLasso(){
 
 function explodeMissile(m){
   const R=120,F=18;
-  triggerShake(8);playSound('explosion');
+  triggerShake(8);triggerHitStop(4);playSound('explosion');
   // Bright flash
   window._explosionFlashes=window._explosionFlashes||[];
   window._explosionFlashes.push({x:m.x,y:m.y,r:10,maxR:80,life:12});
@@ -8468,7 +8701,7 @@ function nukeplanet(){
   window._nukeCooldown=600; // 10 seconds cooldown
   const p=currentPlanet;if(!p)return;
   try{nukeSfx.currentTime=0;nukeSfx.play().catch(()=>{playSound('explosion');});}catch(e){playSound('explosion');}
-  triggerShake(20);
+  triggerShake(20);triggerHitStop(10);
   showMessage(`NUCLEAR LAUNCH DETECTED. ${p.name} is being sterilized...`);
   // White flash
   window._nukeFlash=60;
@@ -8701,6 +8934,25 @@ function updateAlienWeapons(){
       if(w.effect==='stun'){ m.stunTimer=150; m.shootTimer=Math.max(m.shootTimer||0,90); }
       else if(w.effect==='panic'){ m.shootTimer=Math.max(m.shootTimer||0,60); m.stunTimer=Math.max(m.stunTimer||0,45); }
     }
+    // Wail (panic) shatters building windows — visible glass shards
+    if(w.effect==='panic' && !w._shattered && w.r>60){
+      for(let bi=0;bi<blocks.length;bi++){
+        const bl=blocks[bi];
+        if(bl.dead||!bl.fixed)continue;
+        const bcx=bl.x+bl.w/2, bcy=bl.y+bl.h/2;
+        const d=dist(w.x,w.y,bcx,bcy);
+        if(d>w.maxR)continue;
+        bl.windowsShattered=true;
+        // Spray glass shards outward
+        if(particles.length<250){
+          for(let gi=0;gi<4;gi++){
+            const a=Math.random()*Math.PI*2;
+            particles.push({x:bcx+(Math.random()-0.5)*bl.w*0.6,y:bcy+(Math.random()-0.5)*bl.h*0.6,vx:Math.cos(a)*(1.5+Math.random()*2),vy:-Math.random()*3-1,life:30,color:'rgba(200,230,255,0.85)',size:Math.random()*1.8+0.6});
+          }
+        }
+      }
+      w._shattered=true;
+    }
   }
   stunWaves=stunWaves.filter(w=>w.life>0);
 
@@ -8715,7 +8967,7 @@ function updateAlienWeapons(){
     for(let hi=0;hi<humans.length;hi++){
       const h=humans[hi];
       if(h.collected||h.hidden||h.ragdoll)continue;
-      if(Math.abs(b.x-h.bodyX)<16&&Math.abs(b.y-h.bodyY)<22){ plasmaExplode(b); h.ragdoll=true; h.panicLevel=10; applyForce(h,b.vx*0.6,-3); b.life=0; break; }
+      if(Math.abs(b.x-h.bodyX)<16&&Math.abs(b.y-h.bodyY)<22){ plasmaExplode(b); h.ragdoll=true; h.panicLevel=10; applyForce(h,b.vx*0.6,-3); h.plasmaMelt=(h.plasmaMelt||0)+90; b.life=0; break; }
     }
     if(b.life<=0)continue;
     // Military
@@ -9136,6 +9388,20 @@ function updatePlanetShared(){
   if(ship.beamActive){
     const bX=ship.x,bY=ship.y+15,tY=inCaveForBeam ? shipCaveHit.seg.y + shipCaveHit.seg.h : GROUND_LEVEL;
     for(let i=0;i<3;i++){const t=Math.random();particles.push({x:bX+(Math.random()-0.5)*30*t,y:bY+(tY-bY)*t+(Math.random()-0.5)*30*t,vx:(Math.random()-0.5)*2,vy:-Math.random()*2-1,life:20+Math.random()*10,color:`hsl(${120+Math.random()*40},100%,${60+Math.random()*30}%)`,size:Math.random()*3+1});}
+    // Beam suction debris — dust & leaves from the ground fly up into the beam
+    if(particles.length<220){
+      const suckR=120;
+      for(let i=0;i<2;i++){
+        const sx=bX+(Math.random()*2-1)*suckR;
+        const sy=tY-Math.random()*30;
+        const dx=bX-sx, dy=bY-sy;
+        const m=Math.max(1,Math.hypot(dx,dy));
+        const sp=2.5+Math.random()*2;
+        const isLeaf=Math.random()<0.35;
+        const palette=isLeaf?['#4a7a2a','#6a9a3a','#8aaa4a','#c08040']:['#9a8a6a','#776655','#a99','#b9a988'];
+        particles.push({x:sx,y:sy,vx:dx/m*sp+(Math.random()-0.5)*0.6,vy:dy/m*sp-0.4,life:24+Math.random()*16,color:palette[Math.floor(Math.random()*palette.length)],size:isLeaf?Math.random()*2+1.2:Math.random()*1.4+0.6});
+      }
+    }
     humans.forEach(h=>{if(h.collected||h.hidden)return;
       const hDist=Math.abs(h.bodyX-bX),bwH=15+(beamW/2-15)*Math.max(0,(h.bodyY-bY)/(tY-bY));
       if(hDist<bwH&&h.bodyY>bY){
@@ -9152,6 +9418,26 @@ function updatePlanetShared(){
         }
         if(dist(bX,bY,h.headX,h.headY)<45){
           h.collected=true;
+          // Witness escalation — count bystanders who saw the abduction and boost wanted level
+          let witnesses=0;
+          humans.forEach(w=>{
+            if(w===h||w.collected||w.hidden||w.ragdoll||w.isDino)return;
+            const wd=dist(w.bodyX,w.bodyY,h.bodyX,h.bodyY);
+            if(wd<260){
+              witnesses++;
+              // Phone-call icon above witnesses
+              if(Math.random()<0.6){
+                speechBubbles.push({x:w.headX,y:w.headY-22,text:"📞 911!",life:80,vy:-0.4});
+              }
+              w.panicLevel=Math.min((w.panicLevel||0)+2,10);
+              w.crying=true;
+            }
+          });
+          if(witnesses>=3){
+            // Enough witnesses → escalate wanted level to spawn military
+            if(typeof wantedLevel!=='undefined') wantedLevel=Math.min((wantedLevel||0)+1, 5);
+            if(witnesses>=5 && typeof provokeMilitary==='function') provokeMilitary(h.bodyX, h.bodyY);
+          }
           // Combo system
           if(combo.timer>0){combo.count++;combo.best=Math.max(combo.best,combo.count);}else{combo.count=1;}
           combo.timer=120; // 2 seconds to chain
@@ -9308,6 +9594,26 @@ function updatePlanetShared(){
   humans.forEach(h=>{if(h.collected||h.hidden)return;
     // Sim radius: skip AI for idle (non-ragdoll, non-beaming) humans far from player
     if(!h.ragdoll&&!h.beingBeamed&&Math.abs(h.bodyX-_simPX)>3000)return;
+    // Plasma melt: drip green goop, shrink bodyScale, burn timer-based collection
+    if(h.plasmaMelt&&h.plasmaMelt>0){
+      h.plasmaMelt--;
+      if(h.plasmaMelt%4===0 && particles.length<250){
+        particles.push({x:h.bodyX+(Math.random()-0.5)*14,y:h.bodyY-8+Math.random()*16,vx:(Math.random()-0.5)*0.6,vy:Math.random()*1.5+0.5,life:20,color:['#6f8','#3c4','#9fa'][Math.floor(Math.random()*3)],size:Math.random()*2+1.2});
+      }
+      if(h.plasmaMelt===1){
+        // Leaves behind a green acid puddle
+        if(typeof acidPuddles!=='undefined') acidPuddles.push({x:h.bodyX,y:GROUND_LEVEL,r:4,targetR:18,life:600,maxLife:600});
+        h.collected=true; return;
+      }
+    }
+    // Stunner twitch: while stunned, tiny electric sparks periodically
+    if(h.stunTimer&&h.stunTimer>0){
+      h.stunTimer--;
+      if(h.stunTimer%8===0 && particles.length<240){
+        const a=Math.random()*Math.PI*2;
+        particles.push({x:h.bodyX+(Math.random()-0.5)*10,y:h.bodyY-10+(Math.random()-0.5)*18,vx:Math.cos(a)*1.2,vy:Math.sin(a)*1.2,life:8,color:['#8ef','#cff','#fff'][Math.floor(Math.random()*3)],size:Math.random()*1.4+0.6});
+      }
+    }
     if(h.ragdoll){
       // Being eaten: continuous gore while the predator chews — spawn blood+chunks, then vanish.
       if(h.eatTimer && h.eatTimer>0){
@@ -9418,6 +9724,21 @@ function updatePlanetShared(){
         else if(shouldPanic){h.panicLevel=Math.min(h.panicLevel+0.05+terrorBonus*0.02,10);h.crying=true;h.walkDir=h.bodyX<ship.x?-1:1;h.walkSpeed=1.5+h.panicLevel*0.3+terrorBonus*0.15;
           const screamChance=0.98-planetTerror*0.01;
           if(h.panicLevel>1.5&&Math.random()>screamChance)speechBubbles.push({x:h.headX,y:h.headY-20,text:ta('planet.'+p.id+'.cryPhrases')[Math.floor(Math.random()*ta('planet.'+p.id+'.cryPhrases').length)],life:70,vy:-0.3});
+          // Panic propagation: every ~30 frames, a heavily-panicking human scares one nearby witness (wave effect).
+          if(h.panicLevel>4&&(h.walkTimer|0)%30===0){
+            for(let pi=0;pi<humans.length;pi++){
+              const h2=humans[pi];
+              if(h2===h||h2.collected||h2.ragdoll||h2.hidden||h2.onFire||h2.isDino)continue;
+              const dx=h2.bodyX-h.bodyX;if(Math.abs(dx)>180)continue;
+              const dy=h2.bodyY-h.bodyY;if(Math.abs(dy)>90)continue;
+              if((h2.panicLevel||0)>=h.panicLevel-1)continue;
+              h2.panicLevel=Math.min((h2.panicLevel||0)+1.5,9);
+              h2.crying=true;
+              h2.walkDir=h2.bodyX<ship.x?-1:1;
+              h2.walkSpeed=Math.max(h2.walkSpeed||0,1.4);
+              break;
+            }
+          }
         }else if(planetTerror>5&&dS<400&&Math.random()>0.995){
           // Very high global terror — nearby inhabitants hear about attacks and flee
           h.panicLevel=Math.min(h.panicLevel+0.3,5);h.crying=true;h.walkDir=Math.random()>0.5?1:-1;h.walkSpeed=1+terrorBonus*0.2;
@@ -10048,6 +10369,28 @@ function updateAlienOnFoot(){
     }
   }
 
+  // --- MIND CONTROL tick ---
+  if(mindControl){
+    const tgt=mindControl.target;
+    if(!tgt||tgt.collected||tgt.hidden||tgt.ragdoll){ mindControl=null; }
+    else {
+      mindControl.duration--;
+      if(mindControl.duration<=0){ tgt.mindControlled=false; mindControl=null; showMessage('Mind link faded'); }
+      else {
+        // Steer the puppet
+        tgt.walkSpeed=0;
+        if(keys['a']||keys['arrowleft']){ tgt.walkDir=-1; tgt.walkSpeed=2.5; }
+        else if(keys['d']||keys['arrowright']){ tgt.walkDir=1; tgt.walkSpeed=2.5; }
+        // Purple mind-control particles above the puppet
+        if(((frameNow|0)%3===0)&&particles.length<240){
+          particles.push({x:tgt.headX+(Math.random()-0.5)*14,y:tgt.headY-18+(Math.random()-0.5)*6,vx:(Math.random()-0.5)*0.4,vy:-0.6,life:22,color:['#c4f','#a0f','#e8f'][Math.floor(Math.random()*3)],size:Math.random()*1.8+0.8});
+        }
+        // Alien stays still while concentrating — lock position
+        alien.vx*=0.5;
+        return; // skip normal alien movement this frame
+      }
+    }
+  }
   // Movement
   const walkSpeed=2.5;
   if(keys['a']||keys['arrowleft']){alien.vx-=0.5;alien.facing=-1;}
@@ -12643,8 +12986,9 @@ function drawPlanet(){
       ctx.fillRect(dx,GROUND_LEVEL+3+ds*10,2,1);
     }
     // --- Flag (fixed world position, rigid — no wind on airless moon) ---
+    // Skipped 68M years ago: no humans had landed yet.
     const flagX=worldWidth*0.5;
-    if(flagX>camera.x-120 && flagX<camera.x+canvas.width+120){
+    if(!window.prehistoricEra && flagX>camera.x-120 && flagX<camera.x+canvas.width+120){
       // Footprint trail leading to flag
       ctx.fillStyle='rgba(40,40,50,0.35)';
       for(let fp=0;fp<8;fp++){
@@ -12766,6 +13110,66 @@ function drawPlanet(){
   // Tears
   tears.forEach(t=>{ctx.fillStyle=`rgba(100,150,255,${t.life/40})`;ctx.beginPath();ctx.arc(t.x,t.y,t.size,0,Math.PI*2);ctx.fill();});
   // Speech bubbles disabled
+  // UFO wrecks — twisted metal hulk with faint glow
+  ufoWrecks.forEach(w=>{
+    if(w.x<camera.x-60||w.x>camera.x+canvas.width+60)return;
+    if(w.scavenged)return;
+    w.sparkT+=1;
+    const t=frameNow*0.003;
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.45)';
+    ctx.beginPath();ctx.ellipse(w.x,w.y+2,26,4,0,0,Math.PI*2);ctx.fill();
+    // Broken saucer dish (half buried)
+    ctx.fillStyle='#2a2f3a';
+    ctx.beginPath();ctx.ellipse(w.x,w.y-4,24,7,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#404550';
+    ctx.beginPath();ctx.ellipse(w.x-2,w.y-6,20,4,0,0,Math.PI*2);ctx.fill();
+    // Cracked dome
+    ctx.fillStyle='#5a6070';
+    ctx.beginPath();ctx.arc(w.x+4,w.y-6,8,Math.PI,0,false);ctx.fill();
+    ctx.strokeStyle='#90a0b8';ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(w.x+2,w.y-10);ctx.lineTo(w.x+7,w.y-6);ctx.stroke();
+    // Glowing core — pulses
+    const glow=0.5+Math.sin(t+w.sparkT*0.01)*0.3;
+    ctx.fillStyle=`rgba(120,220,255,${glow})`;
+    ctx.beginPath();ctx.arc(w.x-6,w.y-6,2.5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgba(200,240,255,${glow*0.8})`;
+    ctx.beginPath();ctx.arc(w.x-6,w.y-6,1.3,0,Math.PI*2);ctx.fill();
+    // Occasional spark
+    if(Math.random()>0.97 && particles.length<200){
+      particles.push({x:w.x+(Math.random()-0.5)*20,y:w.y-6,vx:(Math.random()-0.5)*1.4,vy:-Math.random()*1.2,life:18,color:'#8cf',size:1.2});
+    }
+    // Interact prompt
+    if(playerMode==='onfoot' && Math.abs(alien.x-w.x)<50 && Math.abs(alien.y-w.y)<60){
+      ctx.fillStyle='rgba(150,220,255,0.9)';ctx.font='10px monospace';ctx.textAlign='center';
+      ctx.fillText('[E] SCAVENGE',w.x,w.y-24);
+    }
+  });
+  // Hidden bunkers — only show a hatch if revealed (player close enough)
+  hiddenBunkers.forEach(bk=>{
+    if(bk.x<camera.x-80||bk.x>camera.x+canvas.width+80)return;
+    // Reveal when player nearby
+    if(playerMode==='onfoot' && Math.abs(alien.x-(bk.x+bk.w/2))<80) bk.revealed=true;
+    if(!bk.revealed)return;
+    // Hatch: metal rectangle embedded in ground
+    const hx=bk.x, hy=GROUND_LEVEL-2, hw=bk.w, hh=bk.h;
+    ctx.fillStyle=bk.looted?'#222':'#3a3a3a';
+    ctx.fillRect(hx,hy-hh,hw,hh);
+    ctx.strokeStyle='#666';ctx.lineWidth=1;
+    ctx.strokeRect(hx,hy-hh,hw,hh);
+    // Bolts
+    ctx.fillStyle='#888';
+    for(let i=0;i<4;i++){ctx.beginPath();ctx.arc(hx+6+i*22,hy-hh+6,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(hx+6+i*22,hy-6,1.5,0,Math.PI*2);ctx.fill();}
+    // Warning symbol
+    ctx.fillStyle=bk.looted?'rgba(200,100,100,0.5)':'rgba(255,200,60,0.85)';
+    ctx.font='bold 12px monospace';ctx.textAlign='center';
+    ctx.fillText('☣',hx+hw/2,hy-hh/2+4);
+    // Interact prompt
+    if(playerMode==='onfoot' && !bk.looted && Math.abs(alien.x-(hx+hw/2))<40){
+      ctx.fillStyle='rgba(255,220,100,0.9)';ctx.font='10px monospace';
+      ctx.fillText('[E] BREACH BUNKER',hx+hw/2,hy-hh-10);
+    }
+  });
   // Ash piles (fade out mound)
   ashPiles.forEach(a=>{
     if(a.x<camera.x-20||a.x>camera.x+canvas.width+20)return;
@@ -13101,6 +13505,50 @@ function drawPlanet(){
     // Body (all races/skins + bodyType variations)
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
 
+    // --- Mind-control tether: crackling purple beam from alien's head to the puppet's head ---
+    if(mindControl && mindControl.target){
+      const tgt=mindControl.target;
+      const sx=ax, sy=ay-28;
+      const txp=tgt.headX-camera.x, typ=tgt.headY-camera.y;
+      const now=frameNow*0.012;
+      // Outer soft glow
+      ctx.save();
+      ctx.strokeStyle='rgba(180,120,255,0.25)';ctx.lineWidth=7;
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(txp,typ);ctx.stroke();
+      // Jittery electric core — two overlapping zigzag polylines
+      const dx=txp-sx, dy=typ-sy;
+      const segs=Math.max(6, Math.min(20, Math.hypot(dx,dy)/18|0));
+      for(let pass=0;pass<2;pass++){
+        ctx.strokeStyle=pass===0?'rgba(220,180,255,0.9)':'rgba(255,255,255,0.7)';
+        ctx.lineWidth=pass===0?1.6:0.8;
+        ctx.beginPath();ctx.moveTo(sx,sy);
+        for(let i=1;i<segs;i++){
+          const k=i/segs;
+          const cxp=sx+dx*k, cyp=sy+dy*k;
+          // Perpendicular jitter
+          const px=-dy, py=dx; const pl=Math.max(1,Math.hypot(px,py));
+          const jit=(Math.sin(now*1.3+i*0.9+pass*1.7)+Math.sin(now*2.1+i*0.6+pass*3))*3;
+          ctx.lineTo(cxp+(px/pl)*jit, cyp+(py/pl)*jit);
+        }
+        ctx.lineTo(txp,typ);
+        ctx.stroke();
+      }
+      // Pulsing endpoint glows
+      const pulse=0.5+Math.sin(now*3)*0.3;
+      const eg=ctx.createRadialGradient(txp,typ,0,txp,typ,10);
+      eg.addColorStop(0,`rgba(220,180,255,${pulse})`);
+      eg.addColorStop(1,'transparent');
+      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(txp,typ,10,0,Math.PI*2);ctx.fill();
+      const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,8);
+      sg.addColorStop(0,`rgba(220,180,255,${pulse*0.8})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;ctx.beginPath();ctx.arc(sx,sy,8,0,Math.PI*2);ctx.fill();
+      // Crown ring orbiting the puppet's head
+      ctx.strokeStyle=`rgba(220,180,255,${0.5+Math.sin(now*4)*0.25})`;ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.ellipse(txp,typ-2,9,3.5,Math.sin(now*2)*0.4,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+
     // Dive suit overlay (drawn on top of body when the suit is on)
     if(alien.diveSuit && alien.underwater){
       drawDiveSuit(ax, ay, f);
@@ -13339,6 +13787,45 @@ function drawPlanet(){
     ctx.fillStyle=shipCloak.active?`rgba(0,200,255,${0.5+Math.sin(frameNow*0.01)*0.3})`:'#08a';
     ctx.fillRect(cx,cy,ep,6);
     ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(shipCloak.active?'CLOAKED':'CLOAK [V]',canvas.width/2,cy-3);
+  }
+
+  // --- ALIEN ACTION CHIPS (on foot) — above the weapon row ---
+  if(playerMode==='onfoot' && !alien.drivingVehicle && gameMode==='planet' && !mothershipMode && !pyramidInteriorMode){
+    // Context-aware: dim chips when their action isn't currently relevant.
+    const nearVeh = (typeof vehicles!=='undefined') && vehicles.some(v=>!v.destroyed && Math.abs(v.x-alien.x)<90 && Math.abs((v.y||GROUND_LEVEL)-alien.y)<80);
+    const nearWreck = (typeof ufoWrecks!=='undefined') && ufoWrecks.some(w=>!w.looted && Math.abs(w.x-alien.x)<70 && Math.abs((w.y||GROUND_LEVEL)-alien.y)<80);
+    const nearBunker = (typeof hiddenBunkers!=='undefined') && hiddenBunkers.some(b=>!b.looted && b.revealed && Math.abs((b.x+(b.w||40)/2)-alien.x)<70);
+    const mc = !!(typeof mindControl!=='undefined' && mindControl);
+    const aChips = [
+      {label:'SHIP',  key:'ENT', active: false,                    col:[120,200,255]},
+      {label:'HIJK',  key:'B',   active: nearVeh,                   col:[255,200,80]},
+      {label:'INTR',  key:'E',   active: nearWreck||nearBunker,     col:[140,255,160]},
+      {label:'MIND',  key:'T',   active: mc,                        col:[200,120,255]},
+      {label:'LGHT',  key:'L',   active: !!flashlightOn,            col:[255,240,140]},
+      {label:'MUTE',  key:'M',   active: !!window._muted,           col:[200,200,200]},
+    ];
+    const cw=48, cg=4;
+    const ctotal = aChips.length*cw + (aChips.length-1)*cg;
+    const chx=(canvas.width-ctotal)/2, chy=canvas.height-80;
+    ctx.fillStyle='rgba(0,0,0,0.45)';
+    ctx.fillRect(chx-6, chy-6, ctotal+12, 34);
+    for(let i=0;i<aChips.length;i++){
+      const c = aChips[i];
+      const sx = chx + i*(cw+cg);
+      const [r,g,b] = c.col;
+      const pulse = c.active ? (0.35 + Math.sin(frameNow*0.012)*0.12) : 0.10;
+      ctx.fillStyle = `rgba(${r},${g},${b},${pulse})`;
+      ctx.fillRect(sx, chy, cw, 22);
+      ctx.strokeStyle = c.active ? `rgba(${r},${g},${b},0.95)` : `rgba(${r},${g},${b},0.45)`;
+      ctx.lineWidth = c.active ? 2 : 1;
+      ctx.strokeRect(sx+0.5, chy+0.5, cw-1, 21);
+      ctx.fillStyle = c.active ? '#fff' : `rgb(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)})`;
+      ctx.font='bold 9px monospace'; ctx.textAlign='center';
+      ctx.fillText(c.label, sx+cw/2, chy+10);
+      ctx.font='8px monospace';
+      ctx.fillStyle = c.active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.50)';
+      ctx.fillText('['+c.key+']', sx+cw/2, chy+19);
+    }
   }
 
   // --- ALIEN WEAPON HUD (on foot) — hidden while driving; vehicle controls shown instead ---
@@ -14169,6 +14656,7 @@ function drawShip(){
     const l=ship.lasso, tgt=l.target;
     let tx,ty;
     if(l.targetType==='block'){tx=tgt.x+tgt.w/2; ty=tgt.y+tgt.h/2;}
+    else if(l.targetType==='vehicle'){tx=tgt.x+(tgt.w||40)/2; ty=tgt.y-(tgt.h||20)/2;}
     else {tx=tgt.bodyX; ty=tgt.bodyY;}
     const sx=ship.x, sy=ship.y+18;
     // Rope with slight sag
@@ -16530,6 +17018,7 @@ const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
 const missileSfx=mkAudio('missile-sfx.wav',0.1,false);
+const lassoSfx=mkAudio('lasso-whip.wav',0.12,false);
 const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
 // Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
 const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
@@ -16640,7 +17129,10 @@ function gameLoop(){
     requestAnimationFrame(gameLoop);
     return;
   }
-  let _t0=performance.now();update();window._tUpd=(performance.now()-_t0)|0;_t0=performance.now();draw();window._tDrw=(performance.now()-_t0)|0;updateAmbience();
+  let _t0=performance.now();
+  if(hitStopFrames>0){ hitStopFrames--; }
+  else { update(); }
+  window._tUpd=(performance.now()-_t0)|0;_t0=performance.now();draw();window._tDrw=(performance.now()-_t0)|0;updateAmbience();
   // FPS tracking
   _fpsFrames++;
   const now=performance.now();
