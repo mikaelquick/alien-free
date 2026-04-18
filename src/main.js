@@ -14685,8 +14685,8 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=eg;ctx.fillRect(ax-25*s,ay-35*s,50*s,40*s);
   }
 
-  // Back arm (skip for limbless body types)
-  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug'){
+  // Back arm (skip for limbless body types; southpark draws its own mittens)
+  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug' && !(bt==='humanoid' && skin.outfit==='southpark')){
     ctx.strokeStyle=_sb2(0x8a);ctx.lineWidth=1.8*s;ctx.lineCap='round';ctx.lineJoin='round';
     ctx.beginPath();ctx.moveTo(ax-f*4*s,ay-16*s);ctx.quadraticCurveTo(ax-f*9*s,ay-10*s,ax-f*11*s,ay-6*s);ctx.stroke();
     ctx.lineWidth=0.8*s;
@@ -14758,6 +14758,9 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.beginPath();ctx.moveTo(ax-3*s,ay-12*s);ctx.quadraticCurveTo(ax-9*s,ay-8*s,ax-8*s,ay-2*s);ctx.stroke();
     ctx.beginPath();ctx.moveTo(ax+3*s,ay-12*s);ctx.quadraticCurveTo(ax+9*s,ay-8*s,ax+8*s,ay-2*s);ctx.stroke();
   } else if(bt==='humanoid'){
+    if(skin.outfit==='southpark'){
+      // South Park: stubby legs drawn with the torso; skip default legs here.
+    } else {
     // Longer, human-proportioned legs with pants hint
     ctx.strokeStyle=_sa2(0x77);ctx.lineWidth=2.5*s;ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(ax-3*s,ay-7*s);ctx.lineTo(ax-3*s+lo*0.3,ay-3*s);ctx.lineTo(ax-3*s+lo*0.7,ay);ctx.stroke();
@@ -14766,6 +14769,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle='#2a2030';
     ctx.beginPath();ctx.ellipse(ax-3*s+lo*0.7,ay,3.5*s,1.6*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(ax+3*s-lo*0.7,ay,3.5*s,1.6*s,0,0,Math.PI*2);ctx.fill();
+    }
   } else if(bt==='spider'){
     // 8 legs arching outward (4 per side) with staggered sway — spidery crawl
     ctx.strokeStyle=_sb2(0x88);ctx.lineWidth=1.3*s;ctx.lineCap='round';
@@ -14999,6 +15003,37 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Belt line
       ctx.fillStyle=ob;ctx.fillRect(ax-6*s,ay-8.5*s,12*s,1.2*s);
       ctx.fillStyle='#f8d060';ctx.fillRect(ax-1*s,ay-8.5*s,2*s,1.2*s);
+    } else if(outfit==='southpark'){
+      // Bulky winter coat with puffy silhouette. Body sits lower because head is huge.
+      const coatTop=ay-15*s, coatBot=ay-4*s;
+      ctx.fillStyle=oa;
+      ctx.beginPath();
+      ctx.moveTo(ax-8*s, coatTop);
+      ctx.quadraticCurveTo(ax-10*s, coatTop+4*s, ax-9*s, coatBot);
+      ctx.lineTo(ax+9*s, coatBot);
+      ctx.quadraticCurveTo(ax+10*s, coatTop+4*s, ax+8*s, coatTop);
+      ctx.closePath(); ctx.fill();
+      // Seam down middle
+      ctx.strokeStyle='rgba(0,0,0,0.28)'; ctx.lineWidth=0.6*s;
+      ctx.beginPath(); ctx.moveTo(ax, coatTop+1*s); ctx.lineTo(ax, coatBot); ctx.stroke();
+      // Scarf hint (darker band at collar)
+      ctx.fillStyle='rgba(0,0,0,0.22)';
+      ctx.fillRect(ax-8*s, coatTop, 16*s, 1.5*s);
+      // Mitten hands dangling by sides
+      const mittenCol = ob || oa;
+      const handSway = Math.sin(walkPhase||0)*1.2*s;
+      ctx.fillStyle = mittenCol;
+      ctx.beginPath(); ctx.arc(ax-9*s+handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax+9*s-handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
+      // Short pants + boots
+      const pantsCol = skin.pants || '#3a2a1a';
+      ctx.fillStyle = pantsCol;
+      ctx.fillRect(ax-6*s, coatBot, 5*s, 4*s);
+      ctx.fillRect(ax+1*s, coatBot, 5*s, 4*s);
+      // Boots
+      ctx.fillStyle='#2a1a10';
+      ctx.beginPath(); ctx.ellipse(ax-3.5*s+ (Math.sin(walkPhase||0)*1.5*s), ay+0.5*s, 3.2*s, 1.6*s, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(ax+3.5*s- (Math.sin(walkPhase||0)*1.5*s), ay+0.5*s, 3.2*s, 1.6*s, 0, 0, Math.PI*2); ctx.fill();
     } else if(outfit==='ghost'){
       // Flowing sheet covers entire body + hat drawn in head section
       const sheetW=10*s, sheetTop=ay-26*s, sheetBot=ay+1*s;
@@ -15189,7 +15224,131 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
 
   // Head
   const hx2=ax, hy2=ay-33*s+_headShift;
-  if(_isHuman){
+  if(_isHuman && skin.outfit==='southpark'){
+    // Oversized round cartoon head, the defining South Park silhouette
+    const HR = 12*s;
+    const spHy = hy2 + 6*s; // drop head lower so it sits on the tiny torso
+    // Head (big flat-shaded oval)
+    ctx.fillStyle = skin.head;
+    ctx.beginPath(); ctx.ellipse(hx2, spHy, HR, HR, 0, 0, Math.PI*2); ctx.fill();
+    // Subtle shading on lower half (no gradient — keep it flat cartoon)
+    ctx.fillStyle = 'rgba(0,0,0,0.07)';
+    ctx.beginPath(); ctx.ellipse(hx2, spHy+4*s, HR-0.5*s, HR*0.55, 0, 0, Math.PI*2); ctx.fill();
+    // Black outline (characteristic bold line)
+    ctx.strokeStyle='#1a1208'; ctx.lineWidth=1.2*s;
+    ctx.beginPath(); ctx.ellipse(hx2, spHy, HR, HR, 0, 0, Math.PI*2); ctx.stroke();
+    // Two round white eyes side by side
+    const eyeY = spHy - 1*s, eyeR = 4.2*s;
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(hx2 - 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx2 + 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#1a1208'; ctx.lineWidth=1*s;
+    ctx.beginPath(); ctx.arc(hx2 - 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx2 + 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.stroke();
+    // Tiny black pupils
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(hx2 - 4*s + f*0.3*s, eyeY, 0.9*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx2 + 4.4*s + f*0.3*s, eyeY, 0.9*s, 0, Math.PI*2); ctx.fill();
+    // Small mouth
+    ctx.strokeStyle='#1a1208'; ctx.lineWidth=0.9*s;
+    ctx.beginPath();
+    ctx.moveTo(hx2-1.6*s, spHy+5.5*s);
+    ctx.quadraticCurveTo(hx2, spHy+(6.2+breathe)*s, hx2+1.6*s, spHy+5.5*s);
+    ctx.stroke();
+    // Hat / hair per character
+    const hat = skin.hat || 'none';
+    if(hat==='beanie_red'){
+      // Stan — blue beanie with red pompom
+      ctx.fillStyle='#1a3c9a';
+      ctx.beginPath();
+      ctx.moveTo(hx2-HR, spHy-5*s);
+      ctx.quadraticCurveTo(hx2-HR-0.5*s, spHy-13*s, hx2, spHy-14*s);
+      ctx.quadraticCurveTo(hx2+HR+0.5*s, spHy-13*s, hx2+HR, spHy-5*s);
+      ctx.quadraticCurveTo(hx2, spHy-8*s, hx2-HR, spHy-5*s);
+      ctx.closePath(); ctx.fill();
+      // Brim
+      ctx.fillStyle='#12286a';
+      ctx.fillRect(hx2-HR, spHy-6*s, HR*2, 2*s);
+      // Red pompom
+      ctx.fillStyle='#d42020';
+      ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
+    } else if(hat==='ushanka'){
+      // Kyle — green ushanka with earflaps
+      ctx.fillStyle='#2a8a2a';
+      ctx.beginPath();
+      ctx.moveTo(hx2-HR-1*s, spHy-4*s);
+      ctx.quadraticCurveTo(hx2-HR-2*s, spHy-12*s, hx2, spHy-14*s);
+      ctx.quadraticCurveTo(hx2+HR+2*s, spHy-12*s, hx2+HR+1*s, spHy-4*s);
+      ctx.quadraticCurveTo(hx2, spHy-7*s, hx2-HR-1*s, spHy-4*s);
+      ctx.closePath(); ctx.fill();
+      // Earflaps (triangular down the sides)
+      ctx.beginPath(); ctx.moveTo(hx2-HR-1*s, spHy-4*s); ctx.lineTo(hx2-HR+1*s, spHy+4*s); ctx.lineTo(hx2-HR+3*s, spHy-3*s); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx2+HR+1*s, spHy-4*s); ctx.lineTo(hx2+HR-1*s, spHy+4*s); ctx.lineTo(hx2+HR-3*s, spHy-3*s); ctx.closePath(); ctx.fill();
+      // Hat band
+      ctx.fillStyle='#1a5a1a';
+      ctx.fillRect(hx2-HR-1*s, spHy-5*s, (HR+1)*2*s/s, 1.6*s);
+      // Red hair tuft peeking out
+      ctx.fillStyle=skin.hair;
+      ctx.beginPath(); ctx.arc(hx2-3*s, spHy-6*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx2+3*s, spHy-6*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+    } else if(hat==='beanie_yel'){
+      // Cartman — light blue beanie with yellow pompom
+      ctx.fillStyle='#74c8e8';
+      ctx.beginPath();
+      ctx.moveTo(hx2-HR, spHy-5*s);
+      ctx.quadraticCurveTo(hx2-HR-0.5*s, spHy-13*s, hx2, spHy-14*s);
+      ctx.quadraticCurveTo(hx2+HR+0.5*s, spHy-13*s, hx2+HR, spHy-5*s);
+      ctx.quadraticCurveTo(hx2, spHy-8*s, hx2-HR, spHy-5*s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#3898c0';
+      ctx.fillRect(hx2-HR, spHy-6*s, HR*2, 2*s);
+      ctx.fillStyle='#f0d000';
+      ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
+    } else if(hat==='parka'){
+      // Kenny — orange parka hood covers most of the face
+      ctx.fillStyle=oa || '#d86a14';
+      // Full hood wrap
+      ctx.beginPath();
+      ctx.arc(hx2, spHy-1*s, HR+2*s, Math.PI*0.95, Math.PI*2.05, false);
+      ctx.lineTo(hx2+HR+2*s, spHy+7*s);
+      ctx.quadraticCurveTo(hx2, spHy+9*s, hx2-HR-2*s, spHy+7*s);
+      ctx.closePath(); ctx.fill();
+      // Fur trim around face opening
+      ctx.fillStyle='#c08050';
+      for(let fi=0; fi<8; fi++){
+        const fa = -Math.PI*0.8 + fi*(Math.PI*1.6/7);
+        const fx = hx2 + Math.cos(fa)*(HR-0.5*s), fy = spHy + Math.sin(fa)*(HR-0.5*s);
+        ctx.beginPath(); ctx.arc(fx, fy, 1.4*s, 0, Math.PI*2); ctx.fill();
+      }
+      // Dark face slit — only eyes visible
+      ctx.fillStyle='#080808';
+      ctx.beginPath(); ctx.ellipse(hx2, spHy, HR-3*s, HR-3*s, 0, 0, Math.PI*2); ctx.fill();
+      // Re-draw the eyes white-on-black for contrast
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(hx2 - 3*s, eyeY, 1.8*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx2 + 3*s, eyeY, 1.8*s, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#000';
+      ctx.beginPath(); ctx.arc(hx2 - 2.7*s, eyeY, 0.8*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx2 + 3.3*s, eyeY, 0.8*s, 0, Math.PI*2); ctx.fill();
+    } else if(hat==='chef'){
+      // Chef — tall white chef hat
+      ctx.fillStyle='#f0f0f0';
+      ctx.fillRect(hx2-HR+1*s, spHy-9*s, (HR-1)*2*s/s, 3*s);
+      ctx.beginPath(); ctx.ellipse(hx2, spHy-11*s, HR-1*s, 4*s, 0, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#b0b0b0'; ctx.lineWidth=0.5*s;
+      ctx.beginPath(); ctx.ellipse(hx2, spHy-11*s, HR-1*s, 4*s, 0, 0, Math.PI*2); ctx.stroke();
+    } else {
+      // Butters — plain combed-over blonde hair
+      ctx.fillStyle=skin.hair;
+      ctx.beginPath();
+      ctx.moveTo(hx2-HR+1*s, spHy-7*s);
+      ctx.quadraticCurveTo(hx2-HR-1*s, spHy-11*s, hx2-2*s, spHy-12*s);
+      ctx.quadraticCurveTo(hx2+4*s, spHy-13*s, hx2+HR-0.5*s, spHy-9*s);
+      ctx.quadraticCurveTo(hx2+HR*0.3, spHy-8*s, hx2-1*s, spHy-9*s);
+      ctx.quadraticCurveTo(hx2-HR*0.7, spHy-8*s, hx2-HR+1*s, spHy-7*s);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if(_isHuman){
     // Small human head (round, shorter)
     const hgH=ctx.createRadialGradient(hx2-2*s,hy2-2*s,1*s,hx2,hy2,8*s);
     hgH.addColorStop(0,_sh2(0xe0));hgH.addColorStop(0.6,_sh2(0xbc));hgH.addColorStop(1,_sh2(0x90));
@@ -15199,8 +15358,8 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_sh2(0xa0);
     ctx.beginPath();ctx.ellipse(hx2-6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(hx2+6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
-    // Hair (top + sides) — suppressed for ghost (under sheet) and astronaut (under helmet)
-    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut'){
+    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path)
+    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark'){
       ctx.fillStyle=skin.hair;
       ctx.beginPath();
       ctx.moveTo(hx2-6*s,hy2-2*s);
@@ -15362,7 +15521,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Eyes + face
-  if(_isHuman && skin.outfit!=='ghost'){
+  if(_isHuman && skin.outfit!=='ghost' && skin.outfit!=='southpark'){
     // Small human eyes (white with iris)
     ctx.fillStyle='#fff';
     ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
@@ -15501,12 +15660,17 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
 
   // Front arm + gun (skip for limbless types)
   if(bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='larva' && bt!=='spider' && bt!=='slug'){
-    ctx.strokeStyle=_sb2(0xaa);ctx.lineWidth=1.8*s;
-    ctx.beginPath();ctx.moveTo(ax+f*4*s,ay-17*s);ctx.quadraticCurveTo(ax+f*9*s,ay-14*s,ax+f*13*s,ay-12*s);ctx.stroke();
-    ctx.lineWidth=0.8*s;ctx.strokeStyle=_sb2(0x99);
-    for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax+f*13*s,ay-12*s);ctx.lineTo(ax+f*14*s,ay+(-12.5+i*1.5)*s);ctx.stroke();}
-    // Gun
-    ctx.save();ctx.translate(ax+f*13*s,ay-12*s);ctx.scale(f,1);
+    const spOutfit = bt==='humanoid' && skin.outfit==='southpark';
+    if(!spOutfit){
+      ctx.strokeStyle=_sb2(0xaa);ctx.lineWidth=1.8*s;
+      ctx.beginPath();ctx.moveTo(ax+f*4*s,ay-17*s);ctx.quadraticCurveTo(ax+f*9*s,ay-14*s,ax+f*13*s,ay-12*s);ctx.stroke();
+      ctx.lineWidth=0.8*s;ctx.strokeStyle=_sb2(0x99);
+      for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax+f*13*s,ay-12*s);ctx.lineTo(ax+f*14*s,ay+(-12.5+i*1.5)*s);ctx.stroke();}
+    }
+    // Gun — position above the mitten for southpark, else from the default arm hand
+    const gunX = spOutfit ? ax + f*10*s : ax + f*13*s;
+    const gunY = spOutfit ? ay - 6*s   : ay - 12*s;
+    ctx.save();ctx.translate(gunX,gunY);ctx.scale(f,1);
     ctx.fillStyle='#3a3a3a';ctx.beginPath();
     ctx.moveTo(-1*s,-2.5*s);ctx.lineTo(12*s,-1.5*s);ctx.lineTo(13*s,0);ctx.lineTo(12*s,1.5*s);ctx.lineTo(-1*s,2.5*s);ctx.lineTo(-2*s,0);ctx.closePath();ctx.fill();
     ctx.fillStyle='#555';ctx.fillRect(3*s,-1*s,3*s,2*s);
