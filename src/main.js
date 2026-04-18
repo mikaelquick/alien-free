@@ -5480,6 +5480,37 @@ function updateMothership(){
     if(keys['d']||keys['arrowright']){h.vx+=0.5;h.facing=1;}
     // Jump (SPACE) like on-foot
     if(keys[' ']&&h.onGround){h.vy=-7;h.onGround=false;}
+    // --- GRAPPLING HOOK (G) — hooks into the corridor ceiling ---
+    // Ceiling height in alien-local coords: floor is y=0, ceiling ~ -(canvas.height-140)
+    const hubCeilingY = -(canvas.height - 140);
+    const gNowH = !!keys['g'];
+    if(gNowH && !h._gPrev){
+      if(h.grapple){ h.grapple=null; }
+      else {
+        const dir=h.facing, sp=14;
+        h.grapple={phase:'flying', x:h.x+dir*10, y:h.y-14, vx:dir*sp*0.7, vy:-sp*0.7, anchorX:0, anchorY:0, life:60};
+      }
+    }
+    h._gPrev=gNowH;
+    if(h.grapple){
+      const g=h.grapple;
+      if(g.phase==='flying'){
+        g.x+=g.vx; g.y+=g.vy; g.vy+=0.22; g.life--;
+        // Hit ceiling
+        if(g.y<=hubCeilingY+10){ g.phase='attached'; g.anchorX=g.x; g.anchorY=hubCeilingY+10; g.life=240; }
+        else if(g.life<=0 || g.y>4){ h.grapple=null; }
+      } else {
+        g.life--;
+        const dx=g.anchorX-h.x, dy=g.anchorY-h.y+10;
+        const d=Math.hypot(dx,dy)||1;
+        const pull=Math.min(0.85, 0.4+d*0.0012);
+        h.vx += (dx/d)*pull;
+        h.vy += (dy/d)*pull - 0.36*0.6; // counter gravity while pulling
+        h.onGround=false;
+        if(d<20) h.grapple=null;
+        if(g.life<=0) h.grapple=null;
+      }
+    }
     // Physics
     h.vy+=0.36; // gravity
     h.vx*=0.85;
@@ -5487,6 +5518,8 @@ function updateMothership(){
     h.y+=h.vy;
     // Floor
     if(h.y>=0){h.y=0;h.vy=0;h.onGround=true;}else{h.onGround=false;}
+    // Ceiling bump (prevent flying through the top)
+    if(h.y<hubCeilingY+6){h.y=hubCeilingY+6; if(h.vy<0)h.vy=0;}
     // Walls
     if(h.x<40){h.x=40;h.vx=0;}
     if(h.x>h.width-40){h.x=h.width-40;h.vx=0;}
@@ -5814,11 +5847,42 @@ function updateMothership(){
     if(keys['a']||keys['arrowleft']){za.vx-=0.4;za.facing=-1;}
     if(keys['d']||keys['arrowright']){za.vx+=0.4;za.facing=1;}
     if((keys[' ']||keys['w']||keys['arrowup'])&&za.onGround){za.vy=-6;za.onGround=false;}
+    // --- GRAPPLING HOOK (G) — hooks into the cell ceiling bars ---
+    const zooFloorY=canvas.height-50;
+    const zooCeilY=70; // matches drawMothership ceiling
+    const gNowZ = !!keys['g'];
+    if(gNowZ && !za._gPrev){
+      if(za.grapple){ za.grapple=null; }
+      else {
+        const dir=za.facing, sp=13;
+        za.grapple={phase:'flying', x:za.x+dir*10, y:za.y-24, vx:dir*sp*0.7, vy:-sp*0.7, anchorX:0, anchorY:0, life:60};
+      }
+    }
+    za._gPrev=gNowZ;
+    if(za.grapple){
+      const g=za.grapple;
+      if(g.phase==='flying'){
+        g.x+=g.vx; g.y+=g.vy; g.vy+=0.18; g.life--;
+        if(g.y<=zooCeilY+16){ g.phase='attached'; g.anchorX=g.x; g.anchorY=zooCeilY+16; g.life=220; }
+        else if(g.life<=0 || g.y>=zooFloorY){ za.grapple=null; }
+      } else {
+        g.life--;
+        const dx=g.anchorX-za.x, dy=g.anchorY-(za.y-20);
+        const d=Math.hypot(dx,dy)||1;
+        const pull=Math.min(0.8, 0.35+d*0.001);
+        za.vx += (dx/d)*pull;
+        za.vy += (dy/d)*pull - 0.25*0.7; // counter gravity
+        za.onGround=false;
+        if(d<22) za.grapple=null;
+        if(g.life<=0) za.grapple=null;
+      }
+    }
     za.vy+=0.25; za.vx*=0.88;
     za.x+=za.vx; za.y+=za.vy;
     // Zoo floor
-    const zooFloorY=canvas.height-50;
     if(za.y>=zooFloorY){za.y=zooFloorY;za.vy=0;za.onGround=true;}else{za.onGround=false;}
+    // Zoo ceiling bump
+    if(za.y<zooCeilY+30){za.y=zooCeilY+30; if(za.vy<0)za.vy=0;}
     // Zoo walls
     const zooW=mi.zooWidth||Math.max(1400, (mi.zooCreatures.length+mi.milkCows.length)*140+600);
     if(za.x<30)za.x=30;
@@ -6149,6 +6213,58 @@ function drawMothership(){
       const sx=lx-camX;
       ctx.fillStyle=`rgba(150,220,255,${0.25+Math.sin(t*2+lx*0.01)*0.08})`;
       ctx.fillRect(sx+10,ceilY-10,100,4);
+    }
+    // === Hanging structural pipes (grapple targets) ===
+    for(let px=Math.floor(camX/180)*180; px<camX+cw+180; px+=180){
+      const sx=px-camX+60;
+      // Pipe bracket at ceiling
+      ctx.fillStyle='#2a3848';
+      ctx.fillRect(sx-4, ceilY, 8, 6);
+      ctx.fillStyle='#4a5a6a';
+      ctx.fillRect(sx-2, ceilY+6, 4, 14);
+      // Horizontal pipe / conduit
+      ctx.fillStyle='#3a4858';
+      ctx.fillRect(sx-22, ceilY+18, 44, 5);
+      ctx.fillStyle='rgba(255,255,255,0.18)';
+      ctx.fillRect(sx-22, ceilY+18, 44, 1);
+      // Running energy pulse on pipe
+      const ph2=(t*0.7 + px*0.005)%1;
+      ctx.fillStyle=`rgba(120,230,255,${0.8*(1-Math.abs(ph2-0.5)*2)})`;
+      ctx.fillRect(sx-22 + ph2*44, ceilY+19, 4, 3);
+    }
+    // === Warning lights between doors ===
+    for(let wx=Math.floor(camX/200)*200; wx<camX+cw+200; wx+=200){
+      const sx=wx-camX;
+      const blink=0.35+Math.sin(t*2.4+wx*0.02)*0.55;
+      const warnCol = Math.floor(wx/200)%2===0 ? [255,120,60] : [120,220,255];
+      ctx.fillStyle=`rgba(${warnCol[0]},${warnCol[1]},${warnCol[2]},${Math.max(0,blink)*0.9})`;
+      ctx.beginPath(); ctx.arc(sx, ceilY+42, 3.5, 0, Math.PI*2); ctx.fill();
+      // Halo
+      const wg=ctx.createRadialGradient(sx,ceilY+42,0,sx,ceilY+42,16);
+      wg.addColorStop(0,`rgba(${warnCol[0]},${warnCol[1]},${warnCol[2]},${Math.max(0,blink)*0.35})`);
+      wg.addColorStop(1,'transparent');
+      ctx.fillStyle=wg; ctx.beginPath(); ctx.arc(sx,ceilY+42,16,0,Math.PI*2); ctx.fill();
+    }
+    // === Floor steam vents (occasional puff) ===
+    for(let vx=Math.floor(camX/240)*240; vx<camX+cw+240; vx+=240){
+      const sx=vx-camX+120;
+      // Vent grate
+      ctx.fillStyle='#182028';
+      ctx.fillRect(sx-10, floorY-2, 20, 4);
+      ctx.strokeStyle='rgba(140,180,220,0.3)'; ctx.lineWidth=0.5;
+      for(let si=0;si<4;si++){ ctx.beginPath(); ctx.moveTo(sx-8+si*5, floorY-1); ctx.lineTo(sx-8+si*5, floorY+2); ctx.stroke(); }
+      // Puffing steam cloud (driven by time, staggered)
+      const cyc=(t*0.6 + vx*0.01)%3;
+      if(cyc<1.2){
+        const k=cyc/1.2;
+        const sa=0.35*(1-k);
+        const sr=6+k*18;
+        const sy=floorY-2 - k*22;
+        const sgrad=ctx.createRadialGradient(sx,sy,0,sx,sy,sr);
+        sgrad.addColorStop(0,`rgba(200,220,240,${sa})`);
+        sgrad.addColorStop(1,'transparent');
+        ctx.fillStyle=sgrad; ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
+      }
     }
     // Back wall base
     ctx.fillStyle='#081224';ctx.fillRect(0,ceilY,cw,floorY-ceilY);
@@ -6915,6 +7031,32 @@ function drawMothership(){
     // Player alien sprite (matches selected race/skin)
     drawAlienPreview(ax, ay, 1.0, getAlienSkin(), h.facing, h.walkT);
 
+    // === GRAPPLING HOOK rope + claw ===
+    if(h.grapple){
+      const g=h.grapple;
+      const handX=ax+h.facing*6, handY=ay-14;
+      const tipX=(g.phase==='attached')?(g.anchorX - h.x + ax):(g.x - h.x + ax);
+      const tipY=(g.phase==='attached')?(g.anchorY - h.y + ay):(g.y - h.y + ay);
+      // Rope
+      const rg=ctx.createLinearGradient(handX,handY,tipX,tipY);
+      rg.addColorStop(0,'rgba(200,180,140,0.85)'); rg.addColorStop(1,'rgba(255,220,160,0.95)');
+      ctx.strokeStyle=rg; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(handX,handY); ctx.lineTo(tipX,tipY); ctx.stroke();
+      // Hook claw at tip
+      const rang=Math.atan2(tipY-handY,tipX-handX);
+      ctx.save(); ctx.translate(tipX,tipY); ctx.rotate(rang);
+      ctx.fillStyle='#c0a060';
+      ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(2,-1); ctx.lineTo(2,1); ctx.lineTo(-4,3); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='#e0c080'; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.moveTo(2,-1); ctx.lineTo(6,-3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, 1); ctx.lineTo(6, 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(7, 0); ctx.stroke();
+      if(g.phase==='attached'){
+        ctx.fillStyle=`rgba(255,220,120,${0.4+Math.sin(t*6)*0.3})`;
+        ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
     // Top HUD
     ctx.fillStyle='rgba(100,200,255,0.85)';ctx.font=`bold 16px monospace`;ctx.textAlign='center';
     ctx.fillText('MOTHERSHIP',cw/2,28);
@@ -6922,7 +7064,7 @@ function drawMothership(){
     ctx.fillText(`Score: ${score}  |  Specimens: ${mothership.specimens.length}  |  Milk: ${milkScore}`,cw/2,46);
     // Bottom hint
     ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='10px monospace';ctx.textAlign='center';
-    ctx.fillText('A/D: Walk  |  SPACE: Jump  |  E: Enter door  |  ESC: Exit to space',cw/2,ch-15);
+    ctx.fillText('A/D: Walk  |  SPACE: Jump  |  G: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
 
   // ================================================================
   // BRIDGE - NPC portraits with speech
@@ -7144,6 +7286,21 @@ function drawMothership(){
         ctx.beginPath();ctx.arc(sx+8,ceilY-8,1.5,0,Math.PI*2);ctx.fill();
         ctx.beginPath();ctx.arc(sx+112,ceilY-8,1.5,0,Math.PI*2);ctx.fill();
       }
+      // === Horizontal cage bars along the ceiling (grapple targets) ===
+      ctx.fillStyle='#1a1814';
+      ctx.fillRect(0, ceilY+14, cw, 6);
+      ctx.strokeStyle='rgba(0,0,0,0.65)'; ctx.lineWidth=1;
+      ctx.strokeRect(0, ceilY+14, cw, 6);
+      // Vertical bar segments dropping down
+      ctx.fillStyle='#222018';
+      for(let bx=Math.floor(camX/40)*40; bx<camX+cw+40; bx+=40){
+        const sx=bx-camX;
+        ctx.fillRect(sx-1, ceilY+20, 2, 10);
+        // Metal sheen
+        ctx.fillStyle='rgba(255,255,255,0.1)';
+        ctx.fillRect(sx-1, ceilY+20, 1, 10);
+        ctx.fillStyle='#222018';
+      }
       // Hanging light bulbs (flicker)
       for(let lx=150;lx<zooW;lx+=300){
         const sx=lx-camX;
@@ -7246,9 +7403,36 @@ function drawMothership(){
 
       // Draw player alien — full detailed model with skin
       const ax=za.x-camX, ay=za.y;
-      // Shadow
-      ctx.fillStyle='rgba(0,0,0,0.4)';ctx.beginPath();ctx.ellipse(ax,floorY+2,10,2.5,0,0,Math.PI*2);ctx.fill();
+      // Shadow (fades when airborne)
+      const airFrac=Math.max(0, Math.min(1, (floorY-ay)/220));
+      ctx.fillStyle=`rgba(0,0,0,${0.4*(1-airFrac*0.7)})`;
+      ctx.beginPath();ctx.ellipse(ax,floorY+2,10*(1-airFrac*0.5),2.5*(1-airFrac*0.5),0,0,Math.PI*2);ctx.fill();
       drawAlienPreview(ax, ay, 1.0, getAlienSkin(), za.facing, za.walkTimer);
+
+      // === GRAPPLING HOOK rope + claw ===
+      if(za.grapple){
+        const g=za.grapple;
+        const handX=ax+za.facing*6, handY=ay-14;
+        const tipX=(g.phase==='attached')?(g.anchorX - za.x + ax):(g.x - za.x + ax);
+        const tipY=(g.phase==='attached')?(g.anchorY):(g.y);
+        const rg=ctx.createLinearGradient(handX,handY,tipX,tipY);
+        rg.addColorStop(0,'rgba(200,180,140,0.85)'); rg.addColorStop(1,'rgba(255,220,160,0.95)');
+        ctx.strokeStyle=rg; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.moveTo(handX,handY); ctx.lineTo(tipX,tipY); ctx.stroke();
+        const rang=Math.atan2(tipY-handY,tipX-handX);
+        ctx.save(); ctx.translate(tipX,tipY); ctx.rotate(rang);
+        ctx.fillStyle='#c0a060';
+        ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(2,-1); ctx.lineTo(2,1); ctx.lineTo(-4,3); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle='#e0c080'; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.moveTo(2,-1); ctx.lineTo(6,-3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(2, 1); ctx.lineTo(6, 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(7, 0); ctx.stroke();
+        if(g.phase==='attached'){
+          ctx.fillStyle=`rgba(255,220,120,${0.4+Math.sin(t*6)*0.3})`;
+          ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+      }
 
       ctx.restore(); // end zoom
 
@@ -7259,7 +7443,7 @@ function drawMothership(){
 
       // HUD
       ctx.fillStyle='rgba(200,180,120,0.7)';ctx.font='9px monospace';ctx.textAlign='center';
-      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
+      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  G: Grapple  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
     } else {
 
     // Group creatures into cells
@@ -7741,7 +7925,7 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&e.key==='F4'){window._perfMode=!window._perfMode;showMessage(window._perfMode?'Performance mode ON':'Performance mode OFF');e.preventDefault();return;}
   if(!keys[k]&&k==='l'){flashlightOn=!flashlightOn;showMessage(flashlightOn?'Flashlight ON':'Flashlight OFF');return;}
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
-    [spaceAmbience,flameSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
+    [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -8944,7 +9128,11 @@ function updatePlanetShared(){
   const shipCaveHit = isInsideCave(ship.x, ship.y);
   const inCaveForBeam = !!shipCaveHit;
   ship.beamActive=keys[' ']&&playerMode==='ship'&&(ship.y<GROUND_LEVEL-60 || inCaveForBeam);
-  if(ship.beamActive&&!wasBeam)playSound('beam');
+  if(ship.beamActive){
+    if(!beamSfx._playing){ try{beamSfx.currentTime=0; beamSfx.play().catch(()=>{});}catch(e){} beamSfx._playing=true; }
+  } else if(beamSfx._playing){
+    try{beamSfx.pause();}catch(e){} beamSfx._playing=false;
+  }
   if(ship.beamActive){
     const bX=ship.x,bY=ship.y+15,tY=inCaveForBeam ? shipCaveHit.seg.y + shipCaveHit.seg.h : GROUND_LEVEL;
     for(let i=0;i<3;i++){const t=Math.random();particles.push({x:bX+(Math.random()-0.5)*30*t,y:bY+(tY-bY)*t+(Math.random()-0.5)*30*t,vx:(Math.random()-0.5)*2,vy:-Math.random()*2-1,life:20+Math.random()*10,color:`hsl(${120+Math.random()*40},100%,${60+Math.random()*30}%)`,size:Math.random()*3+1});}
@@ -16335,12 +16523,13 @@ function lerpColor(c1,c2,t){const p=c=>{if(c.length===4)return[parseInt(c[1]+c[1
 function mkAudio(src,vol,loop){const a=new Audio();a.preload='none';a.src=src;a.volume=vol||0;a.loop=!!loop;return a;}
 const spaceAmbience=mkAudio('space-ambience.mp3',0,true);
 const flameSfx=mkAudio('flame-sound.mp3',0.03,true);
+const beamSfx=mkAudio('beam-loop.wav',0.005,true);
 const planetMusic={earth:mkAudio('earth-music.wav',0,true),asteroid:mkAudio('eerie-music.mp3',0,true)};
 // Prehistoric Earth ambient track — swapped in when window.prehistoricEra is true on Earth.
 const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
-const missileSfx=mkAudio('missile-sfx.wav',0.4,false);
+const missileSfx=mkAudio('missile-sfx.wav',0.1,false);
 const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
 // Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
 const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
