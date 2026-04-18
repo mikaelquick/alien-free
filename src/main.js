@@ -74,6 +74,7 @@ const KEY_ACTIONS = [
   {id:'grapple',     label:'Grappling Hook',     canonical:'g',     context:'foot'},
   {id:'switchWeap',  label:'Next Weapon',        canonical:'tab',   context:'foot'},
   {id:'toggleMode',  label:'Enter/Exit Ship',    canonical:'enter', context:'both'},
+  {id:'hijackVeh',   label:'Hijack/Deploy Vehicle', canonical:'b',     context:'both'},
   {id:'cloak',       label:'Cloak',              canonical:'v',     context:'ship'},
   {id:'lasso',       label:'Lasso',              canonical:'c',     context:'ship'},
   {id:'nuke',        label:'Nuke',               canonical:'n',     context:'ship'},
@@ -81,7 +82,7 @@ const KEY_ACTIONS = [
   {id:'flashlight',  label:'Flashlight',         canonical:'l',     context:'both'},
   {id:'mute',        label:'Mute Audio',         canonical:'m',     context:'both'},
 ];
-const KEYBIND_VERSION = 2; // bump when defaults change to invalidate stale saved bindings
+const KEYBIND_VERSION = 4; // bump when defaults change to invalidate stale saved bindings
 let keyBindings = (()=>{
   try{
     const saved=JSON.parse(localStorage.getItem('sadabduction_keybinds')||'{}');
@@ -171,7 +172,15 @@ function saveGame(){
       leaderRelations:{...leaderRelations}, genocideCount, milkScore,
       specimens:mothership.specimens, totalCollected:mothership.totalCollected,
       collectedCows:mothership.collectedCows||[],
-      gameStats:{...gameStats}, version:1
+      gameStats:{...gameStats},
+      // Location snapshot — so Continue returns to where you saved
+      location:{
+        mode: gameMode,                     // 'planet' | 'space'
+        planetId: currentPlanet ? currentPlanet.id : null,
+        shipX: ship.x, shipY: ship.y,
+        prehistoricEra: !!window.prehistoricEra,
+      },
+      version:2
     };
     localStorage.setItem('sadabduction_save', JSON.stringify(data));
   }catch(e){}
@@ -196,11 +205,13 @@ function loadGame(){
     mothership.totalCollected=d.totalCollected||0;
     mothership.collectedCows=d.collectedCows||[];
     if(d.gameStats) Object.assign(gameStats,d.gameStats);
+    _pendingSavedLocation = d.location || null;
     document.getElementById('score').textContent=score;
     return true;
   }catch(e){return false;}
 }
 function hasSaveGame(){ return !!localStorage.getItem('sadabduction_save'); }
+let _pendingSavedLocation = null;
 
 // --- PAUSE MENU ---
 let pauseMenu = { active:false, sel:0, _cool:0 };
@@ -929,6 +940,9 @@ const alien = {
   // --- GRAPPLING HOOK (press G) ---
   grapple:null,         // null | {phase:'flying'|'attached', x,y,vx,vy, anchorX,anchorY, life}
   _gPrev:false,
+  // --- VEHICLE HIJACK ---
+  drivingVehicle:null,  // reference to a vehicle when driving; null on foot
+  _ctrlPrev:false,
 };
 
 function triggerShake(intensity){ screenShake.intensity=Math.max(screenShake.intensity,intensity); }
@@ -1344,9 +1358,14 @@ function initSpacePlanets() {
     p.orbits = true;
     p.orbitRadius = Math.hypot(dx, dy);
     p.orbitAngle = Math.atan2(dy, dx);
+    p.initOrbitAngle = p.orbitAngle;
+    p.initSpaceX = p.spaceX;
+    p.initSpaceY = p.spaceY;
     const years = orbitalYears[p.id] || 1;
     p.orbitSpeed = (Math.PI * 2) / (EARTH_PERIOD_FRAMES * years);
   });
+  // Store moon's initial angle too
+  planets.forEach(p=>{ if(p.orbitsEarth){ p.initOrbitAngle = p.orbitAngle; } });
 }
 
 function generateDeepStars() {
@@ -3360,13 +3379,7 @@ function loadPlanet(planet) {
           hasWindow:false,windowLit:false,isDoor:false,
           shape:'building',buildingType:'militaryBase',windowSeed:Math.random()*1000,isTree:false};
         building.blocks.push(block);blocks.push(block);buildings.push(building);
-        // Pre-spawn soldiers
-        const hpMult=(1+getDifficultyLevel()*0.15);
-        for(let i=0;i<3;i++){
-          military.push({type:'soldier',x:bx+20+Math.random()*80,y:GROUND_LEVEL-20,vx:0,facing:1,
-            shootTimer:0,health:Math.ceil(3*hpMult),alive:true,color:'#363',gunColor:'#555',
-            baseX:bx,passive:true});
-        }
+        // No pre-spawned garrison — military only deploys when the player draws heat (wantedLevel>0)
       });
     }
     // Hide ~30% of inhabitants inside buildings
@@ -3985,7 +3998,7 @@ function drawStarmap(){
     ctx.fillStyle='rgba(180,200,230,0.6)';ctx.font='10px monospace';
     const lines=[
       unlockedPlanets.includes(p.id)?'Status: UNLOCKED':'Status: LOCKED',
-      `Missions: ${Math.min(prog.missionIndex||0,5)}/5   Boss: ${bossDefeated[p.id]?'DEFEATED':'Active'}`,
+      `Boss: ${bossDefeated[p.id]?'DEFEATED':'Active'}`,
       `Completion: ${(prog.completion||'none').toUpperCase()}`,
     ];
     lines.forEach((l,i)=>ctx.fillText(l,dx+15,dy+44+i*14));
@@ -7338,6 +7351,10 @@ document.addEventListener('keydown', e => {
   // ESC opens pause menu (not in mothership — mothership has its own ESC handling)
   if(k==='escape'&&gameStarted&&!mothershipMode&&!pyramidInteriorMode){pauseMenu.active=true;pauseMenu.sel=0;pauseMenu._cool=10;e.preventDefault();keys[k]=true;return;}
   if (!keys[k]&&k==='enter'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&!pauseMenu.active) togglePlayerMode();
+  if (!keys[k]&&k==='b'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&!pauseMenu.active){
+    if(playerMode==='onfoot') hijackNearestVehicle();
+    else if(playerMode==='ship') ejectFromShipIntoVehicle();
+  }
   if (!keys[k]&&k==='e'&&playerMode==='ship'&&!mothershipMode) repulsorBlast();
   if (!keys[k]&&k==='n'&&gameMode==='planet'&&playerMode==='ship') nukeplanet();
   if (!keys[k]&&k==='v'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
@@ -7916,7 +7933,7 @@ function nukeplanet(){
   // Kill military
   military.forEach(m=>{if(m.type!=='bullet'&&m.type!=='boulder'&&m.alive){m.health=0;}});
   // Kill vehicles
-  vehicles.forEach(v=>{v.alive=false;v.exploding=40;});
+  vehicles.forEach(v=>{if(v.indestructible)return;v.alive=false;v.exploding=40;});
   // Massive fire everywhere
   for(let i=0;i<30;i++)fires.push({x:camera.x+Math.random()*canvas.width,y:GROUND_LEVEL-Math.random()*100,life:300+Math.random()*200,size:Math.random()*20+10});
   // Massive particle burst
@@ -7946,6 +7963,20 @@ function togglePlayerMode(){
     alien.inCave=inDryCave;
     showMessage(inDryCave ? 'Exited ship in cave. Explore!' : tr('msg.onFoot'));
   }else{
+    // If driving a hijacked vehicle: dismount first (back to on-foot)
+    if(alien.drivingVehicle){
+      const v=alien.drivingVehicle;
+      alien.drivingVehicle=null;
+      v.hijacked=false;
+      v.indestructible=false;
+      v.vx=0;
+      alien.x=v.x+v.w+12;
+      alien.y=GROUND_LEVEL-10;
+      alien.vx=0; alien.vy=0;
+      alien.onGround=false;
+      showMessage('Dismounted vehicle');
+      return;
+    }
     // Re-enter ship — must be near it
     const d=dist(alien.x,alien.y,ship.x,ship.y+20);
     if(d<80){
@@ -7956,6 +7987,63 @@ function togglePlayerMode(){
       showMessage(tr('msg.getCloser'));
     }
   }
+}
+
+function ejectFromShipIntoVehicle(){
+  if(playerMode!=='ship') return;
+  // Need to be near ground (same altitude check as togglePlayerMode)
+  if(ship.y<GROUND_LEVEL-100){ showMessage('Get closer to the ground first'); return; }
+  // Pick a spawn X: prefer ship.x, but not over ocean
+  let spawnX=ship.x;
+  if(currentPlanet&&currentPlanet.id==='earth'){
+    let tries=0;
+    while(isOverOcean(spawnX) && tries<40){ spawnX = ship.x + (Math.random()-0.5)*800; tries++; }
+    if(isOverOcean(spawnX)){ showMessage('Cannot drop a vehicle over water'); return; }
+  }
+  // Pick vehicle type — use first earth car if available, else a default sedan.
+  const vTypes = (VEHICLE_TYPES[currentPlanet&&currentPlanet.id]||VEHICLE_TYPES.earth);
+  const vt = vTypes[Math.floor(Math.random()*Math.min(4,vTypes.length))]; // small cars only (first 4)
+  const v = {...vt, x:spawnX-vt.w/2, y:GROUND_LEVEL, vx:0, alive:true,
+    homeMin:100, homeMax:worldWidth-100,
+    hijacked:true, indestructible:true};
+  vehicles.push(v);
+  // Switch to on-foot and drive
+  playerMode='onfoot';
+  alien.drivingVehicle=v;
+  alien.x=v.x+v.w*0.3;
+  alien.y=v.y-v.h*0.55;
+  alien.vx=0; alien.vy=0;
+  alien.jetpackFuel=100;
+  alien.health=100;
+  alien.inCave=false;
+  // Little drop-in flash
+  for(let i=0;i<16;i++)particles.push({x:v.x+v.w/2,y:v.y-10,vx:(Math.random()-0.5)*3,vy:-Math.random()*2,life:25,color:['#0f0','#8f8','#fff'][Math.floor(Math.random()*3)],size:Math.random()*3+1});
+  triggerShake(3);
+  showMessage('Deployed with '+(vt.label||'vehicle')+'!');
+}
+
+function hijackNearestVehicle(){
+  if(playerMode!=='onfoot') return;
+  if(alien.drivingVehicle) return;
+  let nearest=null, nd=160;
+  for(let i=0;i<vehicles.length;i++){
+    const v=vehicles[i];
+    if(!v.alive) continue;
+    const d=dist(alien.x,alien.y,v.x+v.w/2,v.y-v.h/2);
+    if(d<nd){nd=d; nearest=v;}
+  }
+  if(!nearest){showMessage('No vehicle nearby'); return;}
+  alien.drivingVehicle=nearest;
+  nearest.hijacked=true;
+  nearest.indestructible=true;
+  nearest.vx=0;
+  // Panic humans nearby
+  for(let hi=0;hi<humans.length;hi++){const h=humans[hi];
+    if(h.collected||h.ragdoll)continue;
+    if(Math.abs(h.bodyX-nearest.x)<200){h.walkDir=h.bodyX<nearest.x?-1:1;h.walkSpeed=2.5;}
+  }
+  planetTerror=Math.min(planetTerror+0.3,10);
+  showMessage('Vehicle hijacked! ENTER to dismount.');
 }
 
 function alienShoot(){
@@ -8144,7 +8232,7 @@ function updateAlienWeapons(){
         humans.forEach(h=>{ if(h.collected||h.hidden)return; const d=dist(g.x,g.y,h.bodyX,h.bodyY); if(d<R){ h.ragdoll=true; h.panicLevel=10; applyForce(h,(h.bodyX-g.x)*0.1,-5-Math.random()*3); } });
         military.forEach(m=>{ if(!m.alive||m.type==='bullet'||m.type==='boulder')return; const d=dist(g.x,g.y,m.x,m.y); if(d<R){ m.health-=20; if(m.health<=0)m.alive=false; } });
         blocks.forEach(bl=>{ if(bl.dead)return; const d=dist(g.x,g.y,bl.x+bl.w/2,bl.y+bl.h/2); if(d<R){ bl.health-=40; bl.cracked=true; bl.onFire=true; if(!bl.fixed){bl.vx+=(bl.x-g.x)*0.04;bl.vy-=4;} if(bl.health<=0)checkBuildingDestroyed(bl); } });
-        vehicles.forEach(v=>{ if(!v.alive)return; const d=dist(g.x,g.y,v.x+v.w/2,v.y); if(d<R){ v.alive=false; v.exploding=40; } });
+        vehicles.forEach(v=>{ if(!v.alive||v.indestructible)return; const d=dist(g.x,g.y,v.x+v.w/2,v.y); if(d<R){ v.alive=false; v.exploding=40; } });
         for(let pi=0;pi<40;pi++){const a=Math.random()*Math.PI*2;particles.push({x:g.x,y:g.y,vx:Math.cos(a)*(3+Math.random()*5),vy:Math.sin(a)*(3+Math.random()*5),life:30,color:['#a0f','#f0f','#60f'][Math.floor(Math.random()*3)],size:Math.random()*3+1});}
       }
       if(g.timer<=0) g.phase='done';
@@ -8455,13 +8543,15 @@ function updatePlanetShared(){
   // Camera follows alien when on foot, ship otherwise
   if(playerMode==='onfoot'){
     camera.x=alien.x-canvas.width/2+screenShake.x;
-    camera.y=alien.y-canvas.height/2+100+screenShake.y;
+    // Driving: raise camera (less ground, more horizon) because vehicle + zoom fill the frame
+    const _yOff = alien.drivingVehicle ? -80 : 100;
+    camera.y=alien.y-canvas.height/2+_yOff+screenShake.y;
   }else{
     camera.x=ship.x-canvas.width/2+screenShake.x;
     camera.y=ship.y-canvas.height/2+screenShake.y;
   }
   // Smooth zoom: closeup on foot, normal in ship. Lerps over ~30 frames.
-  const _zoomTarget = playerMode==='onfoot' ? 1.9 : 1;
+  const _zoomTarget = playerMode==='onfoot' ? (alien.drivingVehicle ? 2.4 : 1.9) : 1;
   worldZoom += (_zoomTarget - worldZoom) * 0.08;
   // Wrap entities seamlessly around the player
   const hw=worldWidth/2,sx=playerMode==='onfoot'?alien.x:ship.x;
@@ -9143,6 +9233,7 @@ function updatePlanetShared(){
   // --- VEHICLES ---
   vehicles.forEach(v=>{
     if(!v.alive){if(v.exploding>0)v.exploding--;return;}
+    if(v.hijacked) return; // player-controlled; updated in updateAlienOnFoot
     // Sim radius: skip AI for vehicles far from player (still renders if on-screen)
     if(Math.abs(v.x-_simPX)>3000)return;
     v.x+=v.vx;
@@ -9304,6 +9395,88 @@ function updatePlanetShared(){
 // --- ALIEN ON-FOOT UPDATE ---
 function updateAlienOnFoot(){
   const p=currentPlanet||planetDefs[0];
+
+  // --- VEHICLE DRIVING (hijacked) ---
+  if(alien.drivingVehicle){
+    const v=alien.drivingVehicle;
+    if(!v.alive){
+      // Vehicle somehow got removed; eject
+      alien.drivingVehicle=null;
+      alien.x=v.x; alien.y=GROUND_LEVEL-10; alien.onGround=false;
+    } else {
+      const boosting = !!keys['shift'];
+      const maxSpeed = boosting ? 11 : 5.5;
+      const accel = boosting ? 0.6 : 0.35;
+      if(keys['a']||keys['arrowleft']){ v.vx=Math.max(v.vx-accel,-maxSpeed); alien.facing=-1; }
+      else if(keys['d']||keys['arrowright']){ v.vx=Math.min(v.vx+accel,maxSpeed); alien.facing=1; }
+      else { v.vx*=0.92; if(Math.abs(v.vx)<0.05) v.vx=0; }
+      // Boost FX: thruster burst particles trailing behind
+      if(boosting && Math.abs(v.vx)>1.5){
+        for(let i=0;i<2;i++){
+          particles.push({
+            x: v.x + (v.vx>0 ? 0 : v.w) + (Math.random()-0.5)*4,
+            y: v.y - v.h*0.35 + (Math.random()-0.5)*6,
+            vx: -Math.sign(v.vx)*(3+Math.random()*2),
+            vy: (Math.random()-0.5)*1.2,
+            life: 14+Math.random()*8,
+            color: ['#0ff','#4cf','#8ef','#fff'][Math.floor(Math.random()*4)],
+            size: Math.random()*2.5+1.5
+          });
+        }
+      }
+      // Block water
+      const leadX = v.vx>0 ? v.x+v.w+8 : v.x-8;
+      if(currentPlanet&&currentPlanet.id==='earth'&&(isOverOcean(leadX)||isOverOcean(v.x)||isOverOcean(v.x+v.w))){
+        // Bounce back out of water
+        if(v.vx!==0){ v.vx=-Math.sign(v.vx)*1.5; }
+        while((isOverOcean(v.x)||isOverOcean(v.x+v.w)) && v.x>50 && v.x+v.w<worldWidth-50){ v.x+=v.vx; }
+        showMessage('Vehicle cannot enter water');
+      } else {
+        v.x+=v.vx;
+      }
+      // World clamp
+      if(v.x<50){v.x=50; v.vx=0;}
+      if(v.x+v.w>worldWidth-50){v.x=worldWidth-50-v.w; v.vx=0;}
+      // Drive-over gore — horizontal-overlap based, tolerant of unit scale/floating
+      if(Math.abs(v.vx)>0.5){
+        const vL = v.x - 4, vR = v.x + v.w + 4;
+        for(let hi=0;hi<humans.length;hi++){
+          const h=humans[hi];
+          if(h.collected || !h.alive) continue;
+          const s = h.scale || 1;
+          const halfW = ((h.bodyWidth||16)/2) * s + 4;
+          const hL = h.bodyX - halfW, hR = h.bodyX + halfW;
+          if(hR < vL || hL > vR) continue;
+          // Vertical: feet/body somewhere in the vehicle's vertical band. Use feet if available.
+          const footY = (h.footLY!=null || h.footRY!=null)
+            ? Math.max(h.footLY||h.bodyY, h.footRY||h.bodyY) : (h.bodyY + 20*s);
+          if(footY < v.y - v.h - 12) continue;      // unit floats above roof
+          if(footY > v.y + 40) continue;            // far below ground (shouldn't happen)
+          const power=Math.min(5, 1.5+Math.abs(v.vx)*0.5 + s*0.3);
+          spawnGibs(h, v.vx*6, -4-Math.random()*3, power);
+          h.collected=true;
+          triggerShake(Math.min(4, 2.5 + s*0.3));
+          planetTerror=Math.min(planetTerror+0.25,10);
+        }
+        // Skid marks while moving
+        if(Math.abs(v.vx)>3 && Math.random()<0.3){
+          skidMarks.push({x:v.x+v.w*0.2,y:GROUND_LEVEL-2,w:Math.abs(v.vx)*4,life:400,maxLife:400});
+          skidMarks.push({x:v.x+v.w*0.8,y:GROUND_LEVEL-2,w:Math.abs(v.vx)*4,life:400,maxLife:400});
+        }
+      }
+      // Sync alien into cabin, suppress physics
+      alien.x=v.x+v.w*0.3;
+      alien.y=v.y-v.h*0.55;
+      alien.vx=0; alien.vy=0;
+      alien.onGround=true;
+      alien.walkTimer+=Math.abs(v.vx)*0.02;
+      // Cooldowns still tick
+      for(let ci=0;ci<alien.weaponCD.length;ci++) if(alien.weaponCD[ci]>0) alien.weaponCD[ci]--;
+      alien.shootCooldown=Math.max(0,alien.shootCooldown-1);
+      alien.jetpackFuel=Math.min(100, alien.jetpackFuel+0.5);
+      return;
+    }
+  }
 
   // Movement
   const walkSpeed=2.5;
@@ -9487,7 +9660,7 @@ function updateAlienOnFoot(){
 
   // Camera follows alien
   camera.x=alien.x-canvas.width/2+screenShake.x;
-  camera.y=alien.y-canvas.height/2+100+screenShake.y;
+  camera.y=alien.y-canvas.height/2+(alien.drivingVehicle?-80:100)+screenShake.y;
 
   // Seabed cave entry (Earth: swim up to a cave mouth underwater + E/Enter, dive suit required)
   if(p.id==='earth' && alien.underwater && alien.diveSuit){
@@ -9636,6 +9809,7 @@ function updatePlanetSystems(){
   // Vehicles
   vehicles.forEach(v=>{
     if(!v.alive){if(v.exploding>0)v.exploding--;return;}
+    if(v.hijacked) return; // player-controlled
     if(Math.abs(v.x-_simPX)>3000)return;
     v.x+=v.vx;if(v.x<100||v.x>worldWidth-100)v.vx*=-1;
   });
@@ -9852,10 +10026,30 @@ function updateSpace(){
       const whDist=dist(ship.x,ship.y,wh.spaceX,wh.spaceY);
       if(whDist<wh.radius*0.5){
         window.prehistoricEra=!window.prehistoricEra; // toggle: through once = past, through again = present
-        // Drop the ship near Earth's current orbital position — the wormhole leads to Earth
-        // (past or present). This also prevents the player getting stranded when Earth
-        // has orbited far from its starting position.
+        // Snap the entire solar system back to its starting layout — so all planets are
+        // reachable from wherever we drop the ship. Otherwise long-running orbits may
+        // scatter planets behind the Sun or outside ship range.
+        const sunP = planets.find(p=>p.isSun);
+        const sunSX = sunP ? sunP.spaceX : 0, sunSY = sunP ? sunP.spaceY : 0;
+        planets.forEach(p=>{
+          if(!p.orbits) return;
+          if(p.orbitsEarth) return; // moon fixed up after earth below
+          if(p.initOrbitAngle!=null){
+            p.orbitAngle = p.initOrbitAngle;
+            p.spaceX = sunSX + Math.cos(p.orbitAngle) * p.orbitRadius;
+            p.spaceY = sunSY + Math.sin(p.orbitAngle) * p.orbitRadius;
+          }
+        });
         const e=planets.find(p=>p.id==='earth');
+        planets.forEach(p=>{
+          if(!p.orbitsEarth || !e) return;
+          if(p.initOrbitAngle!=null){
+            p.orbitAngle = p.initOrbitAngle;
+            p.spaceX = e.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
+            p.spaceY = e.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
+          }
+        });
+        // Drop ship near Earth in its now-restored starting position.
         if(e){
           const dropAng=Math.random()*Math.PI*2;
           ship.x=e.spaceX+Math.cos(dropAng)*(e.radius+300);
@@ -9883,7 +10077,7 @@ function updateSpace(){
   const mDist=dist(ship.x,ship.y,mothershipPos.x,mothershipPos.y);
   if(mDist<80){
     ship.vx*=0.95;ship.vy*=0.95;
-    if(mDist<50 && mothership._exitCool<=0 && !mothershipMode){
+    if(mDist<50 && !(mothership._exitCool>0) && !mothershipMode){
       enterMothership();
     }
   }else{mothership._dockMsg=false;}
@@ -10134,7 +10328,6 @@ function drawMinimap(){
   // Ship
   const sx=mX+(ship.x-minX)*sX,sy=mY+(ship.y-minY)*sY;ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(sx,sy,3,0,Math.PI*2);ctx.fill();
   if(Math.sin(ship.lightPhase*3)>0){ctx.strokeStyle='#0f0';ctx.beginPath();ctx.arc(sx,sy,6,0,Math.PI*2);ctx.stroke();}
-  ctx.fillStyle='#0f0';ctx.font='9px monospace';ctx.textAlign='right';ctx.fillText(tr('hud.starMap'),mX+mW-4,mY+mH-4);
 }
 
 function drawPlanet(){
@@ -11851,7 +12044,8 @@ function drawPlanet(){
       ctx.globalAlpha=v.exploding/40;ctx.fillStyle='#f80';ctx.beginPath();ctx.arc(v.x+v.w/2,v.y,15+Math.random()*10,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;return;
     }
     if(!v.alive)return;
-    renderVehicle(v);
+    if(v.hijacked) renderHijackedVehicle(v);
+    else renderVehicle(v);
   });
 
   // --- HAZARDS ---
@@ -12111,6 +12305,11 @@ function drawPlanet(){
     const _askin=getAlienSkin();
     const ax=alien.x,ay=alien.y,f=alien.facing;
 
+    // If driving, the alien is inside the vehicle — not rendered separately.
+    if(alien.drivingVehicle){
+      // intentionally no body render while driving
+    } else {
+
     // Shadow
     const alienShadowY=alien.inCave?(()=>{const ch2=isInsideCave(alien.x,alien.y);return ch2?ch2.seg.y+ch2.seg.h-2:GROUND_LEVEL;})():GROUND_LEVEL;
     ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(ax,alienShadowY,9,2.5,0,0,Math.PI*2);ctx.fill();
@@ -12163,6 +12362,7 @@ function drawPlanet(){
       }
       ctx.restore();
     }
+    } // end non-driving render block
   }
 
   // Boss
@@ -13681,6 +13881,113 @@ function renderCow(c){
   if(c.beingBeamed){ctx.fillStyle='rgba(0,255,0,0.7)';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(c.label,cx,by-16*s);}
 }
 
+// Hijacked (alien-converted) vehicle — retrofitted to a sleek hovercraft look:
+// - Floats off the ground on a cyan antigrav glow
+// - Wheels hidden; replaced by glowing thruster discs
+// - Neon-tinted windshield and trim
+// - Faint energy trail behind when moving
+function renderHijackedVehicle(v){
+  const cx=v.x+v.w/2;
+  const hover = 5 + Math.sin(frameNow*0.006)*1.2;
+  const gy = v.y; // ground line (wheels would sit here)
+
+  // --- Antigrav underglow on the ground (before lifting the vehicle) ---
+  const glowGrad=ctx.createRadialGradient(cx, gy+1, 2, cx, gy+1, v.w*0.75);
+  glowGrad.addColorStop(0, 'rgba(120,240,255,0.75)');
+  glowGrad.addColorStop(0.4,'rgba(80,180,255,0.35)');
+  glowGrad.addColorStop(1, 'rgba(60,120,255,0)');
+  ctx.fillStyle=glowGrad;
+  ctx.beginPath();ctx.ellipse(cx, gy+2, v.w*0.7, 6, 0, 0, Math.PI*2);ctx.fill();
+
+  // Energy trail when moving
+  if(Math.abs(v.vx)>0.5){
+    const tailSide = v.vx>0 ? -1 : 1; // trail drags behind
+    const tx = v.vx>0 ? v.x : v.x+v.w;
+    for(let i=0;i<5;i++){
+      const a=(5-i)/5;
+      ctx.fillStyle=`rgba(120,240,255,${a*0.25})`;
+      ctx.beginPath();ctx.ellipse(tx+tailSide*(i*10+6), gy-v.h*0.35-hover, 6-i, 2, 0, 0, Math.PI*2);ctx.fill();
+    }
+    // Occasional energy sparks
+    if(Math.random()<0.5){
+      particles.push({x:tx+tailSide*8, y:gy-v.h*0.35-hover+(Math.random()-0.5)*4,
+        vx:tailSide*(1+Math.random()*1.5), vy:(Math.random()-0.5)*0.6,
+        life:18+Math.random()*10, color:['#8ff','#4df','#6ef'][Math.floor(Math.random()*3)], size:1+Math.random()*1.5});
+    }
+  }
+
+  // --- Hovering body (translated up) ---
+  ctx.save();
+  ctx.translate(0,-hover);
+  // We want wheels hidden. Hack: draw a solid band over where the wheels would be after renderVehicle.
+  // Easier: call renderVehicle, then mask wheels with a thruster strip.
+  renderVehicle(v);
+  // Hide wheels with a dark thruster bar at ground level
+  ctx.fillStyle='rgba(10,20,40,0.9)';
+  ctx.fillRect(v.x-1, gy-2, v.w+2, 4);
+  // Thruster discs (two glowing pads under the vehicle)
+  const discs = v.type==='truck'?3 : v.type==='bus'?4 : 2;
+  const pulseT = frameNow*0.012;
+  for(let i=0;i<discs;i++){
+    const dx = v.x + v.w*(0.15 + i*(0.7/(discs-1||1)));
+    const pulse = 0.6 + Math.sin(pulseT+i)*0.3;
+    const dg=ctx.createRadialGradient(dx, gy, 1, dx, gy, 7);
+    dg.addColorStop(0,`rgba(180,255,255,${0.85*pulse})`);
+    dg.addColorStop(0.5,'rgba(80,200,255,0.55)');
+    dg.addColorStop(1,'rgba(40,120,255,0)');
+    ctx.fillStyle=dg;
+    ctx.beginPath();ctx.ellipse(dx, gy, 7, 3, 0, 0, Math.PI*2);ctx.fill();
+    // Core
+    ctx.fillStyle=`rgba(220,255,255,${pulse})`;
+    ctx.beginPath();ctx.ellipse(dx, gy-0.5, 2.5, 1, 0, 0, Math.PI*2);ctx.fill();
+  }
+
+  // Neon trim outline along the body (slim glow)
+  const trimCol = `rgba(80,240,255,${0.55+Math.sin(frameNow*0.01)*0.2})`;
+  ctx.strokeStyle=trimCol;
+  ctx.lineWidth=1;
+  ctx.shadowColor='rgba(80,240,255,0.8)';
+  ctx.shadowBlur=6;
+  // Body outline
+  if(v.type==='bus' || v.type==='truck'){
+    ctx.strokeRect(v.x+1, v.y-v.h+1, v.w-2, v.h-2);
+  } else {
+    // Car silhouette outline
+    ctx.beginPath();
+    ctx.moveTo(v.x, v.y-v.h*0.55);
+    ctx.lineTo(v.x+v.w*0.2, v.y-v.h-1);
+    ctx.lineTo(v.x+v.w*0.8, v.y-v.h-1);
+    ctx.lineTo(v.x+v.w, v.y-v.h*0.55);
+    ctx.lineTo(v.x+v.w, v.y-2);
+    ctx.lineTo(v.x, v.y-2);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.shadowBlur=0;
+
+  // Tinted windshield (cyan/green sci-fi glass)
+  const winTint = 'rgba(60,255,200,0.25)';
+  ctx.fillStyle=winTint;
+  if(v.type==='bus'){
+    ctx.fillRect(v.x+v.w*0.05, v.y-v.h+3, v.w*0.88, v.h*0.45);
+  } else if(v.type==='truck'){
+    ctx.fillRect(v.x+v.w*0.05, v.y-v.h+3, v.w*0.22, v.h*0.4);
+  } else {
+    ctx.fillRect(v.x+v.w*0.22, v.y-v.h+2, v.w*0.22, v.h*0.4);
+    ctx.fillRect(v.x+v.w*0.56, v.y-v.h+2, v.w*0.22, v.h*0.4);
+  }
+
+  // Front headlight: forward-facing cyan cone/dot
+  const dir = v.vx<0 ? -1 : 1;
+  const hlX = dir>0 ? v.x+v.w-2 : v.x+2;
+  ctx.fillStyle='rgba(180,255,255,0.95)';
+  ctx.shadowColor='rgba(180,255,255,0.9)';ctx.shadowBlur=8;
+  ctx.beginPath();ctx.arc(hlX, v.y-v.h*0.35, 2, 0, Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+
+  ctx.restore();
+}
+
 function renderVehicle(v){
   ctx.save();
   // Sprites are drawn facing left (cab/front on left side). Flip horizontally when moving right.
@@ -14868,7 +15175,25 @@ function startGame(isContinue){
   gameStarted=true; mainMenuMode=null;
   if(isContinue && loadGame()){
     initSpacePlanets(); generateDeepStars();
-    loadPlanet(planets[0]);
+    const loc = _pendingSavedLocation;
+    // Restore prehistoric flag BEFORE loading the planet so Earth picks the right biome set
+    window.prehistoricEra = !!(loc && loc.prehistoricEra);
+    let targetPlanet = planets[0];
+    if(loc && loc.planetId){
+      const found = planets.find(p=>p.id===loc.planetId);
+      if(found) targetPlanet = found;
+    }
+    if(loc && loc.mode==='space'){
+      // Was in space — stay in space at saved ship position
+      gameMode='space';
+      currentPlanet=null;
+      if(typeof loc.shipX==='number') ship.x=loc.shipX;
+      if(typeof loc.shipY==='number') ship.y=loc.shipY;
+      ship.vx=0; ship.vy=0;
+    } else {
+      loadPlanet(targetPlanet);
+    }
+    _pendingSavedLocation = null;
     document.getElementById('score').textContent=score;
     showMessage('Welcome back, Commander.');
   } else {
@@ -15100,6 +15425,7 @@ function drawMainMenu(){
     items.push({label:'NEW GAME', action:'new'});
     items.push({label:'SETTINGS', action:'settings'});
     items.push({label:'DEBUG', action:'debug'});
+    items.push({label:'CREDITS', action:'credits'});
     items.push({label:'EXIT', action:'exit'});
     const menuY=ch*0.52;
     const itemH=42;
@@ -15356,6 +15682,60 @@ function drawMainMenu(){
       ctx.font='bold 13px monospace'; ctx.textAlign='center';
       ctx.fillText(lbl, cw/2, yy+17);
     });
+  }
+  else if(mainMenuMode==='credits'){
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 22px monospace';ctx.textAlign='center';
+    ctx.fillText('CREDITS',cw/2,ch*0.08);
+
+    const scroll=window._mmCreditsScroll||0;
+    const y0=ch*0.16 - scroll;
+    let y=y0;
+    const section=(title)=>{
+      ctx.fillStyle='rgba(0,255,0,0.75)';ctx.font='bold 15px monospace';ctx.textAlign='center';
+      y+=18; ctx.fillText(title,cw/2,y); y+=6;
+      ctx.strokeStyle='rgba(0,200,0,0.3)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(cw/2-160,y);ctx.lineTo(cw/2+160,y);ctx.stroke();
+      y+=14;
+    };
+    const line=(txt,opts)=>{
+      const color=(opts&&opts.color)||'rgba(180,220,180,0.75)';
+      const font=(opts&&opts.font)||'12px monospace';
+      ctx.fillStyle=color; ctx.font=font; ctx.textAlign='center';
+      ctx.fillText(txt,cw/2,y); y+=16;
+    };
+
+    section('GAME');
+    line('SpaceShip — an alien abduction game',{color:'rgba(0,255,0,0.8)',font:'bold 13px monospace'});
+    line('Code & design: Mikael Quick');
+    line('Built with Claude Code');
+    y+=8;
+
+    section('SOUND & MUSIC');
+    // Edit these entries to match the actual sources/licenses of your audio files.
+    const credits=[
+      {file:'alien-voice.mp3',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'earth-music.mp3 / .wav',  source:'TBD', author:'TBD', license:'TBD'},
+      {file:'eerie-music.mp3',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'flame-sound.mp3',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'missile-sfx.wav',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'mothership-music.mp3',    source:'TBD', author:'TBD', license:'TBD'},
+      {file:'nuke-sfx.flac',           source:'TBD', author:'TBD', license:'TBD'},
+      {file:'space-ambience.mp3',      source:'TBD', author:'TBD', license:'TBD'},
+      {file:'underwater-ambience.wav', source:'TBD', author:'TBD', license:'TBD'},
+    ];
+    credits.forEach(c=>{
+      line(c.file,{color:'rgba(0,220,0,0.7)',font:'bold 12px monospace'});
+      line(c.author+'  \u2014  '+c.source+'  ('+c.license+')',{color:'rgba(180,220,180,0.6)',font:'11px monospace'});
+      y+=4;
+    });
+
+    section('THANKS');
+    line('Everyone who panicked, fled, or got abducted along the way.');
+    y+=20;
+
+    // Footer hint
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('W/S or \u2191/\u2193 to scroll  |  ESC or ENTER to go back',cw/2,ch-20);
   }
   else if(mainMenuMode==='debug'){
     // Top-level debug menu
@@ -16543,7 +16923,7 @@ function updateMainMenu(){
     const hasSave=hasSaveGame();
     const items=[];
     if(hasSave) items.push('continue');
-    items.push('new','settings','debug','exit');
+    items.push('new','settings','debug','credits','exit');
 
     if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=10;}
     if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=10;}
@@ -16564,6 +16944,7 @@ function updateMainMenu(){
       else if(action==='shipskins'){mainMenuMode='shipskins';mainMenuSel=SHIP_PAINTS.findIndex(s=>s.id===shipPaint.name)||0;}
       else if(action==='settings'){mainMenuMode='settings';mainMenuSel=0;}
       else if(action==='debug'){mainMenuMode='debug';mainMenuSel=0;}
+      else if(action==='credits'){mainMenuMode='credits';mainMenuSel=0;}
       else if(action==='exit'){
         // Show start-screen overlay and stop the game
         const ss=document.getElementById('start-screen'); if(ss) ss.style.display='flex';
@@ -16731,6 +17112,12 @@ function updateMainMenu(){
       }
     }
     if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='credits'){
+    // Scroll with W/S; ESC or ENTER back to main menu
+    if(keys['w']||keys['arrowup']){window._mmCreditsScroll=Math.max(0,(window._mmCreditsScroll||0)-14);window._mmCool=2;}
+    if(keys['s']||keys['arrowdown']){window._mmCreditsScroll=(window._mmCreditsScroll||0)+14;window._mmCool=2;}
+    if(keys['escape']||keys['enter']||keys[' ']){keys['escape']=false;keys['enter']=false;keys[' ']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;window._mmCreditsScroll=0;}
   }
   else if(mainMenuMode==='sandbox'){
     const n=1;
