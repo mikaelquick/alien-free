@@ -15441,31 +15441,33 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.fillStyle='#f8d060';ctx.fillRect(ax-1*s,ay-8.5*s,2*s,1.2*s);
     } else if(outfit==='southpark'){
       // Bulky winter coat with puffy silhouette. Body sits lower because head is huge.
+      // Cartman has a noticeably wider silhouette.
+      const fat = skin.id==='sp_cart' ? 1.45 : 1;
       const coatTop=ay-15*s, coatBot=ay-4*s;
       ctx.fillStyle=oa;
       ctx.beginPath();
-      ctx.moveTo(ax-8*s, coatTop);
-      ctx.quadraticCurveTo(ax-10*s, coatTop+4*s, ax-9*s, coatBot);
-      ctx.lineTo(ax+9*s, coatBot);
-      ctx.quadraticCurveTo(ax+10*s, coatTop+4*s, ax+8*s, coatTop);
+      ctx.moveTo(ax-8*s*fat, coatTop);
+      ctx.quadraticCurveTo(ax-10*s*fat, coatTop+4*s, ax-9*s*fat, coatBot);
+      ctx.lineTo(ax+9*s*fat, coatBot);
+      ctx.quadraticCurveTo(ax+10*s*fat, coatTop+4*s, ax+8*s*fat, coatTop);
       ctx.closePath(); ctx.fill();
       // Seam down middle
       ctx.strokeStyle='rgba(0,0,0,0.28)'; ctx.lineWidth=0.6*s;
       ctx.beginPath(); ctx.moveTo(ax, coatTop+1*s); ctx.lineTo(ax, coatBot); ctx.stroke();
       // Scarf hint (darker band at collar)
       ctx.fillStyle='rgba(0,0,0,0.22)';
-      ctx.fillRect(ax-8*s, coatTop, 16*s, 1.5*s);
+      ctx.fillRect(ax-8*s*fat, coatTop, 16*s*fat, 1.5*s);
       // Mitten hands dangling by sides
       const mittenCol = ob || oa;
       const handSway = Math.sin(walkPhase||0)*1.2*s;
       ctx.fillStyle = mittenCol;
-      ctx.beginPath(); ctx.arc(ax-9*s+handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(ax+9*s-handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax-9*s*fat+handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax+9*s*fat-handSway, coatBot+0.5*s, 2.2*s, 0, Math.PI*2); ctx.fill();
       // Short pants + boots
       const pantsCol = skin.pants || '#3a2a1a';
       ctx.fillStyle = pantsCol;
-      ctx.fillRect(ax-6*s, coatBot, 5*s, 4*s);
-      ctx.fillRect(ax+1*s, coatBot, 5*s, 4*s);
+      ctx.fillRect(ax-6*s*fat, coatBot, 5*s*fat, 4*s);
+      ctx.fillRect(ax+1*s*fat, coatBot, 5*s*fat, 4*s);
       // Boots
       ctx.fillStyle='#2a1a10';
       ctx.beginPath(); ctx.ellipse(ax-3.5*s+ (Math.sin(walkPhase||0)*1.5*s), ay+0.5*s, 3.2*s, 1.6*s, 0, 0, Math.PI*2); ctx.fill();
@@ -15736,17 +15738,11 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     // Subtle shading on lower half (no gradient — keep it flat cartoon)
     ctx.fillStyle = 'rgba(0,0,0,0.07)';
     ctx.beginPath(); ctx.ellipse(hx2, spHy+4*s, HR-0.5*s, HR*0.55, 0, 0, Math.PI*2); ctx.fill();
-    // Black outline (characteristic bold line)
-    ctx.strokeStyle='#1a1208'; ctx.lineWidth=1.2*s;
-    ctx.beginPath(); ctx.ellipse(hx2, spHy, HR, HR, 0, 0, Math.PI*2); ctx.stroke();
     // Two round white eyes side by side
     const eyeY = spHy - 1*s, eyeR = 4.2*s;
     ctx.fillStyle='#fff';
     ctx.beginPath(); ctx.arc(hx2 - 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(hx2 + 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle='#1a1208'; ctx.lineWidth=1*s;
-    ctx.beginPath(); ctx.arc(hx2 - 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx2 + 4.2*s, eyeY, eyeR, 0, Math.PI*2); ctx.stroke();
     // Tiny black pupils
     ctx.fillStyle='#000';
     ctx.beginPath(); ctx.arc(hx2 - 4*s + f*0.3*s, eyeY, 0.9*s, 0, Math.PI*2); ctx.fill();
@@ -15789,10 +15785,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Hat band
       ctx.fillStyle='#1a5a1a';
       ctx.fillRect(hx2-HR-1*s, spHy-5*s, (HR+1)*2*s/s, 1.6*s);
-      // Red hair tuft peeking out
-      ctx.fillStyle=skin.hair;
-      ctx.beginPath(); ctx.arc(hx2-3*s, spHy-6*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(hx2+3*s, spHy-6*s, 1.6*s, 0, Math.PI*2); ctx.fill();
     } else if(hat==='beanie_yel'){
       // Cartman — light blue beanie with yellow pompom
       ctx.fillStyle='#74c8e8';
@@ -15808,7 +15800,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
     } else if(hat==='parka'){
       // Kenny — orange parka hood covers most of the face
-      ctx.fillStyle=oa || '#d86a14';
+      ctx.fillStyle=skin.outfitA || '#d86a14';
       // Full hood wrap
       ctx.beginPath();
       ctx.arc(hx2, spHy-1*s, HR+2*s, Math.PI*0.95, Math.PI*2.05, false);
@@ -16071,7 +16063,9 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Eyes + face
-  if(_isHuman && skin.outfit!=='ghost' && skin.outfit!=='southpark'){
+  if(_isHuman && skin.outfit==='southpark'){
+    // South Park eyes + mouth are drawn in the head block; skip default alien eyes here.
+  } else if(_isHuman && skin.outfit!=='ghost' && skin.outfit!=='southpark'){
     // Small human eyes (white with iris)
     ctx.fillStyle='#fff';
     ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
