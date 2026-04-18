@@ -1,3 +1,15 @@
+// --- SHIP TYPES & PAINTS ---
+// Organized by ship type. Each type has multiple paint/color variants.
+export const SHIP_TYPES = [
+  {id:'saucer',  name:'Saucer',       description:'Classic disc-shaped UFO'},
+  {id:'xwing',   name:'X-Fighter',    description:'Four-winged starfighter'},
+  {id:'tie',     name:'Twin-Ion',     description:'Imperial interceptor'},
+  {id:'falcon',  name:'Freighter',    description:'Modified smuggler ship'},
+  {id:'wedge',   name:'Wedge',        description:'Triangular capital ship'},
+  {id:'rocket',  name:'Rocket',       description:'Retro finned rocket'},
+  {id:'shuttle', name:'Shuttle',      description:'Orbital shuttle'},
+];
+
 export const SHIP_PAINTS = [
   {id:'default',name:'Classic Saucer',color:'#bbb',accent:'#888',trail:'#0f0',cost:0,ship:'saucer'},
   {id:'stealth',name:'Shadow Saucer',color:'#333',accent:'#111',trail:'#060',cost:0,ship:'saucer'},

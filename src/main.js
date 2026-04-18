@@ -1,7 +1,7 @@
 import { TRANSLATIONS } from './translations.js';
 import { GRAVITY, BEAM_WIDTH, GROUND_LEVEL, LEAVE_THRESHOLD, LAND_DISTANCE, WATER_DEPTH, WATER_SURFACE, SEABED_Y, EARTH_WORLD_WIDTH } from './config/constants.js';
 import { ALIEN_RACES, ALIEN_SKINS } from './config/aliens.js';
-import { SHIP_PAINTS } from './config/ships.js';
+import { SHIP_PAINTS, SHIP_TYPES } from './config/ships.js';
 import { CREW_BONUSES } from './config/crew.js';
 
 // --- LANGUAGE SYSTEM ---
@@ -86,7 +86,8 @@ function skinTint(gray, hexOrRainbow, ratio){
 }
 
 // --- MAIN MENU STATE ---
-let mainMenuMode = 'menu'; // 'menu', 'skins', 'shipskins', 'debugPlanet', 'debugUnits', 'debugPreview', null (in game)
+let mainMenuMode = 'menu'; // 'menu', 'skins', 'raceskins', 'shipskins', 'shipVariants', 'debug', 'debugPlanet', 'debugUnits', 'debugPreview', 'sandbox', 'sandboxCaves', 'sandboxCaveWalk', null (in game)
+let caveWalkState = null; // {caveIdx, alien:{x,y,vx,vy,facing,walkT,onGround}, worldW}
 let mainMenuSel = 0;
 let mainMenuStars = [];
 let mainMenuAlienPhase = 0;
@@ -172,11 +173,16 @@ let fires = [];
 let ashPiles = []; // burned-down humans — {x, y, life, maxLife}
 let acidPuddles = []; // persistent ground acid — {x, y, r, life, maxLife}
 let rockets = []; // rocket projectiles — {x, y, vx, vy, life}
+let bloodPools = []; // dark stains on the ground — {x, y, r, targetR, life, maxLife, color}
+let gibs = []; // flying limb chunks — {x, y, vx, vy, rot, rotV, size, life, kind, color, onGround, groundY}
+let skidMarks = []; // tire skid marks — {x, y, w, life, maxLife, alpha}
 // On-foot alien weapon projectiles
 let stunWaves = []; // neural stunner cones + panic wails — {x,y,r,maxR,life,maxLife,kind:'cone'|'radial',dir,effect}
 let plasmaBolts = []; // arcing plasma globs — {x,y,vx,vy,life}
 let gravityWells = []; // thrown orbs — {x,y,vx,vy,phase,timer,r,maxR}
 let parasites = []; // homing symbiotes — {x,y,vx,vy,life,target,attachT}
+let chainsawSlashes = []; // short melee arcs — {x,y,dir,life,maxLife}
+let chainsawRev = 0; // visual rev level while firing
 // Master pool of weapon primitives — any race picks 5 of these
 const WEAPON_POOL = {
   stunner: { label:'Stunner',   cd:30,  color:'#8ef' },
@@ -187,19 +193,20 @@ const WEAPON_POOL = {
   laser:   { label:'Laser',     cd:10,  color:'#0ff' },
   acid:    { label:'Acid',      cd:140, color:'#cf0' },
   rocket:  { label:'Rocket',    cd:90,  color:'#f40' },
+  chainsaw:{ label:'Chainsaw',  cd:6,   color:'#fd4' },
 };
 // Per-race loadout — each race has 5 unique weapons themed to its biology
 const RACE_LOADOUTS = {
-  grey:      ['stunner','wail','plasma','gwell','swarm'],
-  larva:     ['acid','swarm','plasma','stunner','wail'],
-  reptilian: ['plasma','rocket','wail','stunner','gwell'],
-  insectoid: ['swarm','stunner','acid','wail','plasma'],
-  human:     ['laser','rocket','stunner','wail','gwell'],
-  blob:      ['acid','gwell','wail','swarm','plasma'],
-  tentacle:  ['wail','gwell','swarm','stunner','acid'],
-  mushroom:  ['acid','wail','swarm','stunner','gwell'],
-  cyborg:    ['laser','rocket','stunner','plasma','gwell'],
-  cosmic:    ['plasma','gwell','wail','laser','swarm'],
+  grey:      ['stunner','wail','plasma','gwell','swarm','chainsaw'],
+  larva:     ['acid','swarm','plasma','stunner','wail','chainsaw'],
+  reptilian: ['plasma','rocket','wail','stunner','gwell','chainsaw'],
+  insectoid: ['swarm','stunner','acid','wail','plasma','chainsaw'],
+  human:     ['laser','rocket','stunner','wail','gwell','chainsaw'],
+  blob:      ['acid','gwell','wail','swarm','plasma','chainsaw'],
+  tentacle:  ['wail','gwell','swarm','stunner','acid','chainsaw'],
+  mushroom:  ['acid','wail','swarm','stunner','gwell','chainsaw'],
+  cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
+  cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -665,6 +672,35 @@ function drawLavaBoss(){
 
 // --- MOTHERSHIP INTERIOR ---
 let mothershipMode = false; // true when inside mothership
+// --- PYRAMID INTERIOR (Khet tomb walk-in) ---
+let pyramidInteriorMode = false;
+let pyramidInterior = {
+  exitX: 0,           // alien.x to restore when leaving
+  exitY: 0,           // alien.y to restore when leaving (for underwater exits)
+  theme: 'tomb',      // 'tomb' | 'cave' | 'bunker' | ... — dictates visuals/puzzle flavor
+  worldW: 1800,
+  enterCD: 0,         // small cooldown after entering so E doesn't immediately re-trigger exit
+  alien: {x:120, y:0, vx:0, vy:0, facing:1, walkT:0, onGround:true},
+  // --- PUZZLE: step on 4 glyph plates in the sequence shown above the sarcophagus ---
+  puzzle: {
+    plates: [],      // [{x, glyph, color, litT}]
+    targetSeq: [],   // array of plate indices in correct order
+    progress: 0,     // how many correct steps taken
+    solved: false,
+    rewardGiven: false,
+    solveAnim: 0,    // ticks of celebration animation
+    hintT: 0,        // flashing hint when wrong
+    lastPlateIdx: -1, // to debounce stepping on same plate
+    revealT: 0,      // sarcophagus opening animation
+  },
+};
+// Plate glyph palette
+const PYR_PLATE_DEFS = [
+  {glyph:'\u2600', color:'#ffd26a', name:'sun'},       // sun
+  {glyph:'\u25B2', color:'#c8a058', name:'pyramid'},   // pyramid
+  {glyph:'\u2625', color:'#e8bb78', name:'ankh'},      // ankh
+  {glyph:'\u25C8', color:'#a8c8d8', name:'eye'},       // diamond/eye
+];
 const mothershipInterior = {
   width:1200, height:400,
   npcs:[
@@ -818,7 +854,16 @@ const alien = {
   shootCooldown:0, health:100,
   w:12, h:30,
   weapon:0, // index into ALIEN_WEAPONS
-  weaponCD:[0,0,0,0,0]
+  weaponCD:[0,0,0,0,0],
+  // --- EXPLORATION STATE ---
+  diveSuit:false,       // auto-equipped first time alien swims underwater
+  diveSuitShownT:0,     // briefly highlights the suit when first equipped
+  underwater:false,     // true this frame when submerged
+  oxygen:100,           // 0-100, depletes underwater if no suit
+  bubbleT:0,
+  // --- GRAPPLING HOOK (press G) ---
+  grapple:null,         // null | {phase:'flying'|'attached', x,y,vx,vy, anchorX,anchorY, life}
+  _gPrev:false,
 };
 
 function triggerShake(intensity){ screenShake.intensity=Math.max(screenShake.intensity,intensity); }
@@ -1017,6 +1062,27 @@ const planetDefs = [
     ],
   },
   {
+    id: 'tomb', name: 'Khet', desc: '"Sealed pyramids. And one that isn\'t."',
+    radius: 170, color: '#d4a848', color2: '#b08828', atmosphere: '#e8c878',
+    skyTop: '#0a0804', skyMid: '#2a1810', skyBot: '#4a3018',
+    groundColor: ['#c89860','#a07838','#805820'], grassColor: '#d0a858',
+    buildingColors: [['#d4a868','#b08838','#806020']],
+    inhabitantCount: 32, buildingDensity: 0.5, hasClouds: false, isAlien: true,
+    alienSkin: ['#c8a060','#a08040','#d8b070','#906030'],
+    alienHeadShape: 'egyptian',
+    alienExtra: 'none',
+    alienLabel: 'Tomb Slave',
+    hasPyramids: true, hasSlaves: true,
+    sadFacts: ['"They built them for a god who never came..."','"Sand fills the lungs of generations..."','"The overseer\'s whip never rests..."','"One pyramid was left open. No one knows why..."'],
+    cryPhrases: ['THE PHARAOH WEEPS','MY CHAINS','WHO WILL FINISH IT','MASTER HELP','SAND AND BLOOD','FREE AT LAST','THE OPEN ONE CALLS'],
+    alienTypes: [
+      { type:'slave',    label:'Tomb Slave',    scale:0.95, bodyWidth:4, headR:8, mass:0.9, colors:['#b08050','#906030','#a07040'] },
+      { type:'overseer', label:'Overseer',      scale:1.15, bodyWidth:6, headR:9, mass:1.5, colors:['#3a2a1a','#2a1a0a','#4a3a20'] },
+      { type:'pharaoh',  label:'Forgotten Pharaoh', scale:1.3, bodyWidth:7, headR:11, mass:2.2, colors:['#d4a020','#b08010','#ffd060'] },
+      { type:'child',    label:'Slave Child',   scale:0.55, bodyWidth:3, headR:8, mass:0.3, colors:['#c09060','#a07850'] },
+    ],
+  },
+  {
     id: 'asteroid', name: 'Gorvath Rock', desc: '"A drifting tomb. Something lives inside."',
     radius: 60, color: '#3a3a3a', color2: '#1a1a1a', atmosphere: '#4a2a4a',
     skyTop: '#000000', skyMid: '#0a0008', skyBot: '#150010',
@@ -1114,14 +1180,16 @@ const earthTypeQuotes = {
 };
 
 // --- SPACESHIP ---
-const ship = { x:400, y:GROUND_LEVEL-200, vx:0, vy:0, tilt:0, boosting:false, beamActive:false, lightPhase:0 };
+const ship = { x:400, y:GROUND_LEVEL-200, vx:0, vy:0, tilt:0, boosting:false, beamActive:false, lightPhase:0, lasso:null };
 
 // --- INIT ---
 const mothershipPos={x:3500,y:-600};
 function initSpacePlanets() {
   planets = [];
   const positions = [
-    {x:1500,y:-1500},{x:4000,y:-2500},{x:6500,y:-1800},{x:3000,y:-4200},{x:5500,y:-3800},{x:7500,y:-4500},{x:-2000,y:-6500},
+    {x:1500,y:-1500},{x:4000,y:-2500},{x:6500,y:-1800},{x:3000,y:-4200},{x:5500,y:-3800},{x:7500,y:-4500},
+    {x:9800,y:-5400}, // Khet — pyramid tomb world
+    {x:-2000,y:-6500},
     {x:22000,y:-16000}, // Sun — very far away, must travel to discover
   ];
   planetDefs.forEach((def,i) => {
@@ -1258,6 +1326,38 @@ function generateBuilding(x) {
     if(r<0.4){const l=4+Math.floor(Math.random()*4); addUnit(x, GROUND_LEVEL-l*20-18, l*35, l*20+18, 'grandPyramid', {layers:l});}
     else if(r<0.7){const c=3+Math.floor(Math.random()*2); addUnit(x, GROUND_LEVEL-95, c*28+10, 95, 'temple', {columnCount:c});}
     else{const h=4+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-h*22-15, 20, h*22+15, 'obelisk', {floors:h});}
+  }else if(p.id==='tomb'){
+    // Khet is a living ancient-Egyptian world — pyramids + temples + obelisks + sphinxes + markets + statues
+    const r=Math.random();
+    if(r<0.18){
+      // Half-built pyramid: truncated top, scaffolding
+      const l=3+Math.floor(Math.random()*3);
+      const fullL=l+2+Math.floor(Math.random()*2);
+      const hh=l*22+10;
+      addUnit(x, GROUND_LEVEL-hh, l*38+30, hh, 'halfPyramid', {layers:l, targetLayers:fullL, health:260});
+    } else if(r<0.38){
+      // Closed pyramid
+      const l=4+Math.floor(Math.random()*4);
+      const pw=l*40, ph=l*22+20;
+      addUnit(x, GROUND_LEVEL-ph, pw, ph, 'closedPyramid', {layers:l, health:500});
+    } else if(r<0.52){
+      // Sphinx (colossal lion body + pharaoh head)
+      addUnit(x, GROUND_LEVEL-72, 140, 72, 'sphinx', {health:320});
+    } else if(r<0.65){
+      // Obelisk (reuse existing obelisk type)
+      const hh=5+Math.floor(Math.random()*3);
+      addUnit(x, GROUND_LEVEL-hh*22-15, 20, hh*22+15, 'obelisk', {floors:hh});
+    } else if(r<0.78){
+      // Ancient Egyptian temple (reuse temple with column layout)
+      const c=3+Math.floor(Math.random()*3);
+      addUnit(x, GROUND_LEVEL-95, c*28+10, 95, 'temple', {columnCount:c});
+    } else if(r<0.90){
+      // Desert market (stalls)
+      addUnit(x, GROUND_LEVEL-48, 80, 48, 'desertMarket', {});
+    } else {
+      // Anubis statue
+      addUnit(x, GROUND_LEVEL-90, 46, 90, 'anubisStatue', {});
+    }
   }else{
     // Asteroid and fallback
     addUnit(x, GROUND_LEVEL-40-Math.random()*40, 40+Math.random()*40, 40+Math.random()*40, 'alienStructure', {});
@@ -1792,6 +1892,430 @@ function drawBuildingUnit(b) {
     ctx.moveTo(sx+w/2,sy+h*0.8); ctx.lineTo(sx+w/2-6,sy+h*0.9); ctx.lineTo(sx+w/2+6,sy+h*0.9); ctx.closePath(); ctx.fill();
     break;
   }
+  case 'closedPyramid': {
+    const l=b.layers||5;
+    // Back shadow face (darker receding)
+    ctx.fillStyle='#6a4a1e';
+    ctx.beginPath(); ctx.moveTo(sx,sy+h); ctx.lineTo(sx+w/2,sy); ctx.lineTo(sx+w,sy+h); ctx.closePath(); ctx.fill();
+    // Lit left face
+    ctx.fillStyle='#d8a858';
+    ctx.beginPath(); ctx.moveTo(sx,sy+h); ctx.lineTo(sx+w/2,sy); ctx.lineTo(sx+w/2,sy+h); ctx.closePath(); ctx.fill();
+    // Stepped block tiers
+    const tiers=Math.max(6,l*2);
+    ctx.strokeStyle='rgba(60,36,14,0.55)'; ctx.lineWidth=1;
+    for(let r=1;r<tiers;r++){
+      const ry=sy+r*h/tiers; const rw=w*(1-r/tiers);
+      ctx.beginPath(); ctx.moveTo(sx+w/2-rw/2,ry); ctx.lineTo(sx+w/2+rw/2,ry); ctx.stroke();
+    }
+    // Vertical block seams (on lit face only)
+    ctx.strokeStyle='rgba(60,36,14,0.28)'; ctx.lineWidth=0.7;
+    for(let r=1;r<tiers;r++){
+      const ry0=sy+(r-1)*h/tiers, ry1=sy+r*h/tiers;
+      const rw0=w*(1-(r-1)/tiers)/2, rw1=w*(1-r/tiers)/2;
+      const nb=Math.max(2,Math.floor(rw0/16));
+      for(let bi=1;bi<=nb;bi++){
+        const bt0=bi/nb, bt1=bi/nb;
+        const x0=sx+w/2 - rw0*bt0;
+        const x1=sx+w/2 - rw1*bt1;
+        ctx.beginPath(); ctx.moveTo(x0,ry0); ctx.lineTo(x1,ry1); ctx.stroke();
+      }
+    }
+    // Seam between two faces (center vertical)
+    ctx.strokeStyle='rgba(40,24,10,0.5)'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(sx+w/2,sy); ctx.lineTo(sx+w/2,sy+h); ctx.stroke();
+    // Capstone (dull — sealed, no glow)
+    ctx.fillStyle='#8a6828';
+    ctx.beginPath(); ctx.moveTo(sx+w/2,sy); ctx.lineTo(sx+w/2-7,sy+14); ctx.lineTo(sx+w/2+7,sy+14); ctx.closePath(); ctx.fill();
+    // Carved sun-disc glyph (flush with face, NOT a doorway — just etched stone)
+    ctx.strokeStyle='rgba(60,36,14,0.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(sx+w/2, sy+h*0.7, 7, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx+w/2, sy+h*0.7, 3, 0, Math.PI*2); ctx.stroke();
+    // Rays radiating from the disc
+    for(let ri=0;ri<8;ri++){
+      const ang=ri*Math.PI/4, r1=9, r2=12;
+      ctx.beginPath();
+      ctx.moveTo(sx+w/2+Math.cos(ang)*r1, sy+h*0.7+Math.sin(ang)*r1);
+      ctx.lineTo(sx+w/2+Math.cos(ang)*r2, sy+h*0.7+Math.sin(ang)*r2);
+      ctx.stroke();
+    }
+    break;
+  }
+  case 'openPyramid': {
+    const l=b.layers||5;
+    // Smooth solid pyramid triangle (matches sandbox 'grandPyramid' look)
+    ctx.fillStyle='#c0a050';
+    ctx.beginPath(); ctx.moveTo(sx,sy+h); ctx.lineTo(sx+w/2,sy); ctx.lineTo(sx+w,sy+h); ctx.closePath(); ctx.fill();
+    // Layer lines
+    ctx.strokeStyle='rgba(200,160,60,0.2)'; ctx.lineWidth=0.5;
+    for(let r=1;r<l;r++){
+      const ry=sy+r*h/l;
+      const rw=w*(1-r/l);
+      ctx.beginPath(); ctx.moveTo(sx+w/2-rw/2,ry); ctx.lineTo(sx+w/2+rw/2,ry); ctx.stroke();
+    }
+    // Golden capstone
+    ctx.fillStyle='#ffd700';
+    ctx.beginPath(); ctx.moveTo(sx+w/2,sy); ctx.lineTo(sx+w/2-8,sy+18); ctx.lineTo(sx+w/2+8,sy+18); ctx.closePath(); ctx.fill();
+    // Capstone pulsing glow
+    ctx.fillStyle=`rgba(255,255,200,${0.3+Math.sin(t*3)*0.2})`;
+    ctx.beginPath(); ctx.arc(sx+w/2,sy+8,6,0,Math.PI*2); ctx.fill();
+    // Eye/entrance above doorway (decorative — matches sandbox grandPyramid)
+    ctx.fillStyle='rgba(255,200,50,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(sx+w/2,sy+h*0.55); ctx.lineTo(sx+w/2-7,sy+h*0.65); ctx.lineTo(sx+w/2+7,sy+h*0.65); ctx.closePath();
+    ctx.fill();
+    // DARK OPEN DOORWAY at base center (walk-in entrance)
+    const dw=Math.min(28, w*0.14), dh=Math.min(40, h*0.32);
+    const dx=sx+w/2-dw/2, dy=sy+h-dh;
+    ctx.fillStyle='#050302';
+    ctx.fillRect(dx, dy, dw, dh);
+    // Torchlight peeking out
+    const dg=ctx.createRadialGradient(sx+w/2, dy+dh*0.4, 1, sx+w/2, dy+dh*0.4, dw*1.2);
+    dg.addColorStop(0,`rgba(255,170,60,${0.5+Math.sin(t*4)*0.15})`);
+    dg.addColorStop(0.7,'rgba(180,80,20,0.15)');
+    dg.addColorStop(1,'transparent');
+    ctx.fillStyle=dg; ctx.fillRect(dx-10, dy-10, dw+20, dh+14);
+    // Sandstone door frame
+    ctx.fillStyle='#b88860';
+    ctx.fillRect(dx-4, dy-4, 4, dh+4); // left
+    ctx.fillRect(dx+dw, dy-4, 4, dh+4); // right
+    ctx.fillRect(dx-4, dy-4, dw+8, 5); // lintel
+    // Glyphs above door
+    ctx.fillStyle='rgba(60,36,14,0.8)';
+    ctx.font='bold 8px monospace'; ctx.textAlign='center';
+    ctx.fillText('\u2600 \u25B2 \u2600', sx+w/2, dy-7);
+    break;
+  }
+  case 'halfPyramid': {
+    const l=b.layers||3;
+    const tgt=b.targetLayers||(l+2);
+    // The pyramid would fully span triangle with apex at (sx+w/2, sy - extraH)
+    // where extraH corresponds to the missing (tgt-l) layers. We only draw up to sy (truncated).
+    const layerH=h/l;
+    // Ghost/outline of the unfinished apex
+    const missingLayers=tgt-l;
+    const apexY=sy - missingLayers*layerH;
+    const apexX=sx+w/2;
+    const fullW = w * (tgt/l);
+    const fullLeft = sx+w/2 - fullW/2;
+    const fullRight= sx+w/2 + fullW/2;
+    // Dashed "plan" outline of full intended pyramid
+    ctx.strokeStyle='rgba(180,140,80,0.35)'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(fullLeft, sy+h); ctx.lineTo(apexX, apexY); ctx.lineTo(fullRight, sy+h); ctx.stroke();
+    ctx.setLineDash([]);
+    // Built portion — truncated pyramid (trapezoid)
+    const topHalfW = w/2 * (1 - (missingLayers*layerH)/((missingLayers+l)*layerH));
+    // simpler: the top edge width at sy is w * (missingLayers/tgt) from the apex
+    const topW = fullW * (missingLayers/tgt);
+    const topLeft = sx+w/2 - topW/2;
+    const topRight= sx+w/2 + topW/2;
+    // Back face shadow
+    ctx.fillStyle='#6a4a1e';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy+h); ctx.lineTo(topLeft, sy); ctx.lineTo(topRight, sy); ctx.lineTo(sx+w, sy+h);
+    ctx.closePath(); ctx.fill();
+    // Lit left face
+    ctx.fillStyle='#d8a858';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy+h); ctx.lineTo(topLeft, sy); ctx.lineTo(sx+w/2, sy); ctx.lineTo(sx+w/2, sy+h);
+    ctx.closePath(); ctx.fill();
+    // Stepped tiers on built portion
+    ctx.strokeStyle='rgba(60,36,14,0.55)'; ctx.lineWidth=1;
+    for(let r=1;r<l;r++){
+      const ry=sy+h-r*layerH;
+      const rw=w*(1-r/tgt);
+      ctx.beginPath(); ctx.moveTo(sx+w/2-rw/2, ry); ctx.lineTo(sx+w/2+rw/2, ry); ctx.stroke();
+    }
+    // Seam
+    ctx.strokeStyle='rgba(40,24,10,0.5)'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(sx+w/2, sy); ctx.lineTo(sx+w/2, sy+h); ctx.stroke();
+    // Flat working top surface
+    ctx.fillStyle='#e0b870';
+    ctx.fillRect(topLeft, sy-2, topW, 3);
+    ctx.strokeStyle='rgba(60,36,14,0.7)';
+    ctx.strokeRect(topLeft, sy-2, topW, 3);
+    // SCAFFOLDING on the right slope — wooden poles + planks
+    ctx.strokeStyle='#6a4020'; ctx.lineWidth=2;
+    const slopeDX = (fullRight - (sx+w))/(apexY - (sy+h)); // rise/run along right slope
+    for(let si=0;si<3;si++){
+      const polyY = sy+h - si*20 - 20;
+      const slopeX = (sx+w) + slopeDX*(polyY-(sy+h));
+      // Vertical pole
+      ctx.beginPath(); ctx.moveTo(slopeX+2, sy+h); ctx.lineTo(slopeX+2, polyY); ctx.stroke();
+      // Plank out to slope
+      ctx.strokeStyle='#5a3418'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(slopeX+2, polyY); ctx.lineTo(slopeX-10, polyY); ctx.stroke();
+      ctx.strokeStyle='#6a4020'; ctx.lineWidth=2;
+    }
+    // Ladder leaning against top
+    ctx.strokeStyle='#8a5a28'; ctx.lineWidth=1.8;
+    const ladX=topRight+1, ladX2=sx+w-4;
+    ctx.beginPath(); ctx.moveTo(ladX, sy-1); ctx.lineTo(ladX2, sy+h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ladX+4, sy-1); ctx.lineTo(ladX2+4, sy+h); ctx.stroke();
+    const ladRungs=5;
+    for(let ri=1;ri<ladRungs;ri++){
+      const rt=ri/ladRungs;
+      const rx0=ladX+(ladX2-ladX)*rt;
+      const ry0=sy-1+h*rt;
+      ctx.beginPath(); ctx.moveTo(rx0, ry0); ctx.lineTo(rx0+4, ry0); ctx.stroke();
+    }
+    // Pile of hewn blocks at base
+    ctx.fillStyle='#b08840';
+    ctx.fillRect(sx-14, sy+h-10, 12, 10);
+    ctx.fillRect(sx-6, sy+h-18, 12, 8);
+    ctx.fillRect(sx+w+2, sy+h-8, 12, 8);
+    ctx.strokeStyle='rgba(60,36,14,0.6)'; ctx.lineWidth=0.8;
+    ctx.strokeRect(sx-14, sy+h-10, 12, 10);
+    ctx.strokeRect(sx-6, sy+h-18, 12, 8);
+    ctx.strokeRect(sx+w+2, sy+h-8, 12, 8);
+    // Dust puff at top (construction active)
+    ctx.fillStyle=`rgba(220,200,160,${0.25+Math.sin(t*2+b.windowSeed*0.01)*0.15})`;
+    ctx.beginPath(); ctx.arc(sx+w/2, sy-6, 5+Math.sin(t*3)*1.5, 0, Math.PI*2); ctx.fill();
+    break;
+  }
+  case 'sphinx': {
+    // Colossal sphinx: recumbent lion body + pharaoh head with nemes headdress
+    // Sandstone body plinth
+    ctx.fillStyle='#b08848';
+    ctx.fillRect(sx, sy+h-12, w, 12);
+    ctx.strokeStyle='rgba(60,36,14,0.5)'; ctx.lineWidth=1;
+    ctx.strokeRect(sx, sy+h-12, w, 12);
+    // Lion body (lying down, long & low)
+    const bodyY=sy+h*0.42;
+    ctx.fillStyle='#d4a868';
+    ctx.beginPath();
+    ctx.moveTo(sx+6, sy+h-12);
+    ctx.lineTo(sx+6, bodyY+10);
+    ctx.quadraticCurveTo(sx+w*0.2, bodyY, sx+w*0.55, bodyY+4);
+    ctx.lineTo(sx+w*0.9, bodyY+12);
+    ctx.lineTo(sx+w-6, bodyY+14);
+    ctx.lineTo(sx+w-6, sy+h-12);
+    ctx.closePath();
+    ctx.fill();
+    // Body shadow underside
+    ctx.fillStyle='#8a6a38';
+    ctx.fillRect(sx+6, sy+h-18, w-12, 6);
+    // Front paws (two rectangles in front of body)
+    ctx.fillStyle='#c49858';
+    ctx.fillRect(sx+w*0.55, sy+h-16, 10, 16);
+    ctx.fillRect(sx+w*0.72, sy+h-16, 10, 16);
+    // Paw toes
+    ctx.strokeStyle='rgba(60,36,14,0.55)'; ctx.lineWidth=1;
+    for(let pi=0;pi<2;pi++){
+      const px0=sx+w*0.55+pi*w*0.17;
+      for(let ti=0;ti<3;ti++){
+        ctx.beginPath(); ctx.moveTo(px0+1+ti*3, sy+h-3); ctx.lineTo(px0+1+ti*3, sy+h-6); ctx.stroke();
+      }
+    }
+    // Haunches (rear bump)
+    ctx.fillStyle='#c89860';
+    ctx.beginPath();
+    ctx.ellipse(sx+w*0.12, bodyY+12, 14, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Tail curled along side
+    ctx.strokeStyle='#a07838'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(sx+4, bodyY+18);
+    ctx.quadraticCurveTo(sx-8, bodyY+8, sx+2, bodyY-2);
+    ctx.stroke();
+    ctx.fillStyle='#8a6028';
+    ctx.beginPath(); ctx.arc(sx+2, bodyY-2, 3, 0, Math.PI*2); ctx.fill();
+    // HEAD at front with nemes (striped pharaoh headdress)
+    const headCX=sx+w-18, headCY=sy+h*0.28;
+    // Nemes headdress back (gold/blue striped cloth)
+    ctx.fillStyle='#d4a030';
+    ctx.beginPath();
+    ctx.moveTo(headCX-16, headCY-4);
+    ctx.quadraticCurveTo(headCX, headCY-24, headCX+16, headCY-4);
+    ctx.lineTo(headCX+20, headCY+20);
+    ctx.lineTo(headCX-20, headCY+20);
+    ctx.closePath();
+    ctx.fill();
+    // Nemes stripes (alternating blue)
+    ctx.fillStyle='rgba(40,80,140,0.7)';
+    for(let si=0;si<4;si++){
+      ctx.fillRect(headCX-20+si*10, headCY-4, 4, 24);
+    }
+    // Face (sandstone)
+    ctx.fillStyle='#d8b078';
+    ctx.beginPath();
+    ctx.ellipse(headCX, headCY+2, 12, 14, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Broken nose (classic sphinx damage)
+    ctx.fillStyle='#b0843c';
+    ctx.beginPath();
+    ctx.ellipse(headCX, headCY+6, 3, 2, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Eyes (stoic)
+    ctx.fillStyle='rgba(40,24,8,0.85)';
+    ctx.fillRect(headCX-5, headCY, 3, 1.5);
+    ctx.fillRect(headCX+2, headCY, 3, 1.5);
+    // Mouth line
+    ctx.strokeStyle='rgba(60,36,14,0.7)'; ctx.lineWidth=0.8;
+    ctx.beginPath(); ctx.moveTo(headCX-3, headCY+10); ctx.lineTo(headCX+3, headCY+10); ctx.stroke();
+    // False beard (pharaoh)
+    ctx.fillStyle='#b8903c';
+    ctx.fillRect(headCX-2, headCY+14, 4, 8);
+    // Uraeus (rearing cobra on forehead)
+    ctx.fillStyle='#ffd040';
+    ctx.beginPath(); ctx.arc(headCX, headCY-8, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#a8781c';
+    ctx.fillRect(headCX-1, headCY-12, 2, 4);
+    // Sand piled against base
+    ctx.fillStyle='#c8a060';
+    ctx.beginPath();
+    ctx.moveTo(sx-4, sy+h);
+    ctx.quadraticCurveTo(sx+12, sy+h-5, sx+24, sy+h);
+    ctx.closePath(); ctx.fill();
+    break;
+  }
+  case 'desertMarket': {
+    // Open-air Egyptian bazaar — canopies, merchandise piles, clay jars
+    // Back wall (adobe)
+    ctx.fillStyle='#b08048';
+    ctx.fillRect(sx, sy+h*0.45, w, h*0.55);
+    ctx.strokeStyle='rgba(60,36,14,0.4)'; ctx.lineWidth=1;
+    ctx.strokeRect(sx, sy+h*0.45, w, h*0.55);
+    // Adobe brick lines
+    for(let by=sy+h*0.55; by<sy+h-6; by+=8){
+      ctx.beginPath(); ctx.moveTo(sx, by); ctx.lineTo(sx+w, by); ctx.stroke();
+    }
+    // Striped cloth canopy across front (red/white — trader awning)
+    const canY=sy+h*0.25;
+    const canH=h*0.2;
+    ctx.fillStyle='#c04030';
+    ctx.fillRect(sx-2, canY, w+4, canH);
+    ctx.fillStyle='#e8d8a0';
+    for(let cx=sx;cx<sx+w;cx+=12){
+      ctx.fillRect(cx, canY, 6, canH);
+    }
+    // Canopy poles
+    ctx.fillStyle='#5a3a18';
+    ctx.fillRect(sx-2, canY, 3, h*0.55);
+    ctx.fillRect(sx+w-1, canY, 3, h*0.55);
+    // Ripple at bottom of canopy (scalloped edge)
+    ctx.fillStyle='#8a2818';
+    for(let ex=sx-2; ex<sx+w+2; ex+=8){
+      ctx.beginPath();
+      ctx.moveTo(ex, canY+canH);
+      ctx.lineTo(ex+4, canY+canH+3);
+      ctx.lineTo(ex+8, canY+canH);
+      ctx.closePath(); ctx.fill();
+    }
+    // Clay amphora jars on shelf (fruit/oil merchants)
+    for(let ji=0; ji<3; ji++){
+      const jx=sx+12+ji*24, jy=sy+h*0.62;
+      ctx.fillStyle='#a05028';
+      ctx.beginPath();
+      ctx.moveTo(jx-5, jy);
+      ctx.quadraticCurveTo(jx-7, jy+8, jx-4, jy+14);
+      ctx.lineTo(jx+4, jy+14);
+      ctx.quadraticCurveTo(jx+7, jy+8, jx+5, jy);
+      ctx.closePath(); ctx.fill();
+      // Jar neck
+      ctx.fillStyle='#8a4020';
+      ctx.fillRect(jx-3, jy-4, 6, 4);
+      // Glyph stripe
+      ctx.fillStyle='rgba(40,20,6,0.6)';
+      ctx.fillRect(jx-4, jy+6, 8, 1);
+    }
+    // Pile of bread loaves / cloth bolts on ground
+    ctx.fillStyle='#d4a060';
+    for(let li=0;li<3;li++){
+      ctx.beginPath();
+      ctx.ellipse(sx+w*0.65+li*6, sy+h-5-li*3, 6, 3, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Stacked baskets
+    ctx.fillStyle='#8a6030';
+    ctx.fillRect(sx+w*0.78, sy+h-16, 12, 8);
+    ctx.fillRect(sx+w*0.80, sy+h-24, 8, 8);
+    ctx.strokeStyle='rgba(40,20,6,0.55)'; ctx.lineWidth=0.7;
+    for(let bi=0;bi<3;bi++){ ctx.beginPath(); ctx.moveTo(sx+w*0.78, sy+h-14+bi*2); ctx.lineTo(sx+w*0.78+12, sy+h-14+bi*2); ctx.stroke(); }
+    // Scales of Ma'at (merchant's scale)
+    ctx.strokeStyle='#a8882a'; ctx.lineWidth=1.5;
+    const scX=sx+w*0.25, scY=sy+h*0.5;
+    ctx.beginPath(); ctx.moveTo(scX, scY); ctx.lineTo(scX, scY-14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(scX-8, scY-14); ctx.lineTo(scX+8, scY-14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(scX-8, scY-14); ctx.lineTo(scX-8, scY-8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(scX+8, scY-14); ctx.lineTo(scX+8, scY-8); ctx.stroke();
+    ctx.fillStyle='#c8a040';
+    ctx.beginPath(); ctx.arc(scX-8, scY-6, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(scX+8, scY-6, 3, 0, Math.PI*2); ctx.fill();
+    break;
+  }
+  case 'anubisStatue': {
+    // Anubis — jackal-headed god statue on plinth
+    // Plinth
+    ctx.fillStyle='#b08040';
+    ctx.fillRect(sx, sy+h-20, w, 20);
+    ctx.strokeStyle='rgba(40,24,8,0.6)'; ctx.lineWidth=1;
+    ctx.strokeRect(sx, sy+h-20, w, 20);
+    // Hieroglyphs on plinth
+    ctx.fillStyle='rgba(60,36,14,0.7)';
+    ctx.font='bold 8px monospace'; ctx.textAlign='center';
+    ctx.fillText('\u2625 \u2600 \u2625', sx+w/2, sy+h-6);
+    // Body (dark basalt)
+    ctx.fillStyle='#2a2418';
+    ctx.fillRect(sx+w/2-12, sy+h-54, 24, 34);
+    // Shoulder cape lines
+    ctx.fillStyle='#3a3220';
+    ctx.fillRect(sx+w/2-13, sy+h-54, 26, 4);
+    // Arms crossed holding crook & flail
+    ctx.fillStyle='#1a1610';
+    ctx.fillRect(sx+w/2-8, sy+h-48, 4, 14); // left arm
+    ctx.fillRect(sx+w/2+4, sy+h-48, 4, 14); // right arm
+    // Crook (shepherd's staff)
+    ctx.strokeStyle='#c8a040'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx+w/2-6, sy+h-46);
+    ctx.lineTo(sx+w/2-6, sy+h-60);
+    ctx.quadraticCurveTo(sx+w/2-10, sy+h-64, sx+w/2-10, sy+h-60);
+    ctx.stroke();
+    // Flail
+    ctx.strokeStyle='#c8a040';
+    ctx.beginPath(); ctx.moveTo(sx+w/2+6, sy+h-46); ctx.lineTo(sx+w/2+6, sy+h-60); ctx.stroke();
+    for(let fi=0;fi<3;fi++){
+      ctx.beginPath(); ctx.moveTo(sx+w/2+6, sy+h-60); ctx.lineTo(sx+w/2+4+fi*2, sy+h-64); ctx.stroke();
+    }
+    // Jackal head (pointed snout + tall ears)
+    const jhCX=sx+w/2, jhCY=sy+h-62;
+    ctx.fillStyle='#1a140a';
+    // Head
+    ctx.beginPath();
+    ctx.ellipse(jhCX, jhCY, 10, 9, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Snout (protruding forward)
+    ctx.beginPath();
+    ctx.moveTo(jhCX+4, jhCY-1);
+    ctx.lineTo(jhCX+16, jhCY);
+    ctx.lineTo(jhCX+16, jhCY+4);
+    ctx.lineTo(jhCX+4, jhCY+5);
+    ctx.closePath(); ctx.fill();
+    // Tall pointed ears
+    ctx.beginPath();
+    ctx.moveTo(jhCX-6, jhCY-7);
+    ctx.lineTo(jhCX-9, jhCY-16);
+    ctx.lineTo(jhCX-2, jhCY-9);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(jhCX+2, jhCY-9);
+    ctx.lineTo(jhCX+4, jhCY-16);
+    ctx.lineTo(jhCX+7, jhCY-7);
+    ctx.closePath(); ctx.fill();
+    // Eye (glowing gold)
+    ctx.fillStyle=`rgba(255,210,80,${0.6+Math.sin(t*2)*0.3})`;
+    ctx.beginPath(); ctx.arc(jhCX+2, jhCY, 1.5, 0, Math.PI*2); ctx.fill();
+    // Gold collar
+    ctx.fillStyle='#d4a020';
+    ctx.fillRect(sx+w/2-12, sy+h-54, 24, 3);
+    // Subtle aura
+    const aura=ctx.createRadialGradient(jhCX, jhCY, 2, jhCX, jhCY, 40);
+    aura.addColorStop(0,`rgba(255,210,100,${0.12+Math.sin(t*1.5)*0.05})`);
+    aura.addColorStop(1,'transparent');
+    ctx.fillStyle=aura;
+    ctx.beginPath(); ctx.arc(jhCX, jhCY, 40, 0, Math.PI*2); ctx.fill();
+    break;
+  }
   case 'temple': {
     const c=b.columnCount||3;
     // Roof
@@ -2316,6 +2840,22 @@ function generateUnderwaterObjects() {
     });
   }
 
+  // Hidden seabed cave mouths — entrances to bioluminescent deep caves (need dive suit)
+  // Scatter 2 across the ocean, spaced apart
+  const caveCount = 2;
+  for(let ci = 0; ci < caveCount; ci++) {
+    const cxSlot = oceanFrom + 400 + (oceanW-800)*((ci+0.5)/caveCount) + (Math.random()-0.5)*200;
+    underwaterObjects.push({
+      type: 'seabedCave',
+      x: cxSlot,
+      y: SEABED_Y - 4,
+      w: 90 + Math.random()*30,
+      h: 70 + Math.random()*20,
+      glowPhase: Math.random()*Math.PI*2,
+      motePhase: Math.random()*Math.PI*2,
+    });
+  }
+
   // Bubbles (ambient, rise from seabed)
   for(let i = 0; i < 10; i++) {
     underwaterObjects.push({
@@ -2534,6 +3074,21 @@ function loadPlanet(planet) {
       for(let i=0;i<popCount;i++) generateInhabitant(Math.random()*(worldWidth-400)+200);
     }
     initialPopulation=popCount;
+    // Tomb world: mark exactly one pyramid as OPEN; spawn slaves at half-built sites
+    if(planet.id==='tomb'){
+      const closedPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='closedPyramid');
+      if(closedPys.length>0){
+        const chosen = closedPys[Math.floor(Math.random()*closedPys.length)];
+        chosen.blocks[0].buildingType='openPyramid';
+      }
+      const halfPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='halfPyramid');
+      halfPys.forEach(hp => {
+        const cx = hp.x + hp.w/2;
+        for(let k=0;k<4;k++){
+          generateInhabitant(cx + (Math.random()-0.5)*140);
+        }
+      });
+    }
     generateCows();
     generateUnderwaterObjects();
     // Generate military bases on Earth (3 bases at fixed positions)
@@ -3012,19 +3567,56 @@ function enterMothership(){
   mi.spaceEvents=[];
   mi._eventCD=120+Math.random()*180;
   mi._nebulaPhase=Math.random()*1000;
-  // Hub crew — small NPC aliens wandering / working at consoles
+  // Hub crew — varied NPC officers, scientists, engineers, bots (NO children)
   const crewSkinPool=(typeof ALIEN_RACES!=='undefined'&&ALIEN_RACES.length)?ALIEN_RACES:[null];
   mi.hubCrew=[];
-  for(let i=0;i<4;i++){
+  const crewRoster=[
+    {role:'officer',   accent:'#c44', scale:1.05, label:'Officer'},
+    {role:'scientist', accent:'#8cf', scale:1.00, label:'Scientist'},
+    {role:'engineer',  accent:'#fa0', scale:0.95, label:'Engineer'},
+    {role:'guard',     accent:'#aaa', scale:1.10, label:'Guard'},
+    {role:'medic',     accent:'#fff', scale:0.98, label:'Medic'},
+    {role:'bot',       accent:'#8fa', scale:0.85, label:'Maint-Bot'},
+  ];
+  for(let i=0;i<crewRoster.length;i++){
+    const r=crewRoster[i];
     const sk=crewSkinPool[(i+1)%crewSkinPool.length];
     mi.hubCrew.push({
-      x:250+i*380, vx:0, facing:1, walkT:Math.random()*10,
+      role: r.role,
+      accent: r.accent,
+      label: r.label,
+      x:200+i*260, vx:0, facing:i%2===0?1:-1, walkT:Math.random()*10,
       skin: sk&&sk.skin?sk.skin:(typeof getAlienSkin==='function'?getAlienSkin():null),
-      scale:0.55+Math.random()*0.12,
+      scale: r.scale,
       task: Math.random()<0.5?'walk':'work',
       taskT: 120+Math.random()*240,
       targetX: 200+Math.random()*1400,
-      consoleI: i
+      consoleI: i,
+      sparkT: 0,
+      bob: Math.random()*Math.PI*2,
+    });
+  }
+  // Floating probe-drone that glides above the corridor
+  mi.hubDrone = {
+    x: 400, y: 140, vx: 0.6, baseY: 140, phase: Math.random()*10,
+  };
+  // Overhead service gantry with a cargo drone running along a rail
+  mi.gantryDrone = {
+    x: 200, vx: 0.8, cargoHue: 200 + Math.random()*80,
+    blinkPhase: Math.random()*Math.PI*2,
+  };
+  // Data ticker running across the wall
+  mi.tickerOffset = 0;
+  mi.tickerText = ' // SYS-CORE 04:17  |  HULL INTEGRITY 98%  |  NAV-BEACON LOCKED  |  CARGO HOLD: SPECIMENS + LIVESTOCK  |  JUMP DRIVE: IDLE  |  OXYGEN-MIX NOMINAL  |  WARP-CORE 72%  |  COMMS: 3 NEW TRANSMISSIONS  |  LIFE SUPPORT: GREEN  |  AI-WATCH: OBELI ONLINE ';
+  // Cable bundles hanging from ceiling (static once positioned)
+  mi.hubCables=[];
+  for(let i=0;i<12;i++){
+    mi.hubCables.push({
+      x: 80+i*150+Math.random()*40,
+      len: 10+Math.random()*22,
+      thick: 1+Math.random()*1.5,
+      hue: 20+Math.random()*340,
+      sag: 4+Math.random()*6,
     });
   }
   // Fixed consoles along the back wall (blinking screens + holograms)
@@ -3475,6 +4067,786 @@ function drawZooRiot(){
   });
 }
 
+// ============================================================
+// --- HUB CREW MEMBER RENDERING (varied roles, no children) ---
+// ============================================================
+function drawHubCrewMember(c, cx, floorY, t){
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(cx, floorY+2, 14, 3, 0, 0, Math.PI*2); ctx.fill();
+
+  // Bot has a completely different body — not an alien
+  if(c.role==='bot'){
+    const bobY = floorY + Math.sin(c.bob)*1.2;
+    // Treads
+    ctx.fillStyle='#222';
+    ctx.fillRect(cx-11, bobY-6, 22, 6);
+    // Wheel segments
+    ctx.fillStyle='#555';
+    for(let wi=0;wi<4;wi++){
+      ctx.fillRect(cx-10+wi*6, bobY-5, 4, 4);
+    }
+    // Chassis
+    ctx.fillStyle='#7a8a95';
+    ctx.fillRect(cx-10, bobY-24, 20, 18);
+    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=1;
+    ctx.strokeRect(cx-10, bobY-24, 20, 18);
+    // Hazard stripe
+    ctx.fillStyle='#f93';
+    ctx.fillRect(cx-10, bobY-12, 20, 3);
+    ctx.fillStyle='#222';
+    for(let hi=0;hi<5;hi++){
+      ctx.fillRect(cx-10+hi*5, bobY-12, 2.5, 3);
+    }
+    // Head / sensor cluster
+    ctx.fillStyle='#334';
+    ctx.fillRect(cx-6, bobY-32, 12, 8);
+    // Eye
+    const eyeLit = (Math.sin(t*4+c.bob)+1)*0.5;
+    ctx.fillStyle=`rgba(255,220,80,${0.7+eyeLit*0.3})`;
+    ctx.beginPath(); ctx.arc(cx, bobY-28, 2.5, 0, Math.PI*2); ctx.fill();
+    // Arm with welding torch
+    const armAng = Math.sin(c.bob*2)*0.3 + 0.4;
+    const armX = cx + c.facing*(8);
+    const tipX = armX + c.facing*Math.cos(armAng)*10;
+    const tipY = bobY-16 + Math.sin(armAng)*6;
+    ctx.strokeStyle='#445'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(armX, bobY-16); ctx.lineTo(tipX, tipY); ctx.stroke();
+    // Torch flame (occasional)
+    if(c.sparkT>0){
+      const fg=ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, 8);
+      fg.addColorStop(0,'rgba(180,220,255,0.9)');
+      fg.addColorStop(0.5,'rgba(100,150,255,0.5)');
+      fg.addColorStop(1,'transparent');
+      ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(tipX, tipY, 8, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.95)';
+      ctx.beginPath(); ctx.arc(tipX, tipY, 1.6, 0, Math.PI*2); ctx.fill();
+    }
+    // Antenna
+    ctx.strokeStyle='#333'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx+4, bobY-32); ctx.lineTo(cx+6, bobY-40); ctx.stroke();
+    ctx.fillStyle='#f33';
+    ctx.beginPath(); ctx.arc(cx+6, bobY-40, 1.5, 0, Math.PI*2); ctx.fill();
+    return;
+  }
+
+  // Alien crew — reuse the real renderer if available
+  if(c.skin && typeof drawAlienPreview==='function'){
+    drawAlienPreview(cx, floorY, c.scale, c.skin, c.facing, c.walkT);
+  }else{
+    ctx.fillStyle='#6ab58e';
+    ctx.fillRect(cx-6, floorY-22, 12, 18);
+    ctx.beginPath(); ctx.arc(cx, floorY-27, 7, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Role-specific accessories painted on TOP of the base alien
+  const bodyTop = floorY - 26*c.scale;
+  const headY = floorY - 34*c.scale;
+  const chestY = floorY - 20*c.scale;
+  const handY = floorY - 10*c.scale;
+  const handX = cx + c.facing*9*c.scale;
+
+  if(c.role==='officer'){
+    // Peaked cap
+    ctx.fillStyle='#1a1a22';
+    ctx.fillRect(cx-7, headY-5, 14, 4);
+    ctx.fillRect(cx-9+c.facing*2, headY-1, 6, 2); // visor
+    // Red insignia
+    ctx.fillStyle=c.accent;
+    ctx.fillRect(cx-2, headY-4, 4, 2);
+    // Shoulder epaulettes
+    ctx.fillStyle='#dca';
+    ctx.fillRect(cx-6, chestY, 3, 2);
+    ctx.fillRect(cx+3, chestY, 3, 2);
+    // Sash
+    ctx.strokeStyle=c.accent; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(cx-5, chestY); ctx.lineTo(cx+5, chestY+8); ctx.stroke();
+  } else if(c.role==='scientist'){
+    // Lab coat flap
+    ctx.fillStyle='#e8f0ff';
+    ctx.fillRect(cx-7, chestY, 14, 14);
+    ctx.strokeStyle='rgba(100,120,150,0.5)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx, chestY); ctx.lineTo(cx, chestY+14); ctx.stroke();
+    // Glasses
+    ctx.strokeStyle='#222'; ctx.lineWidth=1;
+    ctx.strokeRect(cx-5, headY-1, 4, 3);
+    ctx.strokeRect(cx+1, headY-1, 4, 3);
+    // Clipboard in hand
+    ctx.fillStyle='#c9b080';
+    ctx.fillRect(handX-3, handY-4, 6, 8);
+    ctx.fillStyle='#fff';
+    ctx.fillRect(handX-2, handY-3, 4, 5);
+    ctx.strokeStyle='#888'; ctx.lineWidth=0.5;
+    for(let li=0;li<3;li++){ ctx.beginPath(); ctx.moveTo(handX-2, handY-2+li*1.5); ctx.lineTo(handX+2, handY-2+li*1.5); ctx.stroke(); }
+  } else if(c.role==='engineer'){
+    // Hard hat
+    ctx.fillStyle=c.accent;
+    ctx.fillRect(cx-7, headY-4, 14, 5);
+    ctx.fillStyle='#d80';
+    ctx.fillRect(cx-7, headY+1, 14, 1);
+    // Tool belt
+    ctx.fillStyle='#6a4020';
+    ctx.fillRect(cx-7, chestY+8, 14, 3);
+    ctx.fillStyle='#aaa';
+    ctx.fillRect(cx-5, chestY+8, 2, 3); // wrench
+    ctx.fillRect(cx+3, chestY+8, 2, 3); // screwdriver
+    // Wrench in hand
+    ctx.strokeStyle='#999'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(handX, handY-4); ctx.lineTo(handX, handY+4); ctx.stroke();
+    ctx.fillStyle='#bbb';
+    ctx.fillRect(handX-2, handY-6, 4, 3);
+  } else if(c.role==='guard'){
+    // Helmet
+    ctx.fillStyle='#2a2a32';
+    ctx.fillRect(cx-8, headY-4, 16, 6);
+    // Visor (blue tint)
+    ctx.fillStyle='rgba(80,180,255,0.75)';
+    ctx.fillRect(cx-6, headY-1, 12, 3);
+    // Armor plates
+    ctx.fillStyle='#4a5058';
+    ctx.fillRect(cx-8, chestY, 16, 10);
+    ctx.strokeStyle='#222'; ctx.lineWidth=0.8;
+    ctx.strokeRect(cx-8, chestY, 16, 10);
+    ctx.beginPath(); ctx.moveTo(cx, chestY); ctx.lineTo(cx, chestY+10); ctx.stroke();
+    // Rifle at hip
+    ctx.fillStyle='#333';
+    ctx.fillRect(cx + c.facing*4, chestY+6, c.facing*12, 3);
+    ctx.fillStyle='#666';
+    ctx.fillRect(cx + c.facing*14, chestY+7, c.facing*3, 1);
+  } else if(c.role==='medic'){
+    // Cap with red cross
+    ctx.fillStyle='#fff';
+    ctx.fillRect(cx-6, headY-4, 12, 4);
+    ctx.fillStyle='#e33';
+    ctx.fillRect(cx-1, headY-4, 2, 4);
+    ctx.fillRect(cx-3, headY-3, 6, 2);
+    // White coat
+    ctx.fillStyle='rgba(240,250,255,0.85)';
+    ctx.fillRect(cx-7, chestY, 14, 12);
+    ctx.fillStyle='#e33';
+    ctx.fillRect(cx-1, chestY+2, 2, 4);
+    ctx.fillRect(cx-3, chestY+3, 6, 2);
+    // Medkit
+    ctx.fillStyle='#fff';
+    ctx.fillRect(handX-3, handY-3, 6, 5);
+    ctx.fillStyle='#e33';
+    ctx.fillRect(handX-1, handY-2, 2, 3);
+    ctx.fillRect(handX-2, handY-1, 4, 1);
+  }
+
+  // Subtle floating label when walking (optional, small)
+  if(c.task==='walk' && Math.abs(c.vx)>0.1){
+    ctx.fillStyle='rgba(180,220,255,0.35)';
+    ctx.font='8px monospace'; ctx.textAlign='center';
+    ctx.fillText(c.label, cx, headY-10);
+  }
+}
+
+// ============================================================
+// --- PYRAMID INTERIOR (Khet tomb walk-in) ---
+// ============================================================
+function initPyramidPuzzle(){
+  const pi=pyramidInterior;
+  const pz=pi.puzzle;
+  // Place 4 plates evenly across the middle of the chamber
+  pz.plates=[];
+  const startX=420, spacing=200;
+  // Pick 4 distinct glyphs (shuffle copy of PYR_PLATE_DEFS)
+  const pool=PYR_PLATE_DEFS.slice();
+  for(let i=pool.length-1;i>0;i--){const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]];}
+  for(let i=0;i<4;i++){
+    pz.plates.push({x:startX+i*spacing, glyph:pool[i].glyph, color:pool[i].color, name:pool[i].name, litT:0});
+  }
+  // Target sequence — a random permutation of indices 0..3
+  pz.targetSeq=[0,1,2,3];
+  for(let i=pz.targetSeq.length-1;i>0;i--){const j=(Math.random()*(i+1))|0; [pz.targetSeq[i],pz.targetSeq[j]]=[pz.targetSeq[j],pz.targetSeq[i]];}
+  pz.progress=0;
+  pz.solved=false;
+  pz.rewardGiven=false;
+  pz.solveAnim=0;
+  pz.hintT=0;
+  pz.lastPlateIdx=-1;
+  pz.revealT=0;
+}
+
+function updatePyramidInterior(){
+  const pi=pyramidInterior;
+  const a=pi.alien;
+  const ch=canvas.height;
+  const floorY=ch-70;
+  // Movement
+  if(keys['a']||keys['arrowleft']){a.vx-=0.5;a.facing=-1;}
+  if(keys['d']||keys['arrowright']){a.vx+=0.5;a.facing=1;}
+  if(keys[' ']&&a.onGround){a.vy=-7;a.onGround=false;}
+  a.vy+=GRAVITY*0.6;
+  a.vx*=0.85;
+  a.x+=a.vx; a.y+=a.vy;
+  // Floor (canvas-relative, not world GROUND_LEVEL)
+  if(a.y>=floorY){a.y=floorY;a.vy=0;a.onGround=true;}
+  // Walk anim
+  if(Math.abs(a.vx)>0.3&&a.onGround) a.walkT+=0.15;
+  // Bounds
+  if(a.x<40) a.x=40;
+  if(a.x>pi.worldW-40) a.x=pi.worldW-40;
+  // Exit cooldown
+  if(pi.enterCD>0) pi.enterCD--;
+
+  // --- PUZZLE ---
+  const pz=pi.puzzle;
+  // Tick lit timers
+  pz.plates.forEach(pl=>{ if(pl.litT>0) pl.litT--; });
+  if(pz.hintT>0) pz.hintT--;
+  if(pz.solveAnim>0) pz.solveAnim--;
+  if(pz.solved && pz.revealT<120) pz.revealT++;
+  // Detect stepping on a plate (alien feet at floorY, near plate x)
+  if(!pz.solved && a.onGround){
+    let steppingIdx=-1;
+    for(let i=0;i<pz.plates.length;i++){
+      const pl=pz.plates[i];
+      if(Math.abs(a.x-pl.x)<28){ steppingIdx=i; break; }
+    }
+    if(steppingIdx>=0 && steppingIdx!==pz.lastPlateIdx){
+      // Newly stepped onto a plate
+      const expected=pz.targetSeq[pz.progress];
+      pz.plates[steppingIdx].litT=40;
+      if(steppingIdx===expected){
+        pz.progress++;
+        if(pz.progress>=pz.targetSeq.length){
+          pz.solved=true;
+          pz.solveAnim=200;
+          showMessage(pi.theme==='cave' ? 'The chest unlocks! Deep-sea treasure revealed.' : 'The tomb opens! Ancient treasure revealed.');
+        }
+      } else {
+        // Wrong — reset progress and flash red hint
+        pz.progress=0;
+        pz.hintT=40;
+      }
+    }
+    pz.lastPlateIdx=steppingIdx;
+  }
+  // Reward: approach opened sarcophagus with E
+  if(pz.solved && !pz.rewardGiven){
+    const sarX=pi.worldW-230; // sarcophagus center x (matches drawPyramidInterior)
+    if(Math.abs(a.x-sarX)<60 && (keys['e']||keys['enter'])){
+      keys['e']=false; keys['enter']=false;
+      pz.rewardGiven=true;
+      score=(typeof score==='number'?score:0)+50;
+      try{ document.getElementById('score').textContent=score; }catch(e){}
+      showMessage(pi.theme==='cave' ? '+50 pearls from the deep chest!' : '+50 ancient credits from the tomb!');
+    }
+  }
+
+  // Exit: ESC or walk back through the doorway (near x<100 pressing E)
+  const nearExit=a.x<100;
+  if(pi.enterCD<=0 && (keys['escape'] || (nearExit && (keys['e']||keys['enter'])))){
+    keys['escape']=false; keys['e']=false; keys['enter']=false;
+    pyramidInteriorMode=false;
+    alien.x=pi.exitX;
+    if(pi.theme==='cave' && pi.exitY) alien.y=pi.exitY;
+    alien.vx=0; alien.vy=0;
+    if(pi.theme==='cave') showMessage('You drift back into the ocean.');
+    else showMessage('You step back into the desert sun.');
+  }
+}
+
+function drawPyramidInterior(){
+  const pi=pyramidInterior;
+  const a=pi.alien;
+  const cw=canvas.width, ch=canvas.height;
+  const t=frameT;
+  // Camera
+  const camX=Math.max(0, Math.min(pi.worldW-cw, a.x-cw/2));
+  ctx.clearRect(0,0,cw,ch);
+  const isCave = pi.theme==='cave';
+  // Background — tomb stone vs deep cave water
+  const bg=ctx.createLinearGradient(0,0,0,ch);
+  if(isCave){
+    bg.addColorStop(0,'#041018');
+    bg.addColorStop(0.5,'#062030');
+    bg.addColorStop(1,'#020810');
+  } else {
+    bg.addColorStop(0,'#1a0f06');
+    bg.addColorStop(0.6,'#2a1808');
+    bg.addColorStop(1,'#0a0502');
+  }
+  ctx.fillStyle=bg; ctx.fillRect(0,0,cw,ch);
+
+  ctx.save();
+  ctx.translate(-camX, 0);
+
+  // Floor (canvas-relative — independent of world GROUND_LEVEL)
+  const floorTop=ch-70;
+  if(isCave){
+    // Wet cave floor — dark rock with bioluminescent puddles
+    ctx.fillStyle='#0a1418';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Rocky bumps
+    ctx.fillStyle='#142028';
+    for(let bx=0; bx<pi.worldW; bx+=70){
+      const bh=6+((bx*7)%10);
+      ctx.beginPath();
+      ctx.ellipse(bx+(Math.sin(bx)*12), floorTop+bh/2, 38, bh, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Glowing puddle highlights
+    for(let px=60; px<pi.worldW; px+=180){
+      const pulse=0.4+Math.sin(t*1.5+px)*0.3;
+      ctx.fillStyle=`rgba(80,200,255,${0.15*pulse})`;
+      ctx.beginPath();
+      ctx.ellipse(px, floorTop+8, 30, 4, 0, 0, Math.PI*2); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle='#3a2614';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    ctx.strokeStyle='rgba(20,10,4,0.6)'; ctx.lineWidth=1;
+    for(let x=0;x<pi.worldW;x+=48){
+      ctx.beginPath(); ctx.moveTo(x,floorTop); ctx.lineTo(x,ch); ctx.stroke();
+    }
+    for(let y=floorTop+24;y<ch;y+=24){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(pi.worldW,y); ctx.stroke();
+    }
+  }
+
+  // Ceiling
+  const ceilH=80;
+  if(isCave){
+    // Irregular rock ceiling with stalactites
+    ctx.fillStyle='#06101a';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    ctx.fillStyle='#0c1824';
+    ctx.beginPath();
+    ctx.moveTo(0,ceilH);
+    for(let sx=0; sx<=pi.worldW; sx+=40){
+      const sh=ceilH + 12 + Math.sin(sx*0.07)*8 + ((sx*13)%14);
+      ctx.lineTo(sx, sh);
+    }
+    ctx.lineTo(pi.worldW, ceilH);
+    ctx.closePath();
+    ctx.fill();
+    // Stalactite teeth
+    ctx.fillStyle='#050b12';
+    for(let tx=30; tx<pi.worldW; tx+=55){
+      const th=18+((tx*11)%22);
+      ctx.beginPath();
+      ctx.moveTo(tx-6, ceilH);
+      ctx.lineTo(tx+6, ceilH);
+      ctx.lineTo(tx, ceilH+th);
+      ctx.closePath(); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle='#1a0e06';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    ctx.fillStyle='#2a1808';
+    for(let step=0;step<3;step++){
+      const stepY=ceilH+step*14;
+      const indent=step*30;
+      ctx.fillRect(indent, stepY, pi.worldW-2*indent, 14);
+    }
+  }
+
+  // Wall band
+  if(isCave){
+    // Kelp/barnacle decoration strip
+    ctx.fillStyle='rgba(40,100,120,0.18)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    ctx.strokeStyle='rgba(60,180,220,0.4)'; ctx.lineWidth=1;
+    for(let gx=40; gx<pi.worldW; gx+=60){
+      const sway=Math.sin(t*1.2+gx*0.05)*3;
+      ctx.beginPath(); ctx.moveTo(gx, ceilH+95);
+      ctx.quadraticCurveTo(gx+sway, ceilH+75, gx+sway*1.3, ceilH+55);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle='rgba(200,160,80,0.12)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 40);
+    ctx.fillStyle='rgba(200,160,80,0.5)';
+    ctx.font='bold 18px serif'; ctx.textAlign='center';
+    const glyphs=['\u2600','\u25B2','\u2625','\u2604','\u26B0','\u2698','\u2694','\u2618'];
+    for(let gx=40; gx<pi.worldW; gx+=80){
+      ctx.fillText(glyphs[Math.floor(gx/80)%glyphs.length], gx, ceilH+78);
+    }
+  }
+
+  // Pillars / Crystal clusters
+  for(let px=200; px<pi.worldW-100; px+=360){
+    if(isCave){
+      // Giant crystal cluster
+      const crystalCols=['#4fd0ff','#9f7cff','#5affc8','#ff9fe0'];
+      const col=crystalCols[(px/360|0)%crystalCols.length];
+      const pulse=0.6+Math.sin(t*1.5+px)*0.3;
+      const cr=parseInt(col.slice(1,3),16), cgg=parseInt(col.slice(3,5),16), cbb=parseInt(col.slice(5,7),16);
+      // Glow aura
+      const aura=ctx.createRadialGradient(px, ceilH+200, 4, px, ceilH+200, 160);
+      aura.addColorStop(0, `rgba(${cr},${cgg},${cbb},${0.35*pulse})`);
+      aura.addColorStop(1,'transparent');
+      ctx.fillStyle=aura;
+      ctx.beginPath(); ctx.arc(px, ceilH+200, 160, 0, Math.PI*2); ctx.fill();
+      // Crystal shards growing up from floor
+      ctx.fillStyle=col;
+      for(let k=0;k<5;k++){
+        const kx=px-30+k*15;
+        const kh=40+((k*17)%60);
+        ctx.beginPath();
+        ctx.moveTo(kx-6, floorTop);
+        ctx.lineTo(kx, floorTop-kh);
+        ctx.lineTo(kx+6, floorTop);
+        ctx.closePath();
+        ctx.globalAlpha=0.85;
+        ctx.fill();
+      }
+      // Highlights on each shard
+      ctx.fillStyle='rgba(255,255,255,0.6)';
+      for(let k=0;k<5;k++){
+        const kx=px-30+k*15;
+        const kh=40+((k*17)%60);
+        ctx.beginPath();
+        ctx.moveTo(kx-1, floorTop-2);
+        ctx.lineTo(kx, floorTop-kh+4);
+        ctx.lineTo(kx+1, floorTop-2);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    } else {
+      ctx.fillStyle='#3a2614';
+      ctx.fillRect(px-18, ceilH+94, 36, floorTop-ceilH-94);
+      ctx.fillStyle='#4a3018';
+      ctx.fillRect(px-24, ceilH+94, 48, 10);
+      ctx.fillRect(px-24, floorTop-10, 48, 10);
+      ctx.fillStyle='rgba(200,160,80,0.35)';
+      ctx.fillRect(px-12, ceilH+130, 24, 2);
+      ctx.fillRect(px-12, ceilH+170, 24, 2);
+      ctx.fillRect(px-12, ceilH+210, 24, 2);
+    }
+  }
+
+  // Light sources — torches vs bioluminescent mushrooms
+  for(let tx=140; tx<pi.worldW; tx+=240){
+    if(isCave){
+      // Glowing mushroom cluster on wall
+      const pulse=0.7+Math.sin(t*2+tx)*0.2;
+      const mcol=['rgba(120,220,255,','rgba(180,130,255,','rgba(120,255,200,'][((tx/240)|0)%3];
+      const fg=ctx.createRadialGradient(tx, ceilH+130, 2, tx, ceilH+130, 90*pulse);
+      fg.addColorStop(0, `${mcol}${0.6*pulse})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-100, ceilH+60, 200, 180);
+      // Mushroom stalks + caps
+      for(let mi=0; mi<3; mi++){
+        const mx=tx-14+mi*14;
+        ctx.fillStyle='#e8f4f0';
+        ctx.fillRect(mx-2, ceilH+120, 4, 16);
+        ctx.fillStyle=`${mcol}${0.85})`;
+        ctx.beginPath();
+        ctx.ellipse(mx, ceilH+120, 8, 5, 0, Math.PI, 0);
+        ctx.fill();
+        // Cap spots
+        ctx.fillStyle='rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.arc(mx-2, ceilH+118, 1, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(mx+2, ceilH+116, 1, 0, Math.PI*2); ctx.fill();
+      }
+    } else {
+      ctx.fillStyle='#2a1a08';
+      ctx.fillRect(tx-3, ceilH+120, 6, 30);
+      const flick=0.8+Math.sin(t*14+tx)*0.2;
+      const fg=ctx.createRadialGradient(tx, ceilH+118, 2, tx, ceilH+118, 80*flick);
+      fg.addColorStop(0, `rgba(255,220,120,${0.9*flick})`);
+      fg.addColorStop(0.4, `rgba(240,130,40,${0.4*flick})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-90, ceilH+60, 180, 160);
+      ctx.fillStyle=`rgba(255,200,80,${flick})`;
+      ctx.beginPath();
+      ctx.ellipse(tx, ceilH+112, 5, 10*flick, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // Caustic light ripples underwater
+  if(isCave){
+    ctx.globalAlpha=0.25;
+    for(let ci=0;ci<6;ci++){
+      const cx1=(ci*157 + t*30)%pi.worldW;
+      const cy1=ceilH+40+Math.sin(t+ci)*8;
+      const cg=ctx.createRadialGradient(cx1, cy1, 2, cx1, cy1, 80);
+      cg.addColorStop(0,'rgba(160,230,255,0.4)');
+      cg.addColorStop(1,'transparent');
+      ctx.fillStyle=cg;
+      ctx.beginPath(); ctx.arc(cx1, cy1, 80, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // === PUZZLE PLATES on the floor (stepped-on tiles) ===
+  const pz=pi.puzzle;
+  pz.plates.forEach((pl,idx)=>{
+    const plx=pl.x, ply=floorTop-2;
+    const lit=pl.litT>0;
+    const litFrac=lit?(pl.litT/40):0;
+    // Stone plate (raised block)
+    ctx.fillStyle=lit?pl.color:'#5a4020';
+    ctx.fillRect(plx-26, ply-8, 52, 10);
+    ctx.fillStyle=lit?'#fff7c0':'#7a5a30';
+    ctx.fillRect(plx-26, ply-8, 52, 2);
+    // Crack lines
+    ctx.strokeStyle='rgba(20,10,4,0.55)'; ctx.lineWidth=1;
+    ctx.strokeRect(plx-26, ply-8, 52, 10);
+    // Carved glyph on top
+    ctx.fillStyle=lit?`rgba(255,240,180,${0.7+litFrac*0.3})`:'rgba(200,160,80,0.55)';
+    ctx.font='bold 18px serif'; ctx.textAlign='center';
+    ctx.fillText(pl.glyph, plx, ply);
+    // Glow aura when lit
+    if(lit){
+      const glow=ctx.createRadialGradient(plx, ply-8, 2, plx, ply-8, 80);
+      glow.addColorStop(0, `rgba(${parseInt(pl.color.slice(1,3),16)},${parseInt(pl.color.slice(3,5),16)},${parseInt(pl.color.slice(5,7),16)},${0.5*litFrac})`);
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle=glow;
+      ctx.beginPath(); ctx.arc(plx, ply-8, 80, 0, Math.PI*2); ctx.fill();
+      // Upward light shaft
+      const shaftG=ctx.createLinearGradient(plx, ply-8, plx, ceilH+120);
+      shaftG.addColorStop(0, `rgba(255,230,150,${0.35*litFrac})`);
+      shaftG.addColorStop(1, 'transparent');
+      ctx.fillStyle=shaftG;
+      ctx.fillRect(plx-10, ceilH+120, 20, ply-ceilH-128);
+    }
+  });
+
+  // === SARCOPHAGUS / ANCIENT CHEST at the far back — opens when solved ===
+  const sarcX=pi.worldW-320, sarcY=floorTop-48;
+  // Target sequence tablet above (the "hint")
+  const tabX=sarcX+90, tabY=ceilH+120;
+  // Stone tablet
+  ctx.fillStyle=isCave?'#0c1820':'#3a2614';
+  ctx.fillRect(tabX-90, tabY-18, 180, 56);
+  ctx.strokeStyle=isCave?'rgba(120,220,255,0.55)':'rgba(200,160,80,0.5)'; ctx.lineWidth=2;
+  ctx.strokeRect(tabX-90, tabY-18, 180, 56);
+  ctx.fillStyle=isCave?'rgba(160,230,255,0.7)':'rgba(200,160,80,0.5)';
+  ctx.font='bold 10px monospace'; ctx.textAlign='center';
+  ctx.fillText(isCave?'DEEP RUNES':'TOMB SEAL', tabX, tabY-5);
+  // Target sequence glyphs — green if already stepped, yellow if current, faded if future
+  const plateDefs=pz.plates;
+  ctx.font='bold 24px serif';
+  for(let i=0;i<pz.targetSeq.length;i++){
+    const gx=tabX + (i-1.5)*42;
+    const gy=tabY+28;
+    const plateIdx=pz.targetSeq[i];
+    const pl=plateDefs[plateIdx];
+    if(!pl)continue;
+    let glyphCol, bgCol;
+    if(pz.solved){ glyphCol='#ffd880'; bgCol='rgba(255,200,80,0.35)'; }
+    else if(i<pz.progress){ glyphCol='#8f8'; bgCol='rgba(100,220,120,0.25)'; }
+    else if(i===pz.progress){
+      const pulse=0.5+Math.sin(t*5)*0.3;
+      glyphCol=`rgba(255,230,150,${pulse+0.3})`;
+      bgCol=`rgba(255,210,120,${pulse*0.3})`;
+    } else { glyphCol='rgba(200,160,80,0.5)'; bgCol='rgba(120,90,40,0.15)'; }
+    // Slot bg
+    ctx.fillStyle=bgCol; ctx.fillRect(gx-16, gy-18, 32, 26);
+    ctx.strokeStyle='rgba(200,160,80,0.3)'; ctx.lineWidth=1;
+    ctx.strokeRect(gx-16, gy-18, 32, 26);
+    ctx.fillStyle=glyphCol;
+    ctx.fillText(pl.glyph, gx, gy);
+  }
+  // Error hint flash
+  if(pz.hintT>0){
+    ctx.fillStyle=`rgba(255,60,60,${pz.hintT/40*0.35})`;
+    ctx.fillRect(tabX-90, tabY-18, 180, 56);
+  }
+
+  // Sarcophagus body / Ancient chest
+  const isOpen=pz.solved;
+  const openT=Math.min(1, pz.revealT/60);
+  if(isCave){
+    // Barnacle-encrusted ancient chest
+    ctx.fillStyle='#4a3a28';
+    ctx.fillRect(sarcX, sarcY, 180, 48);
+    // Metal straps
+    ctx.fillStyle='#8a6a48';
+    ctx.fillRect(sarcX, sarcY+10, 180, 3);
+    ctx.fillRect(sarcX, sarcY+34, 180, 3);
+    ctx.fillRect(sarcX+86, sarcY, 8, 48);
+    // Lid (flips open when solved)
+    ctx.fillStyle=isOpen?'#6a5034':'#5a4028';
+    ctx.save();
+    ctx.translate(sarcX, sarcY);
+    ctx.rotate(-openT*0.7);
+    ctx.fillRect(0, -14, 180, 14);
+    ctx.fillStyle='#8a6a48';
+    ctx.fillRect(0, -10, 180, 2);
+    ctx.restore();
+    // Barnacles on chest
+    ctx.fillStyle='#c8d4d0';
+    for(let bi=0;bi<10;bi++){
+      const bxp=sarcX+10+((bi*23)%160);
+      const byp=sarcY+8+((bi*17)%32);
+      ctx.beginPath(); ctx.arc(bxp, byp, 2+((bi*3)%3), 0, Math.PI*2); ctx.fill();
+    }
+    // Keyhole
+    ctx.fillStyle='#1a0a02';
+    ctx.fillRect(sarcX+86, sarcY+20, 8, 10);
+    ctx.beginPath(); ctx.arc(sarcX+90, sarcY+22, 4, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle='#6a4a20';
+    ctx.fillRect(sarcX, sarcY, 180, 48);
+    ctx.fillStyle=isOpen?'#a67840':'#8a6828';
+    ctx.fillRect(sarcX - openT*60, sarcY-8, 180, 10);
+    ctx.fillStyle='#d4a848';
+    ctx.beginPath();
+    ctx.arc(sarcX+90, sarcY+22, 14, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(40,20,4,0.8)';
+    ctx.font='bold 14px serif'; ctx.textAlign='center';
+    ctx.fillText('\u2625', sarcX+90, sarcY+28);
+  }
+
+  // Open tomb reveal — golden glow + treasure inside
+  if(isOpen){
+    const inX=sarcX+120-openT*10, inY=sarcY-4;
+    // Gold glow bursting out
+    const sg=ctx.createRadialGradient(sarcX+90, sarcY-20, 2, sarcX+90, sarcY-20, 140);
+    sg.addColorStop(0,`rgba(255,230,140,${0.6*openT})`);
+    sg.addColorStop(0.5,`rgba(255,180,60,${0.25*openT})`);
+    sg.addColorStop(1,'transparent');
+    ctx.fillStyle=sg;
+    ctx.beginPath(); ctx.arc(sarcX+90, sarcY-20, 140, 0, Math.PI*2); ctx.fill();
+    // Treasure pile inside
+    ctx.fillStyle='#ffd060';
+    ctx.fillRect(sarcX+12, sarcY+4, 60, 6);
+    ctx.fillRect(sarcX+20, sarcY-2, 40, 6);
+    ctx.fillStyle='#fff2a0';
+    for(let ti=0;ti<8;ti++){
+      const tx=sarcX+14+ti*8, ty=sarcY+6-((ti*37)%5);
+      ctx.beginPath(); ctx.arc(tx, ty, 3, 0, Math.PI*2); ctx.fill();
+    }
+    // Sparkles
+    for(let si=0;si<12;si++){
+      const phase=(t*2+si*0.7)%1;
+      const sx2=sarcX+20+((si*27)%140);
+      const sy2=sarcY-10-phase*30;
+      ctx.fillStyle=`rgba(255,240,180,${1-phase})`;
+      ctx.fillRect(sx2, sy2, 2, 2);
+    }
+    // Interact prompt
+    if(!pz.rewardGiven && Math.abs(a.x-(sarcX+90))<120){
+      ctx.fillStyle='#ffd880';
+      ctx.font='bold 12px monospace'; ctx.textAlign='center';
+      ctx.fillText('[E] claim treasure', sarcX+90, sarcY-46);
+    }
+  }
+
+  // Doorway back to outside
+  const dX=60, dW=44, dH=80;
+  const dY=floorTop-dH;
+  if(isCave){
+    // Cave mouth leading back to water — irregular opening
+    ctx.fillStyle='#02060a';
+    ctx.beginPath();
+    ctx.moveTo(dX+dW/2, dY-8);
+    ctx.quadraticCurveTo(dX-6, dY+dH*0.2, dX+4, dY+dH);
+    ctx.lineTo(dX+dW-4, dY+dH);
+    ctx.quadraticCurveTo(dX+dW+10, dY+dH*0.3, dX+dW/2, dY-8);
+    ctx.closePath(); ctx.fill();
+    // Water-light spill (teal)
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(100,220,255,0.35)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Rocky lip
+    ctx.strokeStyle='#0c1824'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(dX+dW/2, dY-8);
+    ctx.quadraticCurveTo(dX-6, dY+dH*0.2, dX+4, dY+dH);
+    ctx.moveTo(dX+dW/2, dY-8);
+    ctx.quadraticCurveTo(dX+dW+10, dY+dH*0.3, dX+dW-4, dY+dH);
+    ctx.stroke();
+    // Rising bubbles inside
+    for(let bi=0;bi<5;bi++){
+      const bp=((t*0.8 + bi*0.2)%1);
+      const bxp=dX+dW/2 + Math.sin(bi+t)*6;
+      const byp=dY+dH - bp*dH;
+      ctx.fillStyle=`rgba(200,240,255,${(1-bp)*0.7})`;
+      ctx.beginPath(); ctx.arc(bxp, byp, 1.6, 0, Math.PI*2); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle='#0a0502';
+    ctx.fillRect(dX, dY, dW, dH);
+    const sun=ctx.createLinearGradient(dX,dY,dX+150,dY);
+    sun.addColorStop(0,'rgba(255,220,140,0.5)');
+    sun.addColorStop(1,'transparent');
+    ctx.fillStyle=sun;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    ctx.fillStyle='#8a6828';
+    ctx.fillRect(dX-4, dY-4, 4, dH+4);
+    ctx.fillRect(dX+dW, dY-4, 4, dH+4);
+    ctx.fillRect(dX-4, dY-4, dW+8, 5);
+  }
+
+  // Dust motes / floating particles
+  for(let di=0;di<30;di++){
+    const dx=(di*173+((t*20)|0))%pi.worldW;
+    const dy=ceilH+120+((di*67+t*15)%180);
+    if(isCave){
+      ctx.fillStyle=`rgba(160,230,255,${0.2+(di%3)*0.1})`;
+    } else {
+      ctx.fillStyle=`rgba(255,220,140,${0.15+(di%3)*0.1})`;
+    }
+    ctx.fillRect(dx, dy, 2, 2);
+  }
+
+  // Alien — reuse the real on-foot renderer so it looks identical to the overworld
+  const ax=a.x, ay=floorTop;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(ax, floorTop+2, 16, 4, 0, 0, Math.PI*2); ctx.fill();
+  drawAlienPreview(ax, ay, 1.0, getAlienSkin(), a.facing, a.walkT);
+
+  ctx.restore();
+
+  // Vignette
+  const vg=ctx.createRadialGradient(cw/2,ch/2,ch*0.3,cw/2,ch/2,ch*0.8);
+  vg.addColorStop(0,'transparent');
+  vg.addColorStop(1,'rgba(0,0,0,0.75)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,cw,ch);
+
+  // HUD
+  ctx.fillStyle=isCave?'#aef0ff':'#ffd880';
+  ctx.font='bold 16px monospace'; ctx.textAlign='left';
+  ctx.fillText(isCave?'DEEP CAVE':'TOMB INTERIOR', 20, 28);
+  ctx.fillStyle='#aaa';
+  ctx.font='12px monospace';
+  ctx.fillText('A/D move  SPACE jump  ESC leave', 20, 46);
+  // Puzzle hint line
+  const pz2=pi.puzzle;
+  const hintCol=isCave?'rgba(160,230,255,0.9)':'rgba(255,220,140,0.85)';
+  if(!pz2.solved){
+    ctx.fillStyle=hintCol;
+    ctx.font='12px monospace';
+    ctx.fillText(`Step on the glyphs in the order shown on the ${isCave?'runes above the chest':'seal above the tomb'}  [${pz2.progress}/${pz2.targetSeq.length}]`, 20, 64);
+  } else if(!pz2.rewardGiven){
+    ctx.fillStyle=isCave?'rgba(160,240,255,0.95)':'rgba(255,230,140,0.95)';
+    ctx.font='bold 13px monospace';
+    ctx.fillText(isCave?'CHEST UNLOCKED — approach the chest':'TOMB OPENED — approach the sarcophagus', 20, 64);
+  } else {
+    ctx.fillStyle='rgba(140,220,160,0.8)';
+    ctx.font='12px monospace';
+    ctx.fillText('Treasure claimed.', 20, 64);
+  }
+
+  // Celebration banner briefly after solving
+  if(pz2.solveAnim>120){
+    const a2=(pz2.solveAnim-120)/80;
+    ctx.fillStyle=isCave?`rgba(160,230,255,${a2*0.9})`:`rgba(255,220,120,${a2*0.9})`;
+    ctx.font='bold 32px serif'; ctx.textAlign='center';
+    ctx.fillText(isCave?'THE RUNES GLOW':'THE SEAL IS BROKEN', cw/2, ch/2);
+  }
+
+  // Prompt near door
+  if(a.x<140){
+    ctx.fillStyle=isCave?'#aef0ff':'#ffd880';
+    ctx.font='bold 14px monospace'; ctx.textAlign='center';
+    ctx.fillText(isCave?'[E] exit cave':'[E] exit tomb', cw/2, ch-40);
+  }
+}
+
 function updateMothership(){
   const mi=mothershipInterior;
   if(mi.dialogTimer>0)mi.dialogTimer--;
@@ -3520,7 +4892,7 @@ function updateMothership(){
         maybeTriggerRiot();
         // Auto-enter "prison cell" walk mode: player walks among creatures
         const all=[...mi.zooCreatures, ...mi.milkCows];
-        const zooW=Math.max(600, all.length*75+320);
+        const zooW=Math.max(1400, all.length*140+600);
         mi.zooWidth=zooW;
         mi.zooWalkMode=true;
         mi.zooAlien={x:zooW*0.5, y:0, vx:0, vy:0, facing:1, onGround:false, walkTimer:0};
@@ -3545,16 +4917,50 @@ function updateMothership(){
     // --- Crew NPCs wander between consoles ---
     if(mi.hubCrew){
       mi.hubCrew.forEach(c=>{
+        c.bob += 0.08;
         if(c.task==='walk'){
           const dx=c.targetX-c.x;
           if(Math.abs(dx)<10){c.task='work';c.taskT=180+Math.random()*300;c.vx=0;}
-          else{c.vx=Math.sign(dx)*0.5;c.facing=Math.sign(dx);c.x+=c.vx;c.walkT+=0.2;}
+          else{
+            const spd = c.role==='bot'?0.35:(c.role==='guard'?0.7:0.5);
+            c.vx=Math.sign(dx)*spd;c.facing=Math.sign(dx);c.x+=c.vx;c.walkT+=0.22;
+          }
         }else{
           c.taskT--;
+          // Engineer/bot spark while "working"
+          if((c.role==='engineer'||c.role==='bot') && Math.random()<0.08){
+            c.sparkT=8;
+            for(let si=0;si<3;si++){
+              mi.ambientParticles.push({
+                x:c.x+(Math.random()-0.5)*6, y:(canvas.height-70)-8,
+                vx:(Math.random()-0.5)*1.2, vy:-0.4-Math.random()*0.8,
+                life:20+Math.random()*10, color:[255,200+Math.random()*40,80], size:1+Math.random()*1.2
+              });
+            }
+          }
+          if(c.sparkT>0)c.sparkT--;
           if(c.taskT<=0){c.task='walk';c.targetX=120+Math.random()*(h.width-240);}
         }
       });
     }
+    // Drone patrols the corridor
+    if(mi.hubDrone){
+      const d=mi.hubDrone;
+      d.phase+=0.05;
+      d.x+=d.vx;
+      if(d.x>h.width-100){d.vx=-Math.abs(d.vx);}
+      if(d.x<100){d.vx=Math.abs(d.vx);}
+      d.y = d.baseY + Math.sin(d.phase)*14;
+    }
+    // Overhead cargo gantry drone — runs along a fixed rail
+    if(mi.gantryDrone){
+      const g=mi.gantryDrone;
+      g.x+=g.vx;
+      if(g.x>h.width-80){g.vx=-Math.abs(g.vx);}
+      if(g.x<80){g.vx=Math.abs(g.vx);}
+    }
+    // Ticker scroll
+    mi.tickerOffset=(mi.tickerOffset+0.7)%99999;
     // --- Random outside events ---
     if(mi.spaceEvents){
       mi._eventCD--;
@@ -3781,7 +5187,7 @@ function updateMothership(){
     mi.zooWalkMode=!mi.zooWalkMode;
     if(mi.zooWalkMode){
       const all=[...mi.zooCreatures, ...mi.milkCows];
-      const zooW=Math.max(600, all.length*75+320);
+      const zooW=Math.max(1400, all.length*140+600);
       mi.zooWidth=zooW;
       mi.zooAlien={x:zooW*0.5,y:0,vx:0,vy:0,facing:1,onGround:false,walkTimer:0};
       all.forEach((c,i)=>{ if(c.x==null||c.x<30||c.x>zooW-30) c.x=80+i*((zooW-160)/Math.max(1,all.length)); });
@@ -3803,7 +5209,7 @@ function updateMothership(){
     const zooFloorY=canvas.height-50;
     if(za.y>=zooFloorY){za.y=zooFloorY;za.vy=0;za.onGround=true;}else{za.onGround=false;}
     // Zoo walls
-    const zooW=mi.zooWidth||Math.max(600, (mi.zooCreatures.length+mi.milkCows.length)*75+320);
+    const zooW=mi.zooWidth||Math.max(1400, (mi.zooCreatures.length+mi.milkCows.length)*140+600);
     if(za.x<30)za.x=30;
     if(za.x>zooW-30)za.x=zooW-30;
     if(Math.abs(za.vx)>0.3&&za.onGround)za.walkTimer+=0.15;
@@ -4102,6 +5508,28 @@ function drawMothership(){
       const sx=fx-camX;
       ctx.beginPath();ctx.moveTo(sx,floorY);ctx.lineTo(sx,ch);ctx.stroke();
     }
+    // Reflective floor highlight — thin gloss band just below the floor line
+    const glossG=ctx.createLinearGradient(0, floorY, 0, floorY+14);
+    glossG.addColorStop(0,'rgba(140,200,255,0.22)');
+    glossG.addColorStop(1,'transparent');
+    ctx.fillStyle=glossG; ctx.fillRect(0, floorY, cw, 14);
+    // Power conduits embedded in floor
+    for(let fx=Math.floor(camX/90)*90; fx<camX+cw+90; fx+=90){
+      const sx=fx-camX;
+      const flick=0.4+Math.sin(t*3+fx*0.01)*0.3;
+      ctx.fillStyle=`rgba(120,220,255,${flick*0.5})`;
+      ctx.fillRect(sx-1, floorY+6, 2, 2);
+      // Pulse travelling along
+      const ph=(t*1.2 + fx*0.008)%1;
+      ctx.fillStyle=`rgba(160,240,255,${0.7*(1-ph)})`;
+      ctx.fillRect(sx-1 + ph*60, floorY+6, 3, 2);
+    }
+    // Low floor mist (semi-transparent undulating band)
+    const mistG=ctx.createLinearGradient(0, floorY-4, 0, floorY+24);
+    mistG.addColorStop(0,'transparent');
+    mistG.addColorStop(0.5,'rgba(120,180,230,0.08)');
+    mistG.addColorStop(1,'rgba(80,140,200,0.14)');
+    ctx.fillStyle=mistG; ctx.fillRect(0, floorY-4, cw, 28);
     // Ceiling
     ctx.fillStyle='#050814';ctx.fillRect(0,0,cw,ceilY);
     ctx.strokeStyle='rgba(100,180,255,0.15)';ctx.beginPath();ctx.moveTo(0,ceilY);ctx.lineTo(cw,ceilY);ctx.stroke();
@@ -4248,6 +5676,32 @@ function drawMothership(){
         }
       }
     });
+    // Subtle crew/player silhouette reflections on the window glass
+    // (still inside the window clip so they only appear within the pane)
+    if(mi.hubCrew){
+      ctx.globalCompositeOperation='lighter';
+      const reflY = wBot - 18; // near bottom of window glass
+      mi.hubCrew.forEach(c=>{
+        const rx=c.x-camX;
+        if(rx<-20||rx>cw+20)return;
+        // Tiny ghost silhouette, very faint
+        ctx.fillStyle=`rgba(160,220,255,0.07)`;
+        ctx.beginPath();
+        ctx.ellipse(rx, reflY-6, 4, 9, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(rx, reflY-14, 3, 0, Math.PI*2); ctx.fill();
+      });
+      // Player reflection
+      const plRX=(mi.hub?mi.hub.x:0)-camX;
+      if(plRX>-20 && plRX<cw+20){
+        ctx.fillStyle='rgba(180,240,255,0.11)';
+        ctx.beginPath();
+        ctx.ellipse(plRX, reflY-7, 5, 10, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(plRX, reflY-16, 3.2, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalCompositeOperation='source-over';
+    }
     ctx.restore();
     // Window structural pillars
     const pillarSp=380;
@@ -4321,57 +5775,444 @@ function drawMothership(){
     if(Math.random()<0.02){
       mi.ambientParticles.push({x:camX+Math.random()*cw, y:wallTop+8, vx:(Math.random()-0.5)*0.2, vy:-0.4-Math.random()*0.3, life:40+Math.random()*30, color:[200,220,255], size:1.5+Math.random()*1.5});
     }
+
+    // === VOLUMETRIC LIGHT SHAFTS (god-rays) from ceiling strips down to floor ===
+    for(let lx=Math.floor(camX/120)*120; lx<camX+cw+120; lx+=120){
+      const sx=lx-camX + 60;
+      const breathe=0.55+Math.sin(t*1.3+lx*0.013)*0.15;
+      const topW=36, botW=110;
+      const ray=ctx.createLinearGradient(sx, ceilY, sx, floorY);
+      ray.addColorStop(0, `rgba(180,230,255,${0.22*breathe})`);
+      ray.addColorStop(0.7, `rgba(140,200,255,${0.05*breathe})`);
+      ray.addColorStop(1, 'transparent');
+      ctx.fillStyle=ray;
+      ctx.beginPath();
+      ctx.moveTo(sx-topW/2, ceilY);
+      ctx.lineTo(sx+topW/2, ceilY);
+      ctx.lineTo(sx+botW/2, floorY);
+      ctx.lineTo(sx-botW/2, floorY);
+      ctx.closePath();
+      ctx.fill();
+      const pool=ctx.createRadialGradient(sx, floorY+2, 4, sx, floorY+2, 70);
+      pool.addColorStop(0, `rgba(160,220,255,${0.28*breathe})`);
+      pool.addColorStop(1, 'transparent');
+      ctx.fillStyle=pool;
+      ctx.beginPath(); ctx.ellipse(sx, floorY+2, 70, 8, 0, 0, Math.PI*2); ctx.fill();
+    }
+
+    // === OVERHEAD SERVICE GANTRY RAIL (hanging below ceiling) ===
+    const railY=ceilY+14;
+    const railG=ctx.createLinearGradient(0, railY, 0, railY+6);
+    railG.addColorStop(0,'#223348');
+    railG.addColorStop(0.5,'#4a6478');
+    railG.addColorStop(1,'#1a2430');
+    ctx.fillStyle=railG;
+    ctx.fillRect(0, railY, cw, 5);
+    ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=1;
+    ctx.strokeRect(0, railY, cw, 5);
+    for(let rx=Math.floor(camX/160)*160; rx<camX+cw+160; rx+=160){
+      const sx=rx-camX;
+      ctx.fillStyle='#162230';
+      ctx.fillRect(sx-2, ceilY, 4, 14);
+      ctx.fillStyle='rgba(120,180,220,0.5)';
+      ctx.fillRect(sx-1, ceilY+2, 2, 2);
+    }
+    if(mi.gantryDrone){
+      const g=mi.gantryDrone;
+      const gx=g.x-camX;
+      if(gx>-60 && gx<cw+60){
+        const dir=Math.sign(g.vx)||1;
+        const gy=railY+5;
+        ctx.fillStyle='#3a5068';
+        ctx.fillRect(gx-6, gy, 12, 6);
+        ctx.fillStyle='#8aa8c0';
+        ctx.fillRect(gx-5, gy, 10, 1);
+        const bodyH=22;
+        ctx.fillStyle='#2a3a50';
+        ctx.fillRect(gx-18, gy+6, 36, bodyH);
+        ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.lineWidth=1;
+        for(let li=0;li<3;li++){
+          ctx.beginPath(); ctx.moveTo(gx-18+li*12, gy+6); ctx.lineTo(gx-18+li*12, gy+6+bodyH); ctx.stroke();
+        }
+        ctx.fillStyle=`hsl(${g.cargoHue},80%,55%)`;
+        ctx.fillRect(gx-18, gy+14, 36, 4);
+        ctx.fillStyle='rgba(0,0,0,0.6)';
+        for(let hi=0;hi<5;hi++){
+          ctx.beginPath();
+          ctx.moveTo(gx-18+hi*8, gy+14);
+          ctx.lineTo(gx-14+hi*8, gy+14);
+          ctx.lineTo(gx-18+hi*8, gy+18);
+          ctx.closePath(); ctx.fill();
+        }
+        const blink=(Math.sin(t*6+g.blinkPhase)+1)*0.5;
+        ctx.fillStyle=`rgba(${dir>0?'100,255,140':'255,140,100'},${0.5+blink*0.5})`;
+        ctx.beginPath(); ctx.arc(gx+dir*16, gy+10, 1.8, 0, Math.PI*2); ctx.fill();
+        const dl=ctx.createLinearGradient(gx, gy+bodyH+6, gx, gy+bodyH+60);
+        dl.addColorStop(0, `rgba(255,220,140,${0.25+blink*0.15})`);
+        dl.addColorStop(1,'transparent');
+        ctx.fillStyle=dl;
+        ctx.beginPath();
+        ctx.moveTo(gx-6, gy+bodyH+6);
+        ctx.lineTo(gx+6, gy+bodyH+6);
+        ctx.lineTo(gx+18, gy+bodyH+60);
+        ctx.lineTo(gx-18, gy+bodyH+60);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // === DATA TICKER BAND (scrolling text just below the rail) ===
+    const tickY=railY+14;
+    ctx.fillStyle='rgba(10,20,40,0.82)';
+    ctx.fillRect(0, tickY, cw, 14);
+    ctx.strokeStyle='rgba(100,180,255,0.4)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0, tickY); ctx.lineTo(cw, tickY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, tickY+14); ctx.lineTo(cw, tickY+14); ctx.stroke();
+    ctx.fillStyle='rgba(140,220,255,0.85)';
+    ctx.font='bold 9px monospace';
+    ctx.textAlign='left';
+    const tt=mi.tickerText||'';
+    if(!mi._tickerW){ mi._tickerW = ctx.measureText(tt).width || 1; }
+    const tw=mi._tickerW;
+    const off=(mi.tickerOffset||0)%tw;
+    let tx2=-off;
+    while(tx2 < cw){
+      ctx.fillText(tt, tx2, tickY+10);
+      tx2+=tw;
+    }
+    const tdot=(Math.sin(t*3)+1)*0.5;
+    ctx.fillStyle=`rgba(100,255,120,${0.6+tdot*0.4})`;
+    ctx.beginPath(); ctx.arc(8, tickY+7, 2, 0, Math.PI*2); ctx.fill();
+
+    // === OVERHEAD CABLE BUNDLES (hanging from ceiling) ===
+    if(mi.hubCables) mi.hubCables.forEach(cb=>{
+      const sx=cb.x-camX;
+      if(sx<-40||sx>cw+40)return;
+      // Main cable
+      ctx.strokeStyle=`hsla(${cb.hue},60%,30%,0.85)`;
+      ctx.lineWidth=cb.thick+1.5;
+      ctx.beginPath();
+      ctx.moveTo(sx-6, ceilY);
+      ctx.quadraticCurveTo(sx, ceilY+cb.len+cb.sag, sx+6, ceilY+cb.len*0.6);
+      ctx.stroke();
+      // Secondary cable
+      ctx.strokeStyle=`hsla(${(cb.hue+140)%360},50%,35%,0.7)`;
+      ctx.lineWidth=cb.thick;
+      ctx.beginPath();
+      ctx.moveTo(sx+3, ceilY);
+      ctx.quadraticCurveTo(sx+6, ceilY+cb.len*0.9+cb.sag*0.6, sx+10, ceilY+cb.len*0.5);
+      ctx.stroke();
+      // Occasional signal pulse along cable
+      const pulse=(t*0.6+cb.x*0.01)%1;
+      if(pulse<0.3){
+        const py=ceilY + pulse/0.3 * cb.len;
+        ctx.fillStyle=`hsla(${cb.hue},90%,70%,${0.8*(1-pulse/0.3)})`;
+        ctx.beginPath();ctx.arc(sx + pulse*4, py, 1.8, 0, Math.PI*2); ctx.fill();
+      }
+    });
+
     // === CREW NPCs (drawn before player so they sit behind) ===
     if(mi.hubCrew) mi.hubCrew.forEach(c=>{
       const cx=c.x-camX;
-      if(cx<-40||cx>cw+40)return;
-      // Shadow
-      ctx.fillStyle='rgba(0,0,0,0.3)';ctx.beginPath();ctx.ellipse(cx,floorY+2,10,2,0,0,Math.PI*2);ctx.fill();
-      if(c.skin && typeof drawAlienPreview==='function'){
-        drawAlienPreview(cx, floorY, c.scale, c.skin, c.facing, c.walkT);
-      }else{
-        // Fallback silhouette
-        ctx.fillStyle='#6ab58e';ctx.fillRect(cx-5,floorY-18,10,15);
-        ctx.beginPath();ctx.arc(cx,floorY-22,6,0,Math.PI*2);ctx.fill();
-      }
+      if(cx<-60||cx>cw+60)return;
+      drawHubCrewMember(c, cx, floorY, t);
     });
-    // Doors (one per menu entry)
+
+    // === FLOATING PROBE DRONE ===
+    if(mi.hubDrone){
+      const d=mi.hubDrone;
+      const dx=d.x-camX;
+      if(dx>-60&&dx<cw+60){
+        const dy=d.y;
+        // Glow beam pointing down
+        const bg=ctx.createLinearGradient(dx, dy, dx, floorY);
+        bg.addColorStop(0,'rgba(140,220,255,0.45)');
+        bg.addColorStop(1,'rgba(140,220,255,0)');
+        ctx.fillStyle=bg;
+        ctx.beginPath();
+        ctx.moveTo(dx-3, dy+6);
+        ctx.lineTo(dx+3, dy+6);
+        ctx.lineTo(dx+18, floorY);
+        ctx.lineTo(dx-18, floorY);
+        ctx.closePath();
+        ctx.fill();
+        // Glow halo
+        const glow=ctx.createRadialGradient(dx, dy, 2, dx, dy, 26);
+        glow.addColorStop(0,'rgba(140,220,255,0.55)');
+        glow.addColorStop(1,'transparent');
+        ctx.fillStyle=glow;
+        ctx.beginPath();ctx.arc(dx, dy, 26, 0, Math.PI*2);ctx.fill();
+        // Body (small saucer)
+        ctx.fillStyle='#223';
+        ctx.beginPath();ctx.ellipse(dx, dy, 10, 4, 0, 0, Math.PI*2);ctx.fill();
+        ctx.fillStyle='#445';
+        ctx.beginPath();ctx.ellipse(dx, dy-2, 6, 3, 0, 0, Math.PI*2);ctx.fill();
+        // Red blinker
+        const blink=(Math.sin(t*8)+1)*0.5;
+        ctx.fillStyle=`rgba(255,80,80,${0.5+blink*0.5})`;
+        ctx.beginPath();ctx.arc(dx+d.vx>0?-8:8, dy, 1.5, 0, Math.PI*2); ctx.fill();
+        // Eye/sensor ring
+        ctx.fillStyle=`rgba(140,220,255,${0.7+Math.sin(t*3)*0.2})`;
+        ctx.beginPath();ctx.arc(dx, dy+1, 2, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    // Doors (one per menu entry) — each styled specifically to its content
     h.doorX.forEach((dx,i)=>{
       const sx=dx-camX;
       if(sx<-120||sx>cw+120)return;
       const m=MS_MENUS[i];
       const c=m.color;
       const near=h.nearDoor===i;
-      const dw=70,dh=130,dy=floorY-dh;
-      // Frame
-      ctx.fillStyle='#0a1522';ctx.fillRect(sx-dw/2-4,dy-6,dw+8,dh+6);
-      // Door panel
+      const dw=76,dh=140,dy=floorY-dh;
+      const flick=0.85+Math.sin(t*6+i)*0.1+(Math.random()<0.005?-0.2:0);
+      // Heavy bulkhead frame (industrial, riveted)
+      const frameCol=`rgb(${20+c[0]*0.15|0},${25+c[1]*0.15|0},${35+c[2]*0.15|0})`;
+      ctx.fillStyle=frameCol;ctx.fillRect(sx-dw/2-7,dy-9,dw+14,dh+12);
+      // Frame highlight (top/left)
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},0.12)`;
+      ctx.fillRect(sx-dw/2-7,dy-9,dw+14,2);
+      ctx.fillRect(sx-dw/2-7,dy-9,2,dh+12);
+      // Rivets on frame
+      ctx.fillStyle='rgba(0,0,0,0.5)';
+      for(let ri=0;ri<5;ri++){const ry=dy-5+ri*(dh/4);
+        ctx.beginPath();ctx.arc(sx-dw/2-4,ry,1.3,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(sx+dw/2+4,ry,1.3,0,Math.PI*2);ctx.fill();
+      }
+      ctx.fillStyle='rgba(180,190,210,0.35)';
+      for(let ri=0;ri<5;ri++){const ry=dy-5+ri*(dh/4);
+        ctx.beginPath();ctx.arc(sx-dw/2-4.3,ry-0.3,0.5,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(sx+dw/2+3.7,ry-0.3,0.5,0,Math.PI*2);ctx.fill();
+      }
+      // Door recess (darker back)
+      ctx.fillStyle='#020610';ctx.fillRect(sx-dw/2,dy,dw,dh);
+      // Door panel with diagonal gradient
       const dg=ctx.createLinearGradient(sx-dw/2,dy,sx+dw/2,dy+dh);
-      dg.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${near?0.35:0.15})`);
-      dg.addColorStop(1,`rgba(${c[0]*0.4|0},${c[1]*0.4|0},${c[2]*0.4|0},${near?0.6:0.35})`);
+      dg.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${near?0.38:0.18})`);
+      dg.addColorStop(0.5,`rgba(${c[0]*0.6|0},${c[1]*0.6|0},${c[2]*0.6|0},${near?0.55:0.3})`);
+      dg.addColorStop(1,`rgba(${c[0]*0.3|0},${c[1]*0.3|0},${c[2]*0.3|0},${near?0.65:0.42})`);
       ctx.fillStyle=dg;ctx.fillRect(sx-dw/2,dy,dw,dh);
-      // Door seam
-      ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.9:0.4})`;ctx.lineWidth=near?2:1;
-      ctx.strokeRect(sx-dw/2,dy,dw,dh);
-      ctx.beginPath();ctx.moveTo(sx,dy);ctx.lineTo(sx,dy+dh);ctx.stroke();
-      // Icon plate above door
-      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.85:0.4})`;
-      ctx.font='26px monospace';ctx.textAlign='center';
-      ctx.fillText(m.icon,sx,dy-14);
-      // Label
-      ctx.fillStyle=near?`rgba(${c[0]},${c[1]},${c[2]},0.95)`:'rgba(180,200,230,0.4)';
+      // Diagonal panel cut lines (sci-fi detail)
+      ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.35:0.18})`;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(sx-dw/2,dy+28);ctx.lineTo(sx-8,dy+28);ctx.lineTo(sx-4,dy+34);ctx.lineTo(sx+dw/2,dy+34);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(sx-dw/2,dy+dh-34);ctx.lineTo(sx+4,dy+dh-34);ctx.lineTo(sx+8,dy+dh-28);ctx.lineTo(sx+dw/2,dy+dh-28);ctx.stroke();
+
+      // === SPECIALIZED DOOR VIEWPORT / CONTENT WINDOW ===
+      // A glowing window in the middle of each door shows a peek of what's inside
+      const vpX=sx, vpY=dy+dh*0.42, vpW=dw-22, vpH=48;
+      // Viewport frame
+      ctx.fillStyle='#000';ctx.fillRect(vpX-vpW/2,vpY-vpH/2,vpW,vpH);
+      ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.9:0.5})`;ctx.lineWidth=1.5;
+      ctx.strokeRect(vpX-vpW/2,vpY-vpH/2,vpW,vpH);
+      ctx.save();
+      ctx.beginPath();ctx.rect(vpX-vpW/2+1,vpY-vpH/2+1,vpW-2,vpH-2);ctx.clip();
+      // Fill base
+      ctx.fillStyle=`rgba(${c[0]*0.15|0},${c[1]*0.15|0},${c[2]*0.15|0},1)`;
+      ctx.fillRect(vpX-vpW/2,vpY-vpH/2,vpW,vpH);
+      const vpL=vpX-vpW/2, vpT=vpY-vpH/2;
+      if(m.id==='bridge'){
+        // Starfield + pilot silhouette with console glow
+        for(let si=0;si<12;si++){const ssx=vpL+((si*17+t*30)%vpW),ssy=vpT+((si*13+2)%vpH);
+          ctx.fillStyle=`rgba(200,230,255,${0.5+Math.sin(t*3+si)*0.3})`;ctx.fillRect(ssx,ssy,1,1);}
+        // Console line
+        ctx.fillStyle='rgba(80,150,255,0.5)';ctx.fillRect(vpL,vpT+vpH-10,vpW,3);
+        // Pilot head silhouette
+        ctx.fillStyle='rgba(0,0,0,0.85)';ctx.beginPath();ctx.arc(vpX,vpT+vpH-12,5,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(80,150,255,0.3)';ctx.fillRect(vpX-6,vpT+vpH-7,12,2);
+      } else if(m.id==='starmap'){
+        // Galaxy swirl
+        for(let si=0;si<20;si++){
+          const a=t*0.5+si*0.4;
+          const r=2+si*0.8;
+          const gx=vpX+Math.cos(a)*r, gy=vpY+Math.sin(a)*r*0.5;
+          ctx.fillStyle=`rgba(${150+si*5},${180-si*3},255,${0.7-si*0.025})`;
+          ctx.fillRect(gx,gy,1.2,1.2);
+        }
+        // Planet orbits
+        ctx.strokeStyle='rgba(120,180,255,0.35)';ctx.lineWidth=0.5;
+        ctx.beginPath();ctx.ellipse(vpX,vpY,12,5,0,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.ellipse(vpX,vpY,20,8,0,0,Math.PI*2);ctx.stroke();
+        // Central star
+        ctx.fillStyle='#ffd';ctx.beginPath();ctx.arc(vpX,vpY,1.8,0,Math.PI*2);ctx.fill();
+      } else if(m.id==='comms'){
+        // Concentric radio waves pulsing out
+        for(let wi=0;wi<4;wi++){
+          const wr=((t*20+wi*10)%24);
+          ctx.strokeStyle=`rgba(255,120,120,${0.7-wr/24*0.7})`;ctx.lineWidth=1.2;
+          ctx.beginPath();ctx.arc(vpX,vpY,wr,0,Math.PI*2);ctx.stroke();
+        }
+        // Antenna
+        ctx.strokeStyle='#f88';ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(vpX,vpY+2);ctx.lineTo(vpX,vpY-8);ctx.stroke();
+        ctx.fillStyle='#f44';ctx.beginPath();ctx.arc(vpX,vpY-9,1.8,0,Math.PI*2);ctx.fill();
+      } else if(m.id==='lab'){
+        // Test tube with bubbling liquid
+        ctx.strokeStyle='rgba(180,220,200,0.7)';ctx.lineWidth=1.2;
+        ctx.strokeRect(vpX-5,vpT+6,10,vpH-12);
+        // Liquid
+        const liqH=(vpH-12)*0.6;
+        ctx.fillStyle=`rgba(140,255,180,0.7)`;ctx.fillRect(vpX-4,vpT+vpH-6-liqH,8,liqH);
+        // Bubbles
+        for(let bi=0;bi<3;bi++){
+          const by=vpT+vpH-6-((t*15+bi*8)%liqH);
+          ctx.fillStyle='rgba(220,255,230,0.85)';
+          ctx.beginPath();ctx.arc(vpX+Math.sin(t*3+bi)*2.5,by,1.2,0,Math.PI*2);ctx.fill();
+        }
+        // Specimen silhouette next to tube
+        ctx.fillStyle='rgba(0,0,0,0.8)';ctx.fillRect(vpX+10,vpT+vpH-14,4,10);
+        ctx.beginPath();ctx.arc(vpX+12,vpT+vpH-16,2,0,Math.PI*2);ctx.fill();
+      } else if(m.id==='arena'){
+        // Crossed swords + sparks
+        ctx.strokeStyle='rgba(255,180,100,0.9)';ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(vpX-10,vpY-8);ctx.lineTo(vpX+10,vpY+8);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(vpX-10,vpY+8);ctx.lineTo(vpX+10,vpY-8);ctx.stroke();
+        // Hilts
+        ctx.fillStyle='#a63';
+        ctx.fillRect(vpX-12,vpY-10,4,4);ctx.fillRect(vpX+8,vpY-10,4,4);
+        ctx.fillRect(vpX-12,vpY+6,4,4);ctx.fillRect(vpX+8,vpY+6,4,4);
+        // Sparks
+        for(let si=0;si<6;si++){const sa=t*2+si;
+          const sox=Math.cos(sa)*(4+si), soy=Math.sin(sa)*(4+si);
+          ctx.fillStyle=`rgba(255,${200+si*10},80,${0.9-si*0.12})`;
+          ctx.fillRect(vpX+sox,vpY+soy,1.5,1.5);
+        }
+      } else if(m.id==='zoo'){
+        // Cages with creature silhouettes pacing
+        ctx.strokeStyle='rgba(80,100,80,0.8)';ctx.lineWidth=0.8;
+        for(let bx=vpL+4;bx<vpL+vpW;bx+=4){
+          ctx.beginPath();ctx.moveTo(bx,vpT+2);ctx.lineTo(bx,vpT+vpH-4);ctx.stroke();
+        }
+        // Floor
+        ctx.fillStyle='rgba(60,45,30,0.6)';ctx.fillRect(vpL,vpT+vpH-6,vpW,6);
+        // Creature silhouette pacing
+        const pc=vpL+8+((t*10)%(vpW-16));
+        ctx.fillStyle='rgba(0,0,0,0.85)';
+        ctx.fillRect(pc-3,vpT+vpH-14,6,8);
+        ctx.beginPath();ctx.arc(pc,vpT+vpH-16,3,0,Math.PI*2);ctx.fill();
+        // Eyes glowing
+        ctx.fillStyle='#f44';ctx.fillRect(pc-2,vpT+vpH-17,1,1);ctx.fillRect(pc+1,vpT+vpH-17,1,1);
+      } else if(m.id==='upgrades'){
+        // Rotating gear + wrench
+        ctx.save();ctx.translate(vpX-5,vpY);ctx.rotate(t);
+        ctx.strokeStyle='rgba(255,220,80,0.9)';ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.stroke();
+        for(let gi=0;gi<8;gi++){const ga=gi*Math.PI/4;
+          ctx.beginPath();ctx.moveTo(Math.cos(ga)*5,Math.sin(ga)*5);ctx.lineTo(Math.cos(ga)*9,Math.sin(ga)*9);ctx.stroke();}
+        ctx.fillStyle='rgba(255,220,80,0.4)';ctx.beginPath();ctx.arc(0,0,2,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+        // Static wrench
+        ctx.strokeStyle='rgba(200,200,210,0.8)';ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(vpX+4,vpY+6);ctx.lineTo(vpX+11,vpY-2);ctx.stroke();
+        ctx.fillStyle='rgba(200,200,210,0.8)';ctx.beginPath();ctx.arc(vpX+12,vpY-3,2.5,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(0,0,0,0.6)';ctx.beginPath();ctx.arc(vpX+12,vpY-3,1.2,0,Math.PI*2);ctx.fill();
+      } else if(m.id==='stats'){
+        // Log bars + pie chart
+        ctx.fillStyle='rgba(150,200,150,0.7)';
+        for(let bi=0;bi<5;bi++){const bh=3+Math.abs(Math.sin(t*0.8+bi))*10;
+          ctx.fillRect(vpL+4+bi*5,vpT+vpH-4-bh,3,bh);}
+        // Pie
+        const pcx=vpX+10, pcy=vpY;
+        ctx.fillStyle='rgba(150,200,150,0.5)';ctx.beginPath();ctx.arc(pcx,pcy,7,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(255,200,50,0.7)';ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.arc(pcx,pcy,7,-Math.PI/2,-Math.PI/2+Math.PI*1.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='rgba(80,150,255,0.7)';ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.arc(pcx,pcy,7,-Math.PI/2+Math.PI*1.2,-Math.PI/2+Math.PI*1.8);ctx.closePath();ctx.fill();
+      }
+      ctx.restore();
+      // Viewport scanlines
+      ctx.fillStyle='rgba(0,0,0,0.18)';
+      for(let sl=0;sl<vpH;sl+=2)ctx.fillRect(vpX-vpW/2,vpY-vpH/2+sl,vpW,1);
+      // Viewport glow
+      if(near){
+        const vg=ctx.createRadialGradient(vpX,vpY,0,vpX,vpY,vpW);
+        vg.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},0.15)`);vg.addColorStop(1,'transparent');
+        ctx.fillStyle=vg;ctx.fillRect(sx-dw/2-10,dy-10,dw+20,dh+20);
+      }
+
+      // === TOP SIGNAGE / ICON PLATE ===
+      // Illuminated sign plate above door
+      const signY=dy-4, signH=22;
+      ctx.fillStyle='#0c1826';ctx.fillRect(sx-dw/2,signY-signH,dw,signH);
+      ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.4)`;ctx.lineWidth=1;ctx.strokeRect(sx-dw/2,signY-signH,dw,signH);
+      // Animated status light (left)
+      const stOn=((Math.sin(t*2+i)+1)*0.5)>0.3;
+      ctx.fillStyle=stOn?`rgba(${c[0]},${c[1]},${c[2]},${0.9*flick})`:'rgba(30,30,30,0.8)';
+      ctx.beginPath();ctx.arc(sx-dw/2+6,signY-signH/2,2,0,Math.PI*2);ctx.fill();
+      if(stOn){
+        ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},0.25)`;
+        ctx.beginPath();ctx.arc(sx-dw/2+6,signY-signH/2,5,0,Math.PI*2);ctx.fill();
+      }
+      // Door number plate (right)
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},0.6)`;
+      ctx.font='bold 7px monospace';ctx.textAlign='right';
+      ctx.fillText(`${String(i+1).padStart(2,'0')}`,sx+dw/2-4,signY-signH/2+2);
+      // Icon glow
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?flick:0.5*flick})`;
+      ctx.font='18px monospace';ctx.textAlign='center';
+      ctx.fillText(m.icon,sx-3,signY-5);
+
+      // Door label with underline
+      ctx.fillStyle=near?`rgba(${c[0]},${c[1]},${c[2]},0.95)`:'rgba(180,200,230,0.45)';
       ctx.font=`${near?'bold ':''}10px monospace`;
-      ctx.fillText(m.name,sx,dy+dh+14);
+      ctx.textAlign='center';
+      ctx.fillText(m.name,sx,dy+dh+16);
+      ctx.strokeStyle=near?`rgba(${c[0]},${c[1]},${c[2]},0.7)`:'rgba(180,200,230,0.2)';
+      ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(sx-dw/2+6,dy+dh+20);ctx.lineTo(sx+dw/2-6,dy+dh+20);ctx.stroke();
+
+      // Floor light strip below door (brighter when near)
+      const stripGrad=ctx.createLinearGradient(sx,dy+dh,sx,dy+dh+8);
+      stripGrad.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},${near?0.7*flick:0.25})`);
+      stripGrad.addColorStop(1,'transparent');
+      ctx.fillStyle=stripGrad;ctx.fillRect(sx-dw/2,dy+dh,dw,8);
+      // Floor reflection
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.12:0.05})`;
+      ctx.beginPath();ctx.ellipse(sx,floorY+2,dw*0.6,4,0,0,Math.PI*2);ctx.fill();
+      // Hazard-stripe safety zone on floor in front of the door
+      const hazY=floorY+10, hazH=5;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(sx-dw/2-6, hazY, dw+12, hazH); ctx.clip();
+      // Yellow base
+      ctx.fillStyle=near?'rgba(255,220,60,0.65)':'rgba(200,180,50,0.38)';
+      ctx.fillRect(sx-dw/2-6, hazY, dw+12, hazH);
+      // Black diagonal slashes
+      ctx.fillStyle='rgba(20,16,6,0.85)';
+      for(let hx=-12; hx<dw+18; hx+=8){
+        ctx.beginPath();
+        ctx.moveTo(sx-dw/2+hx, hazY);
+        ctx.lineTo(sx-dw/2+hx+4, hazY);
+        ctx.lineTo(sx-dw/2+hx-1, hazY+hazH);
+        ctx.lineTo(sx-dw/2+hx-5, hazY+hazH);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      // Glowing threshold bar right at the door sill
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?0.9*flick:0.5})`;
+      ctx.fillRect(sx-dw/2+4, dy+dh-3, dw-8, 2);
+      // Warning chevrons on door frame sides (animated)
+      const chev=(Math.sin(t*2+i)+1)*0.5;
+      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.3+chev*0.5})`;
+      for(let chi=0;chi<3;chi++){
+        const chy=dy+30+chi*38;
+        ctx.beginPath();
+        ctx.moveTo(sx-dw/2-10, chy);
+        ctx.lineTo(sx-dw/2-4, chy+5);
+        ctx.lineTo(sx-dw/2-10, chy+10);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(sx+dw/2+10, chy);
+        ctx.lineTo(sx+dw/2+4, chy+5);
+        ctx.lineTo(sx+dw/2+10, chy+10);
+        ctx.closePath(); ctx.fill();
+      }
+
       // Prompt
       if(near){
         const bob=Math.sin(t*4)*2;
         ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.6+Math.sin(t*5)*0.3})`;
         ctx.font='bold 10px monospace';
-        ctx.fillText('[E]',sx,dy-34+bob);
-        // Glow
-        const glow=ctx.createRadialGradient(sx,dy+dh/2,0,sx,dy+dh/2,dw*1.2);
-        glow.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},0.12)`);glow.addColorStop(1,'transparent');
-        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,dy+dh/2,dw*1.2,0,Math.PI*2);ctx.fill();
+        ctx.textAlign='center';
+        ctx.fillText('[E] ENTER',sx,dy-38+bob);
+        // Sweep glow
+        const glow=ctx.createRadialGradient(sx,dy+dh/2,0,sx,dy+dh/2,dw*1.4);
+        glow.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},0.15)`);glow.addColorStop(1,'transparent');
+        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,dy+dh/2,dw*1.4,0,Math.PI*2);ctx.fill();
       }
     });
     // Ambient particles (drawn after doors)
@@ -4387,6 +6228,76 @@ function drawMothership(){
     if(h.y<-2){
       const shAlpha=Math.max(0.08,0.35+h.y*0.01);
       ctx.fillStyle=`rgba(0,0,0,${shAlpha})`;ctx.beginPath();ctx.ellipse(ax,floorY+2,14,3,0,0,Math.PI*2);ctx.fill();
+    }
+    // === FLOATING HOLOGRAPHIC WAYPOINT ABOVE PLAYER ===
+    // Points to the nearest non-current door
+    if(h.doorX && h.doorX.length){
+      // Find nearest door
+      let nearestI=0, nearestD=1e9;
+      h.doorX.forEach((dx,i)=>{
+        const d=Math.abs(dx-h.x);
+        if(d<nearestD){nearestD=d; nearestI=i;}
+      });
+      const isNearDoor = h.nearDoor===nearestI;
+      // Only show waypoint if NOT already right at a door
+      if(!isNearDoor && nearestD>40){
+        const m2=MS_MENUS[nearestI];
+        const c2=m2.color;
+        const direction = h.doorX[nearestI] > h.x ? 1 : -1;
+        const hx=ax, hy=ay-80 + Math.sin(t*2)*3;
+        // Ring base (projector-style)
+        ctx.strokeStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.6)`;
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy+14, 18, 4, 0, 0, Math.PI*2); ctx.stroke();
+        // Projector beam stem
+        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.15)`;
+        ctx.fillRect(hx-8, hy+6, 16, 10);
+        // Hologram glow
+        const hg=ctx.createRadialGradient(hx, hy, 2, hx, hy, 36);
+        hg.addColorStop(0, `rgba(${c2[0]},${c2[1]},${c2[2]},0.28)`);
+        hg.addColorStop(1,'transparent');
+        ctx.fillStyle=hg;
+        ctx.beginPath(); ctx.arc(hx, hy, 36, 0, Math.PI*2); ctx.fill();
+        // Arrow
+        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},${0.85+Math.sin(t*4)*0.15})`;
+        ctx.save();
+        ctx.translate(hx, hy);
+        ctx.scale(direction, 1);
+        ctx.beginPath();
+        ctx.moveTo(-10, -6);
+        ctx.lineTo(4, -6);
+        ctx.lineTo(4, -12);
+        ctx.lineTo(18, 0);
+        ctx.lineTo(4, 12);
+        ctx.lineTo(4, 6);
+        ctx.lineTo(-10, 6);
+        ctx.closePath();
+        ctx.fill();
+        // Inner highlight
+        ctx.fillStyle=`rgba(255,255,255,${0.35+Math.sin(t*4)*0.15})`;
+        ctx.beginPath();
+        ctx.moveTo(-8, -4);
+        ctx.lineTo(2, -4);
+        ctx.lineTo(2, -9);
+        ctx.lineTo(14, 0);
+        ctx.lineTo(2, 9);
+        ctx.lineTo(2, 4);
+        ctx.lineTo(-8, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        // Door name label below arrow
+        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.8)`;
+        ctx.font='bold 8px monospace';
+        ctx.textAlign='center';
+        ctx.fillText(m2.name, hx, hy+26);
+        // Scanlines over hologram
+        ctx.fillStyle='rgba(0,0,0,0.18)';
+        for(let sl=-12; sl<18; sl+=3){
+          ctx.fillRect(hx-18, hy+sl, 36, 1);
+        }
+      }
     }
     // Shadow
     ctx.fillStyle='rgba(0,0,0,0.35)';ctx.beginPath();ctx.ellipse(ax,ay+2,14,3,0,0,Math.PI*2);ctx.fill();
@@ -4545,8 +6456,18 @@ function drawMothership(){
       const zooW=mi.zooWidth||Math.max(600, allCreatures.length*75+320);
       const floorY=ch-50;
       const ceilY=70;
-      // Camera follows alien
-      const camX=Math.max(0,Math.min(zooW-cw, za.x-cw/2));
+      // Zoom in for closeup feel — scale the whole interior scene
+      const zooZoom=1.6;
+      // Camera follows alien horizontally, biased so the visible width matches zoom
+      const visW=cw/zooZoom;
+      const camX=Math.max(0,Math.min(Math.max(0,zooW-visW), za.x-visW/2)) - (cw-visW)/2;
+      // Pivot the zoom on the floor / player area so the ground stays visible
+      const pivotY=floorY-30;      // roughly where the player's torso is
+      const screenPivotY=ch-90;    // where that pivot should land on screen
+      ctx.save();
+      ctx.translate(cw/2, screenPivotY);
+      ctx.scale(zooZoom, zooZoom);
+      ctx.translate(-cw/2, -pivotY);
 
       // === PRISON CELL INTERIOR ===
       // Back wall (concrete)
@@ -4657,119 +6578,59 @@ function drawMothership(){
         ctx.fillStyle='rgba(20,15,10,0.5)';
         ctx.beginPath();ctx.ellipse(px,floorY+22+(i%2)*6,14+((i*3)%8),3,0,0,Math.PI*2);ctx.fill();
       }
-      // Left/right cell boundary walls (heavy stone)
-      // Left wall
-      if(camX<20){
-        const wx=-camX;
-        ctx.fillStyle='#0a0806';ctx.fillRect(wx-20,ceilY,20,floorY-ceilY);
-        ctx.strokeStyle='rgba(255,220,140,0.1)';ctx.beginPath();ctx.moveTo(wx,ceilY);ctx.lineTo(wx,floorY);ctx.stroke();
-      }
-      // Right wall
-      if(camX>zooW-cw-20){
-        const wx=zooW-camX;
-        ctx.fillStyle='#0a0806';ctx.fillRect(wx,ceilY,20,floorY-ceilY);
-        ctx.strokeStyle='rgba(255,220,140,0.1)';ctx.beginPath();ctx.moveTo(wx,ceilY);ctx.lineTo(wx,floorY);ctx.stroke();
-      }
-      // === IRON BARS ACROSS THE FRONT (foreground — between camera and scene) ===
-      // We'll draw these AFTER creatures but keep flag for later
-      const drawFrontBars = ()=>{
-        // Top crossbar
-        ctx.fillStyle='#1a1a1a';ctx.fillRect(0,ceilY-2,cw,6);
-        ctx.strokeStyle='rgba(80,80,80,0.5)';ctx.lineWidth=1;ctx.strokeRect(0,ceilY-2,cw,6);
-        // Middle crossbar (at waist height — slightly ghosted)
-        ctx.fillStyle='rgba(20,20,20,0.55)';ctx.fillRect(0,floorY-80,cw,4);
-        // Bottom crossbar
-        ctx.fillStyle='#1a1a1a';ctx.fillRect(0,floorY-4,cw,6);
-        ctx.strokeStyle='rgba(80,80,80,0.5)';ctx.strokeRect(0,floorY-4,cw,6);
-        // Vertical bars — evenly spaced, partial alpha near top (between camera & scene)
-        const barSpacing=32, barW=5;
-        for(let bx=-((camX*0.15)%barSpacing);bx<cw+barSpacing;bx+=barSpacing){
-          // Bar body
-          const g=ctx.createLinearGradient(bx,0,bx+barW,0);
-          g.addColorStop(0,'#0a0a0a');g.addColorStop(0.5,'#3a3a3a');g.addColorStop(1,'#0a0a0a');
-          ctx.fillStyle=g;ctx.fillRect(bx,ceilY-2,barW,floorY-ceilY+8);
-          // Highlight
-          ctx.strokeStyle='rgba(120,120,120,0.4)';ctx.lineWidth=1;
-          ctx.beginPath();ctx.moveTo(bx+1,ceilY);ctx.lineTo(bx+1,floorY);ctx.stroke();
-          // Rust specks
-          if(((bx*7.7)|0)%3===0){
-            ctx.fillStyle='rgba(140,70,30,0.5)';
-            ctx.fillRect(bx,ceilY+20+((bx*13)%(floorY-ceilY-40)),barW,3);
-          }
-        }
-      };
-      // Store for later drawing
-      mi._zooFrontBars = drawFrontBars;
-
+      // (No left/right boundary walls — more open space to walk)
       // Draw creatures — use their real walking x (within the prison cell bounds)
       allCreatures.forEach((c,i)=>{
         const cx2=(c.x!=null)?c.x:(i*80+60);
         c._zooWalkX=cx2; // store for interaction
         const sx=cx2-camX;
         if(sx<-40||sx>cw+40)return;
-        const py=floorY;const sz=1.5*(c.scale||c.size||1);
+        const py=floorY;
+        const sc=(c.scale||c.size||1);
         const lo=Math.sin((c.walkTimer||0)*3)*2;
         const bounce=c.feedAnim>0?Math.sin(c.feedAnim*0.5)*3:0;
         if(c._isCow){
+          const sz=1.5*sc;
           ctx.fillStyle=c.color||'#fff';ctx.beginPath();ctx.ellipse(sx,py-8*sz+bounce,16*sz,10*sz,0,0,Math.PI*2);ctx.fill();
           ctx.fillStyle=c.spots||'#333';ctx.beginPath();ctx.ellipse(sx-5*sz,py-11*sz+bounce,4*sz,3*sz,0.3,0,Math.PI*2);ctx.fill();
           ctx.fillStyle=c.color||'#fff';ctx.beginPath();ctx.ellipse(sx+14*sz,py-12*sz+bounce,6*sz,5*sz,0.2,0,Math.PI*2);ctx.fill();
           ctx.fillStyle='#111';ctx.beginPath();ctx.arc(sx+17*sz,py-14*sz+bounce,1.5*sz,0,Math.PI*2);ctx.fill();
           ctx.strokeStyle=c.color||'#fff';ctx.lineWidth=2*sz;
           [[-10,-1],[-4,-1],[5,-1],[11,-1]].forEach(([ox])=>{ctx.beginPath();ctx.moveTo(sx+ox*sz,py-1*sz);ctx.lineTo(sx+ox*sz+(ox<0?lo:-lo),py+4*sz);ctx.stroke();});
-        }else if(c.isAlien){
-          ctx.fillStyle=c.color||'#8a8';ctx.fillRect(sx-3*sz,py-14*sz+bounce,6*sz,14*sz);
-          ctx.fillStyle=c.skinColor||c.color||'#8a8';ctx.beginPath();ctx.ellipse(sx,py-20*sz+bounce,5*sz,6*sz,0,0,Math.PI*2);ctx.fill();
-          ctx.fillStyle='#111';ctx.beginPath();ctx.ellipse(sx-2*sz,py-21*sz+bounce,1.5*sz,2.5*sz,0,0,Math.PI*2);ctx.fill();
-          ctx.beginPath();ctx.ellipse(sx+2*sz,py-21*sz+bounce,1.5*sz,2.5*sz,0,0,Math.PI*2);ctx.fill();
-          ctx.strokeStyle=c.color||'#8a8';ctx.lineWidth=2*sz;
-          ctx.beginPath();ctx.moveTo(sx-2*sz,py+bounce);ctx.lineTo(sx-4*sz+lo,py+8*sz);ctx.stroke();
-          ctx.beginPath();ctx.moveTo(sx+2*sz,py+bounce);ctx.lineTo(sx+4*sz-lo,py+8*sz);ctx.stroke();
         }else{
-          // Human — draw with stored appearance
-          const skin=c.skinColor||'#c9a87c';
-          const bw=(c.bodyWidth||5)*sz;
-          // Legs
-          ctx.strokeStyle=c.color||'#335';ctx.lineWidth=2.5*sz;
-          ctx.beginPath();ctx.moveTo(sx-2*sz,py+bounce);ctx.lineTo(sx-4*sz+lo,py+10*sz);ctx.stroke();
-          ctx.beginPath();ctx.moveTo(sx+2*sz,py+bounce);ctx.lineTo(sx+4*sz-lo,py+10*sz);ctx.stroke();
-          // Shoes
-          ctx.fillStyle='#333';
-          ctx.fillRect(sx-5*sz+lo,py+9*sz,4*sz,2*sz);ctx.fillRect(sx+1*sz-lo,py+9*sz,4*sz,2*sz);
-          // Body
-          ctx.fillStyle=c.color||'#558';ctx.fillRect(sx-bw*0.8,py-14*sz+bounce,bw*1.6,14*sz);
-          // Belt
-          ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fillRect(sx-bw*0.8,py-2*sz+bounce,bw*1.6,1.5*sz);
-          // Arms
-          ctx.strokeStyle=skin;ctx.lineWidth=2*sz;
-          ctx.beginPath();ctx.moveTo(sx-bw*0.8,py-10*sz+bounce);ctx.lineTo(sx-bw*0.8-4*sz-lo*0.5,py-5*sz+bounce);ctx.stroke();
-          ctx.beginPath();ctx.moveTo(sx+bw*0.8,py-10*sz+bounce);ctx.lineTo(sx+bw*0.8+4*sz+lo*0.5,py-5*sz+bounce);ctx.stroke();
-          // Head
-          ctx.fillStyle=skin;ctx.beginPath();ctx.ellipse(sx,py-20*sz+bounce,4*sz,5*sz,0,0,Math.PI*2);ctx.fill();
-          // Eyes
-          ctx.fillStyle='#fff';
-          ctx.beginPath();ctx.ellipse(sx-2*sz,py-21*sz+bounce,1.5*sz,1*sz,0,0,Math.PI*2);ctx.fill();
-          ctx.beginPath();ctx.ellipse(sx+2*sz,py-21*sz+bounce,1.5*sz,1*sz,0,0,Math.PI*2);ctx.fill();
-          ctx.fillStyle='#333';ctx.beginPath();ctx.arc(sx-2*sz,py-21*sz+bounce,0.7*sz,0,Math.PI*2);ctx.fill();
-          ctx.beginPath();ctx.arc(sx+2*sz,py-21*sz+bounce,0.7*sz,0,Math.PI*2);ctx.fill();
-          // Hat
-          if(c.hat==='cap'){ctx.fillStyle=c.color||'#333';ctx.fillRect(sx-5*sz,py-25*sz+bounce,10*sz,3*sz);ctx.fillRect(sx-3*sz,py-27*sz+bounce,8*sz,4*sz);}
-          else if(c.hat==='straw'){ctx.fillStyle='#c0a060';ctx.fillRect(sx-6*sz,py-25*sz+bounce,12*sz,2*sz);ctx.fillRect(sx-3*sz,py-27*sz+bounce,6*sz,3*sz);}
-          else if(c.hat==='feather'){ctx.fillStyle='#f44';ctx.beginPath();ctx.moveTo(sx+2*sz,py-25*sz+bounce);ctx.lineTo(sx+4*sz,py-30*sz+bounce);ctx.lineTo(sx+1*sz,py-26*sz+bounce);ctx.fill();}
-          else if(c.hat==='headband'){ctx.fillStyle='#f60';ctx.fillRect(sx-4*sz,py-23*sz+bounce,8*sz,1.5*sz);}
-          else if(c.hat==='collar'){ctx.fillStyle='#fff';ctx.fillRect(sx-2*sz,py-15.5*sz+bounce,4*sz,1.5*sz);}
-          else if(c.hat==='bun'){ctx.fillStyle='#888';ctx.beginPath();ctx.arc(sx,py-25*sz+bounce,2.5*sz,0,Math.PI*2);ctx.fill();}
-          // Extra
-          if(c.extra==='backpack'){ctx.fillStyle='#864';ctx.fillRect(sx-bw-2*sz,py-12*sz+bounce,3*sz,8*sz);}
-          else if(c.extra==='briefcase'){ctx.fillStyle='#543';ctx.fillRect(sx+bw+1*sz,py-4*sz+bounce,4*sz,3*sz);}
-          else if(c.extra==='chain'){ctx.strokeStyle='#fd0';ctx.lineWidth=1*sz;ctx.beginPath();ctx.arc(sx,py-8*sz+bounce,3*sz,0,Math.PI);ctx.stroke();}
-          else if(c.extra==='cane'){ctx.strokeStyle='#654';ctx.lineWidth=1.5*sz;ctx.beginPath();ctx.moveTo(sx+bw+2*sz,py-5*sz+bounce);ctx.lineTo(sx+bw+4*sz,py+8*sz);ctx.stroke();}
-          else if(c.extra==='belly'){ctx.fillStyle=skin;ctx.beginPath();ctx.ellipse(sx,py-6*sz+bounce,bw*0.7,3*sz,0,0,Math.PI*2);ctx.fill();}
-          else if(c.extra==='cross'){ctx.strokeStyle='#fd0';ctx.lineWidth=1*sz;ctx.beginPath();ctx.moveTo(sx,py-10*sz+bounce);ctx.lineTo(sx,py-6*sz+bounce);ctx.moveTo(sx-1.5*sz,py-8.5*sz+bounce);ctx.lineTo(sx+1.5*sz,py-8.5*sz+bounce);ctx.stroke();}
+          // Humans & aliens — use the full renderHuman() with synthesized physics positions
+          // so they look exactly like what was captured.
+          const s=sc, bw=c.bodyWidth||5;
+          const headR=4*s;
+          const ph=(c.walkTimer||0)*0.25;
+          const legSwing=Math.sin(ph)*3*s;
+          const armSwing=-Math.sin(ph)*2*s;
+          const bob=Math.abs(Math.sin(ph))*1*s+bounce;
+          const bodyX=sx, bodyY=py-14*s-bob;
+          const headX=bodyX, headY=bodyY-8*s-headR;
+          const legLX=bodyX-2*s-legSwing, legLY=py-5*s;
+          const legRX=bodyX+2*s+legSwing, legRY=py-5*s;
+          const footLX=bodyX-3*s-legSwing*1.2, footLY=py;
+          const footRX=bodyX+3*s+legSwing*1.2, footRY=py;
+          const armLX=bodyX-6*s+armSwing, armLY=bodyY-4*s;
+          const armRX=bodyX+6*s-armSwing, armRY=bodyY-4*s;
+          const tmp={
+            ...c,
+            scale:s, bodyWidth:bw, headR,
+            bodyX, bodyY, headX, headY,
+            legLX, legLY, legRX, legRY, footLX, footLY, footRX, footRY,
+            armLX, armLY, armRX, armRY,
+            walkDir: c.walkDir||1,
+            ragdoll:false, beingBeamed:false, onFire:false,
+            panicLevel: c.panicLevel||0,
+            color: c.color||(c.isAlien?'#8a8':'#558'),
+            skinColor: c.skinColor||(c.isAlien?(c.color||'#8a8'):'#c9a87c'),
+          };
+          renderHuman(tmp);
         }
         // Name tag
         ctx.fillStyle='rgba(50,255,80,0.4)';ctx.font='7px monospace';ctx.textAlign='center';
-        ctx.fillText(c.label||'?',sx,py-25*(c.scale||c.size||1)+bounce);
+        ctx.fillText(c.label||'?',sx,py-30*sc+bounce);
       });
 
       // Draw player alien — full detailed model with skin
@@ -4778,8 +6639,7 @@ function drawMothership(){
       ctx.fillStyle='rgba(0,0,0,0.4)';ctx.beginPath();ctx.ellipse(ax,floorY+2,10,2.5,0,0,Math.PI*2);ctx.fill();
       drawAlienPreview(ax, ay, 1.0, getAlienSkin(), za.facing, za.walkTimer);
 
-      // Front iron bars (foreground — between camera and cell)
-      if(mi._zooFrontBars) mi._zooFrontBars();
+      ctx.restore(); // end zoom
 
       // Dim vignette
       const vg=ctx.createRadialGradient(cw/2,ch/2,Math.min(cw,ch)*0.3,cw/2,ch/2,Math.max(cw,ch)*0.65);
@@ -5183,8 +7043,9 @@ function leavePlanet() {
   ship.vx = 0; ship.vy = -2;
   saveGame(); // auto-save when leaving planet
   blocks=[]; buildings=[]; humans=[]; particles=[]; debris=[]; tears=[]; cows=[];
+  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[];
   speechBubbles=[]; missiles=[]; fires=[]; clouds=[]; vehicles=[]; weather=[]; hazards=[]; turrets=[]; laserShots=[]; military=[];
-  stunWaves=[]; plasmaBolts=[]; gravityWells=[]; parasites=[]; ashPiles=[]; acidPuddles=[]; rockets=[];
+  stunWaves=[]; plasmaBolts=[]; gravityWells=[]; parasites=[]; ashPiles=[]; acidPuddles=[]; rockets=[]; chainsawSlashes=[]; chainsawRev=0;
   underwaterCaves=[]; caveCreatures=[]; underwaterObjects=[];
   currentMission=null;missionComplete=false;missionTimer=0;
   currentPlanet = null;
@@ -5213,13 +7074,14 @@ document.addEventListener('keydown', e => {
   if (pauseMenu.active) { keys[e.key.toLowerCase()]=true; if(e.key==='Enter')keys['enter']=true; if(e.key==='Escape')keys['escape']=true; e.preventDefault(); return; }
   const k=e.key.toLowerCase();
   // ESC opens pause menu (not in mothership — mothership has its own ESC handling)
-  if(k==='escape'&&gameStarted&&!mothershipMode){pauseMenu.active=true;pauseMenu.sel=0;pauseMenu._cool=10;e.preventDefault();keys[k]=true;return;}
-  if (!keys[k]&&k==='enter'&&gameMode==='planet'&&!mothershipMode&&!pauseMenu.active) togglePlayerMode();
+  if(k==='escape'&&gameStarted&&!mothershipMode&&!pyramidInteriorMode){pauseMenu.active=true;pauseMenu.sel=0;pauseMenu._cool=10;e.preventDefault();keys[k]=true;return;}
+  if (!keys[k]&&k==='enter'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&!pauseMenu.active) togglePlayerMode();
   if (!keys[k]&&k==='e'&&playerMode==='ship'&&!mothershipMode) repulsorBlast();
   if (!keys[k]&&k==='n'&&gameMode==='planet'&&playerMode==='ship') nukeplanet();
   if (!keys[k]&&k==='c'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
   if (k==='g'&&playerMode==='ship')ship.minigunFiring=true;
+  if (!keys[k]&&k==='h'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
   // Upgrades
   if(!keys[k]&&(k==='1'||k==='2'||k==='3')&&score>=10&&gameMode==='planet'){
     const cost=10;
@@ -5232,7 +7094,7 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&e.key==='F4'){window._perfMode=!window._perfMode;showMessage(window._perfMode?'Performance mode ON':'Performance mode OFF');e.preventDefault();return;}
   if(!keys[k]&&k==='l'){flashlightOn=!flashlightOn;showMessage(flashlightOn?'Flashlight ON':'Flashlight OFF');return;}
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
-    [spaceAmbience,flameSfx,alienVoiceSfx,missileSfx,mothershipMusic,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
+    [spaceAmbience,flameSfx,alienVoiceSfx,missileSfx,nukeSfx,underwaterSfx,mothershipMusic,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -5370,8 +7232,8 @@ function repulsorBlast() {
   triggerShake(6);playSound('blast');
   const bx=ship.x,by=ship.y+20,R=200,F=15;
   for(let i=0;i<30;i++){const a=Math.random()*Math.PI*2,sp=Math.random()*5+2;particles.push({x:bx,y:by,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:30,color:'#f44',size:Math.random()*4+2});}
-  blocks.forEach(b=>{const d=dist(bx,by,b.x+b.w/2,b.y+b.h/2);if(d<R){const f=(1-d/R)*F,a=Math.atan2(b.y+b.h/2-by,b.x+b.w/2-bx);b.fixed=false;b.vx+=Math.cos(a)*f;b.vy+=Math.sin(a)*f;b.health-=f*10;b.cracked=true;checkBuildingDestroyed(b);}});
-  humans.forEach(h=>{if(h.collected)return;const d=dist(bx,by,h.bodyX,h.bodyY);if(d<R){const f=(1-d/R)*F*0.8,a=Math.atan2(h.bodyY-by,h.bodyX-bx);h.ragdoll=true;h.crying=true;h.panicLevel=10;const fx=Math.cos(a)*f,fy=Math.sin(a)*f;applyForce(h,fx,fy);bleedEffect(h,fx,fy);}});
+  blocks.forEach(b=>{const d=dist(bx,by,b.x+b.w/2,b.y+b.h/2);if(d<R){const f=(1-d/R)*F,a=Math.atan2(b.y+b.h/2-by,b.x+b.w/2-bx);b.fixed=false;b.vx+=Math.cos(a)*f;b.vy+=Math.sin(a)*f;b.health-=f*10;maybeEvictFromDamage(b);b.cracked=true;checkBuildingDestroyed(b);}});
+  humans.forEach(h=>{if(h.collected)return;const d=dist(bx,by,h.bodyX,h.bodyY);if(d<R){const f=(1-d/R)*F*0.8,a=Math.atan2(h.bodyY-by,h.bodyX-bx);h.ragdoll=true;h.crying=true;h.panicLevel=10;const fx=Math.cos(a)*f,fy=Math.sin(a)*f;applyForce(h,fx,fy);bleedEffect(h,fx,fy,1.5); if(d<R*0.5)spawnGibs(h,fx,fy,2);}});
   // Military damage from repulsor
   military.forEach(m=>{if(m.type==='bullet'||m.type==='boulder'||!m.alive)return;
     if(m.type==='guardian'&&m.shieldUp)return;
@@ -5392,12 +7254,197 @@ function getBleedColor(h){
   if(p.id==='asteroid')return '#a4a'; // sickly purple
   return '#0f0'; // green default
 }
-function bleedEffect(h,fx,fy){
+function bleedEffect(h,fx,fy,power){
   const c=getBleedColor(h);
-  for(let i=0;i<6;i++)particles.push({x:h.bodyX+(Math.random()-0.5)*10,y:h.bodyY+(Math.random()-0.5)*10,
-    vx:fx*0.2+(Math.random()-0.5)*3,vy:fy*0.2+(Math.random()-0.5)*3,life:25+Math.random()*15,color:c,size:Math.random()*3+1});
+  const N=power||1;
+  // Blood spray particles
+  for(let i=0;i<6*N;i++)particles.push({x:h.bodyX+(Math.random()-0.5)*10,y:h.bodyY+(Math.random()-0.5)*10,
+    vx:fx*0.2+(Math.random()-0.5)*3.5,vy:fy*0.2+(Math.random()-0.5)*3.5-1,life:25+Math.random()*20,color:c,size:Math.random()*3+1,gravity:0.15});
+  // Blood drops that arc and land → spawn pool
+  for(let i=0;i<2*N;i++){
+    const gy=(h.groundY!=null?h.groundY:(typeof GROUND_LEVEL!=='undefined'?GROUND_LEVEL:h.bodyY+40));
+    bloodDroplets.push({x:h.bodyX,y:h.bodyY-5,vx:fx*0.15+(Math.random()-0.5)*3,vy:fy*0.15-1-Math.random()*2,groundY:gy,color:c,size:1.5+Math.random()*1.5});
+  }
+}
+// Single-frame droplet tracker — non-persistent; when they hit ground they spawn a blood pool
+let bloodDroplets=[];
+function stepBloodDroplets(){
+  for(let i=bloodDroplets.length-1;i>=0;i--){
+    const d=bloodDroplets[i];
+    d.vy+=0.35; d.x+=d.vx; d.y+=d.vy;
+    if(d.y>=d.groundY){
+      bloodPools.push({x:d.x,y:d.groundY,r:d.size*0.5,targetR:2+Math.random()*3,life:1200,maxLife:1200,color:d.color});
+      bloodDroplets.splice(i,1);
+    }
+  }
+}
+function spawnGibs(h,ix,iy,power){
+  const c=getBleedColor(h);
+  const bodyC=(h.color||'#558');
+  const skin=(h.skinColor||'#c9a87c');
+  const P=power||1;
+  // Big blood burst
+  bleedEffect(h,ix,iy,1+P);
+  // Limb chunks
+  const parts=['arm','leg','head','torso','hand','foot'];
+  const gy=(h.groundY!=null?h.groundY:(typeof GROUND_LEVEL!=='undefined'?GROUND_LEVEL:h.bodyY+40));
+  const n=3+((P*2)|0);
+  for(let i=0;i<n;i++){
+    const kind=parts[(Math.random()*parts.length)|0];
+    const sz=kind==='head'?5:(kind==='torso'?7:(kind==='hand'||kind==='foot'?3:4));
+    gibs.push({x:h.bodyX+(Math.random()-0.5)*6, y:h.bodyY+(Math.random()-0.5)*10,
+      vx:ix*0.25+(Math.random()-0.5)*6, vy:iy*0.25-2-Math.random()*4,
+      rot:Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.4,
+      size:sz, life:240+Math.random()*120, kind, color:kind==='torso'?bodyC:skin, bloodC:c, groundY:gy, onGround:false});
+  }
+  // Big pool under kill site
+  bloodPools.push({x:h.bodyX,y:gy,r:1,targetR:14+Math.random()*10+P*4,life:1500,maxLife:1500,color:c});
+}
+function stepGibs(){
+  for(let i=gibs.length-1;i>=0;i--){
+    const g=gibs[i];
+    if(!g.onGround){
+      g.vy+=0.35; g.vx*=0.99; g.x+=g.vx; g.y+=g.vy; g.rot+=g.rotV;
+      if(g.y>=g.groundY-g.size*0.3){
+        g.y=g.groundY-g.size*0.3; g.onGround=true;
+        g.vx*=0.2; g.vy=0; g.rotV*=0.2;
+        // Splat — drop a small pool
+        bloodPools.push({x:g.x,y:g.groundY,r:1,targetR:3+Math.random()*3,life:900,maxLife:900,color:g.bloodC});
+        // Blood spray on impact
+        for(let j=0;j<3;j++)particles.push({x:g.x,y:g.groundY-2,vx:(Math.random()-0.5)*2,vy:-0.5-Math.random()*1.5,life:15,color:g.bloodC,size:1+Math.random()});
+      }
+    }
+    g.life--;
+    if(g.life<=0)gibs.splice(i,1);
+  }
+}
+function stepBloodPools(){
+  for(let i=bloodPools.length-1;i>=0;i--){
+    const p=bloodPools[i];
+    if(p.r<p.targetR)p.r+=0.18;
+    p.life--;
+    if(p.life<=0)bloodPools.splice(i,1);
+  }
+}
+function stepSkidMarks(){
+  for(let i=skidMarks.length-1;i>=0;i--){
+    const s=skidMarks[i]; s.life--;
+    if(s.life<=0)skidMarks.splice(i,1);
+  }
+}
+function drawBloodPools(){
+  for(const p of bloodPools){
+    const sx=p.x-camera.x, sy=p.y-camera.y;
+    if(sx<-40||sx>canvas.width+40||sy<-20||sy>canvas.height+20)continue;
+    const fade=Math.min(1,p.life/p.maxLife);
+    ctx.fillStyle=p.color;ctx.globalAlpha=0.35+fade*0.45;
+    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r,p.r*0.4,0,0,Math.PI*2);ctx.fill();
+    // Darker inner
+    ctx.globalAlpha=0.3*fade;
+    ctx.fillStyle='#1a0000';
+    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r*0.55,p.r*0.22,0,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+function drawGibs(){
+  for(const g of gibs){
+    const sx=g.x-camera.x, sy=g.y-camera.y;
+    if(sx<-30||sx>canvas.width+30||sy<-30||sy>canvas.height+30)continue;
+    ctx.save();ctx.translate(g.x,g.y);ctx.rotate(g.rot);
+    // Trailing blood stream while airborne
+    if(!g.onGround && Math.random()<0.4){
+      particles.push({x:g.x,y:g.y,vx:(Math.random()-0.5)*0.5,vy:0.5+Math.random(),life:12,color:g.bloodC,size:1+Math.random()});
+    }
+    ctx.fillStyle=g.color;
+    if(g.kind==='head'){
+      ctx.beginPath();ctx.ellipse(0,0,g.size,g.size*1.15,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#000';ctx.fillRect(-1.5,-0.5,1.3,1.3);ctx.fillRect(0.3,-0.5,1.3,1.3);
+    } else if(g.kind==='torso'){
+      ctx.fillRect(-g.size*0.7,-g.size,g.size*1.4,g.size*2);
+    } else if(g.kind==='arm'||g.kind==='leg'){
+      ctx.fillRect(-g.size*0.3,-g.size,g.size*0.6,g.size*2);
+      ctx.fillStyle=g.bloodC;ctx.fillRect(-g.size*0.35,-g.size-0.5,g.size*0.7,1);
+    } else {
+      ctx.fillRect(-g.size*0.6,-g.size*0.6,g.size*1.2,g.size*1.2);
+    }
+    ctx.restore();
+  }
+}
+function drawSkidMarks(){
+  for(const s of skidMarks){
+    const sx=s.x-camera.x;
+    if(sx<-60||sx>canvas.width+60)continue;
+    const fade=s.life/s.maxLife;
+    ctx.fillStyle=`rgba(20,20,20,${0.45*fade})`;
+    ctx.fillRect(s.x-s.w/2,s.y,s.w,2);
+  }
 }
 function applyForce(h,fx,fy){h.headVX+=fx;h.headVY+=fy;h.bodyVX+=fx;h.bodyVY+=fy;h.legLVX+=fx*0.8;h.legLVY+=fy*0.8;h.legRVX+=fx*0.8;h.legRVY+=fy*0.8;h.armLVX+=fx*1.2;h.armLVY+=fy*1.2;h.armRVX+=fx*1.2;h.armRVY+=fy*1.2;h.footLVX+=fx*0.7;h.footLVY+=fy*0.7;h.footRVX+=fx*0.7;h.footRVY+=fy*0.7;}
+
+// Occupants themed per building type — the unit that flees out when a building is hit/destroyed
+// should look like it belongs there (priest from a church, farmer from a barn, etc.).
+const BUILDING_OCCUPANTS = {
+  church:     {label:'Priest',     color:'#1a1a1a', skinColor:'#d8b892', hat:'collar',  extra:'cross'},
+  mosque:     {label:'Imam',       color:'#e8e8e8', skinColor:'#c9a478', hat:'headband',extra:null},
+  temple:     {label:'Monk',       color:'#c27030', skinColor:'#d8b070', hat:'bun',     extra:null},
+  shop:       {label:'Shopkeeper', color:'#4860a0', skinColor:'#d8b892', hat:'cap',     extra:'briefcase'},
+  market:     {label:'Merchant',   color:'#803030', skinColor:'#c9a060', hat:'straw',   extra:'backpack'},
+  barn:       {label:'Farmer',     color:'#6a8030', skinColor:'#c9a060', hat:'straw',   extra:'cane'},
+  silo:       {label:'Farmer',     color:'#6a8030', skinColor:'#c9a060', hat:'straw',   extra:null},
+  farmhouse:  {label:'Farmer',     color:'#6a5030', skinColor:'#c9a060', hat:'straw',   extra:null},
+  cottage:    {label:'Villager',   color:'#705030', skinColor:'#c9a060', hat:'straw',   extra:null},
+  suburbanHouse:{label:'Resident', color:'#4458a0', skinColor:'#d8b892', hat:'cap',     extra:null},
+  skyscraper: {label:'Office Worker', color:'#303050', skinColor:'#d8b892', hat:'cap',  extra:'briefcase'},
+  adobe:      {label:'Villager',   color:'#a06030', skinColor:'#b88050', hat:'headband',extra:null},
+  hut:        {label:'Hunter',     color:'#6a4820', skinColor:'#9c6838', hat:'feather', extra:'cane'},
+  igloo:      {label:'Inuit',      color:'#f0f0f0', skinColor:'#d8b892', hat:'bun',     extra:'belly'},
+  dome:       {label:'Scientist',  color:'#ffffff', skinColor:'#d8b892', hat:'collar',  extra:'briefcase'},
+  militaryBase:{label:'Soldier',   color:'#445c30', skinColor:'#d8b892', hat:'cap',     extra:null},
+};
+
+function dressHumanForBuilding(h, buildingType){
+  const o = BUILDING_OCCUPANTS[buildingType];
+  if(!o) return; // no theming for trees, silos etc.
+  h.label = o.label;
+  if(o.color) h.color = o.color;
+  if(o.skinColor) h.skinColor = o.skinColor;
+  h.hat = o.hat;
+  h.extra = o.extra;
+}
+
+// Kick a hidden inhabitant out of a damaged building. Used both on destruction
+// and on first-cracked damage (with a probability) so shooting a church sees a priest flee.
+function evictInhabitant(h, b){
+  if(!h.hidden) return;
+  h.hidden = false;
+  h.panicLevel = 8;
+  h.crying = true;
+  h.walkSpeed = 2.5;
+  h.walkDir = Math.random() > 0.5 ? 1 : -1;
+  h.bodyX = b.x + Math.random() * b.w;
+  h.headX = h.bodyX;
+  h.bodyY = GROUND_LEVEL - 15;
+  h.headY = h.bodyY - 15;
+  // Theme the unit to match the building they came from.
+  dressHumanForBuilding(h, b.buildingType);
+  // Burst out effect
+  for(let i=0;i<6;i++) debris.push({x:h.bodyX,y:h.bodyY,vx:(Math.random()-0.5)*4,vy:-Math.random()*3-1,
+    life:25+Math.random()*15,size:Math.random()*2+1,color:b.color||'#888'});
+}
+
+// On first damage (not destruction) — small chance one hidden occupant bursts out.
+// Call this right before `b.cracked = true` so we only fire once per building.
+function maybeEvictFromDamage(b){
+  if(!b || !b.building || b._evicted) return;
+  if(b.cracked) return; // already cracked, only first strike evicts
+  if(Math.random() > 0.35) return; // ~35% of first hits spawn a fleeing occupant
+  const candidates = humans.filter(h => h.hidden && h.hideBuilding === b.building);
+  if(candidates.length === 0) return;
+  const h = candidates[Math.floor(Math.random() * candidates.length)];
+  evictInhabitant(h, b);
+  b._evicted = true;
+  showMessage(`A ${h.label} flees the ${b.buildingType||'building'}!`);
+}
 
 function checkBuildingDestroyed(b){if(b.building && b.health<=0 && !b.building.destroyed){
   b.building.destroyed=true; b.exploding=true; b.explodeTimer=50;
@@ -5413,8 +7460,8 @@ function checkBuildingDestroyed(b){if(b.building && b.health<=0 && !b.building.d
   for(let i=0;i<8;i++) particles.push({x:b.x+Math.random()*b.w,y:b.y+b.h*0.5+Math.random()*b.h*0.5,
     vx:(Math.random()-0.5)*4,vy:-Math.random()*4,life:30+Math.random()*20,
     color:`rgba(255,${100+Math.random()*100},0,0.7)`,size:Math.random()*8+4});
-  // Release hidden inhabitants
-  humans.forEach(h=>{if(h.hidden&&h.hideBuilding===b.building){h.hidden=false;h.panicLevel=8;h.crying=true;h.walkSpeed=2.5;h.walkDir=Math.random()>0.5?1:-1;h.bodyX=b.x+Math.random()*b.w;h.headX=h.bodyX;h.bodyY=GROUND_LEVEL-15;h.headY=h.bodyY-15;}});
+  // Release hidden inhabitants (themed to the building)
+  humans.forEach(h=>{ if(h.hidden && h.hideBuilding===b.building) evictInhabitant(h,b); });
 }}
 
 // --- SOUND FX (Web Audio) ---
@@ -5443,6 +7490,102 @@ function playSound(type){
 }
 function fireMissile(){if(!gameStarted||gameMode==='space')return;missileCooldown=20;missiles.push({x:ship.x,y:ship.y+15,vx:ship.vx*0.3,vy:5,life:300,trail:[]});playSound('missile');}
 
+// Lasso / grapple hook — attach to nearest building or unit and drag it around.
+function toggleLasso(){
+  if(!gameStarted||gameMode!=='planet'||mothershipMode)return;
+  if(ship.lasso){
+    // Release
+    if(ship.lasso.targetType==='block' && ship.lasso.target){ship.lasso.target.lassoed=false;}
+    if(ship.lasso.targetType==='human' && ship.lasso.target){ship.lasso.target.lassoed=false;}
+    ship.lasso=null;
+    showMessage('Lasso released');
+    return;
+  }
+  // Find closest target in range
+  const range=340;
+  let best=null, bestD=range;
+  // Buildings (prefer non-tree fixed structures first)
+  for(const b of blocks){
+    if(b.dead||b.collected)continue;
+    if(b.isTree)continue; // trees are too many — skip to avoid spam
+    const bcx=b.x+b.w/2, bcy=b.y+b.h/2;
+    const d=Math.hypot(bcx-ship.x, bcy-ship.y);
+    if(d<bestD){bestD=d; best={targetType:'block', target:b};}
+  }
+  // Humans
+  for(const h of humans){
+    if(h.collected||h.hidden)continue;
+    const d=Math.hypot(h.bodyX-ship.x, h.bodyY-ship.y);
+    if(d<bestD){bestD=d; best={targetType:'human', target:h};}
+  }
+  if(!best){showMessage('No lasso target in range');return;}
+  if(best.targetType==='block'){
+    const b=best.target;
+    b.fixed=false;
+    b.lassoed=true;
+    // Detach from building so uprooting doesn't insta-destroy the parent
+    if(b.building){b.building.destroyed=true;}
+  } else if(best.targetType==='human'){
+    best.target.lassoed=true;
+    best.target.ragdoll=true;
+    best.target.crying=true;
+    best.target.panicLevel=10;
+  }
+  ship.lasso={targetType:best.targetType, target:best.target};
+  playSound('beam');
+  showMessage('Lasso attached!');
+}
+
+// Per-frame lasso physics — called from the main update loop when ship.lasso is active.
+function updateLasso(){
+  const l=ship.lasso; if(!l)return;
+  const tgt=l.target;
+  // Auto-release conditions
+  if(!tgt||tgt.dead||tgt.collected||tgt.hidden){ship.lasso=null;return;}
+  let tx,ty;
+  if(l.targetType==='block'){tx=tgt.x+tgt.w/2; ty=tgt.y+tgt.h/2;}
+  else {tx=tgt.bodyX; ty=tgt.bodyY;}
+  const dx=ship.x-tx, dy=(ship.y+20)-ty;
+  const d=Math.hypot(dx,dy)||1;
+  // Break if yanked too far
+  if(d>700){
+    if(l.targetType==='block')tgt.lassoed=false;
+    else tgt.lassoed=false;
+    ship.lasso=null; showMessage('Lasso snapped!'); return;
+  }
+  // Spring pull — stronger the further it is, but capped
+  const desiredLen=90;
+  const stretch=Math.max(0, d-desiredLen);
+  const pull=Math.min(0.9, stretch*0.012);
+  const ux=dx/d, uy=dy/d;
+  if(l.targetType==='block'){
+    tgt.vx += ux*pull;
+    tgt.vy += uy*pull - 0.25; // counter gravity so it hangs
+    tgt.vx*=0.96; tgt.vy*=0.96;
+    // Damage things the dragged block slams into
+    blocks.forEach(o=>{
+      if(o===tgt||o.dead||!o.fixed)return;
+      if(tgt.x<o.x+o.w&&tgt.x+tgt.w>o.x&&tgt.y<o.y+o.h&&tgt.y+tgt.h>o.y){
+        const speed=Math.hypot(tgt.vx,tgt.vy);
+        if(speed>2){
+          o.health-=speed*4;
+          maybeEvictFromDamage(o);
+          o.cracked=true;
+          checkBuildingDestroyed(o);
+        }
+      }
+    });
+  } else {
+    // Human — pull all body parts
+    const parts=['head','body','legL','legR','armL','armR','footL','footR'];
+    parts.forEach(pt=>{
+      tgt[pt+'VX']=(tgt[pt+'VX']||0) + ux*pull*0.8;
+      tgt[pt+'VY']=(tgt[pt+'VY']||0) + uy*pull*0.8 - 0.12;
+      tgt[pt+'VX']*=0.95; tgt[pt+'VY']*=0.95;
+    });
+  }
+}
+
 function explodeMissile(m){
   const R=120,F=18;
   triggerShake(8);playSound('explosion');
@@ -5462,8 +7605,8 @@ function explodeMissile(m){
   // Sparks — small bright fast
   for(let i=0;i<15;i++){const a=Math.random()*Math.PI*2,sp=Math.random()*12+4;
     particles.push({x:m.x,y:m.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:15+Math.random()*10,color:'#ff8',size:1+Math.random()*2});}
-  blocks.forEach(b=>{const d=dist(m.x,m.y,b.x+b.w/2,b.y+b.h/2);if(d<R){const f=(1-d/R)*F,a=Math.atan2(b.y+b.h/2-m.y,b.x+b.w/2-m.x);b.fixed=false;b.vx+=Math.cos(a)*f;b.vy+=Math.sin(a)*f;b.health-=f*15;b.cracked=true;checkBuildingDestroyed(b);}});
-  humans.forEach(h=>{if(h.collected)return;const d=dist(m.x,m.y,h.bodyX,h.bodyY);if(d<R){const f=(1-d/R)*F*0.7,a=Math.atan2(h.bodyY-m.y,h.bodyX-m.x);h.ragdoll=true;h.crying=true;h.panicLevel=10;const fx=Math.cos(a)*f,fy=Math.sin(a)*f;applyForce(h,fx,fy);bleedEffect(h,fx,fy);}});
+  blocks.forEach(b=>{const d=dist(m.x,m.y,b.x+b.w/2,b.y+b.h/2);if(d<R){const f=(1-d/R)*F,a=Math.atan2(b.y+b.h/2-m.y,b.x+b.w/2-m.x);b.fixed=false;b.vx+=Math.cos(a)*f;b.vy+=Math.sin(a)*f;b.health-=f*15;maybeEvictFromDamage(b);b.cracked=true;checkBuildingDestroyed(b);}});
+  humans.forEach(h=>{if(h.collected)return;const d=dist(m.x,m.y,h.bodyX,h.bodyY);if(d<R){const f=(1-d/R)*F*0.7,a=Math.atan2(h.bodyY-m.y,h.bodyX-m.x);h.ragdoll=true;h.crying=true;h.panicLevel=10;const fx=Math.cos(a)*f,fy=Math.sin(a)*f;applyForce(h,fx,fy);bleedEffect(h,fx,fy,1.8); if(d<R*0.45)spawnGibs(h,fx,fy,2.5);}});
   // Cow explosion damage
   cows.forEach(c=>{if(c.collected)return;const d=dist(m.x,m.y,c.x,c.bodyY);if(d<R){
     c.collected=true;score+=1;document.getElementById('score').textContent=score;
@@ -5486,7 +7629,7 @@ function nukeplanet(){
   if(window._nukeCooldown>0)return;
   window._nukeCooldown=600; // 10 seconds cooldown
   const p=currentPlanet;if(!p)return;
-  playSound('explosion');
+  try{nukeSfx.currentTime=0;nukeSfx.play().catch(()=>{playSound('explosion');});}catch(e){playSound('explosion');}
   triggerShake(20);
   showMessage(`NUCLEAR LAUNCH DETECTED. ${p.name} is being sterilized...`);
   // White flash
@@ -5500,7 +7643,7 @@ function nukeplanet(){
     for(let i=0;i<8;i++)particles.push({x:c.x,y:c.bodyY,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:25,color:c.color||'#fff',size:Math.random()*3+1});}});
   document.getElementById('score').textContent=score;
   // Destroy all buildings
-  blocks.forEach(b=>{b.fixed=false;b.health=0;b.cracked=true;
+  blocks.forEach(b=>{b.fixed=false;b.health=0;maybeEvictFromDamage(b);b.cracked=true;
     const a=Math.atan2(b.y-ship.y,b.x-ship.x),f=3+Math.random()*5;b.vx=Math.cos(a)*f;b.vy=Math.sin(a)*f-3;});
   // Kill military
   military.forEach(m=>{if(m.type!=='bullet'&&m.type!=='boulder'&&m.alive){m.health=0;}});
@@ -5589,6 +7732,18 @@ function alienShoot(){
       rockets.push({x:alien.x+dir*12,y:alien.y-14,vx:dir*10,vy:-1.2,life:140});
       for(let i=0;i<6;i++)particles.push({x:alien.x+dir*14,y:alien.y-12,vx:-dir*(1+Math.random()*2),vy:(Math.random()-0.5)*1.5,life:14,color:'#f80',size:Math.random()*3+1});
       triggerShake(3); break;
+    case 'chainsaw':
+      // Rapid melee arc in front of the alien — short range, big damage, bloody particles
+      chainsawSlashes.push({x:alien.x+dir*14,y:alien.y-12,dir,life:10,maxLife:10});
+      chainsawRev=Math.min(30, chainsawRev+4);
+      for(let i=0;i<4;i++)particles.push({
+        x:alien.x+dir*(12+Math.random()*10),
+        y:alien.y-10+(Math.random()-0.5)*10,
+        vx:dir*(1+Math.random()*2),
+        vy:(Math.random()-0.5)*1.5,
+        life:8,color:'#fd4',size:Math.random()*2+1,
+      });
+      triggerShake(1); break;
   }
 }
 function alienSwitchWeapon(delta){
@@ -5773,6 +7928,52 @@ function updateAlienWeapons(){
   }
   parasites=parasites.filter(pr=>pr.life>0);
 
+  // Chainsaw slashes — short melee arc, big damage, blood/spark particles
+  if(chainsawRev>0) chainsawRev-=0.5;
+  for(let i=0;i<chainsawSlashes.length;i++){
+    const s=chainsawSlashes[i];
+    s.life--;
+    const range=42, width=28;
+    const cx=s.x+s.dir*range*0.5, cy=s.y;
+    // Humans
+    for(let hi=0;hi<humans.length;hi++){
+      const h=humans[hi];
+      if(h.collected||h.hidden)continue;
+      const dx=h.bodyX-s.x;
+      if(Math.sign(dx)!==s.dir) continue;
+      if(Math.abs(dx)>range) continue;
+      if(Math.abs(h.bodyY-s.y)>width) continue;
+      h.ragdoll=true; h.panicLevel=10; applyForce(h,s.dir*2,-2);
+      for(let p=0;p<4;p++)particles.push({x:h.bodyX,y:h.bodyY,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:18,color:'#c22',size:1+Math.random()*2});
+    }
+    // Military
+    for(let mi=0;mi<military.length;mi++){
+      const m=military[mi];
+      if(!m.alive||m.type==='bullet'||m.type==='boulder')continue;
+      const dx=m.x-s.x;
+      if(Math.sign(dx)!==s.dir) continue;
+      if(Math.abs(dx)>range) continue;
+      if(Math.abs(m.y-s.y)>width+6) continue;
+      m.health-=8; m.stunTimer=Math.max(m.stunTimer||0,20);
+      if(m.health<=0)m.alive=false;
+      for(let p=0;p<3;p++)particles.push({x:m.x,y:m.y,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:16,color:'#c22',size:1+Math.random()*2});
+    }
+    // Blocks
+    for(let bi=0;bi<blocks.length;bi++){
+      const bl=blocks[bi]; if(bl.dead)continue;
+      if(bl.x+bl.w<s.x-range||bl.x>s.x+range)continue;
+      if(bl.y+bl.h<s.y-width||bl.y>s.y+width)continue;
+      const bx=bl.x+bl.w*0.5;
+      if(Math.sign(bx-s.x)!==s.dir) continue;
+      bl.health-=3; bl.cracked=true;
+      if(Math.random()<0.3) particles.push({x:bx,y:bl.y,vx:(Math.random()-0.5)*2,vy:-Math.random()*2,life:14,color:'#c90',size:1.5});
+      if(bl.health<=0) checkBuildingDestroyed(bl);
+    }
+    // Sparks / motor smoke
+    if(Math.random()<0.6) particles.push({x:cx,y:cy+(Math.random()-0.5)*20,vx:(Math.random()-0.5)*2,vy:-Math.random()*1.5,life:10,color:Math.random()<0.5?'#fd4':'#fff',size:1+Math.random()});
+  }
+  chainsawSlashes=chainsawSlashes.filter(s=>s.life>0);
+
   // Acid puddles — persistent ground DOT
   for(let i=0;i<acidPuddles.length;i++){
     const ap=acidPuddles[i]; ap.life--;
@@ -5791,7 +7992,7 @@ function updateAlienWeapons(){
     for(let bi=0;bi<blocks.length;bi++){
       const b=blocks[bi]; if(b.dead)continue;
       if(b.x+b.w>ap.x-ap.r && b.x<ap.x+ap.r && b.y+b.h>ap.y-6 && b.y<ap.y+2){
-        if(Math.random()<0.2){ b.health-=0.5; b.cracked=true; if(b.health<=0)checkBuildingDestroyed(b); }
+        if(Math.random()<0.2){ b.health-=0.5; maybeEvictFromDamage(b);b.cracked=true; if(b.health<=0)checkBuildingDestroyed(b); }
       }
     }
   }
@@ -5825,8 +8026,8 @@ function updateAlienWeapons(){
       fires.push({x:r.x,y:r.y,life:180,size:14,vx:0,vy:0,stuck:false});
       triggerShake(6);
       // Damage radius
-      humans.forEach(h=>{ if(h.collected||h.hidden)return; const d=dist(r.x,r.y,h.bodyX,h.bodyY); if(d<R){ h.ragdoll=true; applyForce(h,(h.bodyX-r.x)/R*6,-5); h.onFire=true; h.burnTimer=300; }});
-      blocks.forEach(b=>{ if(b.dead)return; const d=dist(r.x,r.y,b.x+b.w/2,b.y+b.h/2); if(d<R){ b.health-=40; b.cracked=true; b.onFire=true; if(!b.fixed){b.vx+=(b.x-r.x)*0.05; b.vy-=3;} if(b.health<=0)checkBuildingDestroyed(b); }});
+      humans.forEach(h=>{ if(h.collected||h.hidden)return; const d=dist(r.x,r.y,h.bodyX,h.bodyY); if(d<R){ h.ragdoll=true; const fx=(h.bodyX-r.x)/R*6, fy=-5; applyForce(h,fx,fy); h.onFire=true; h.burnTimer=300; bleedEffect(h,fx*2,fy*2,2); if(d<R*0.5)spawnGibs(h,fx*2,fy*2,3); }});
+      blocks.forEach(b=>{ if(b.dead)return; const d=dist(r.x,r.y,b.x+b.w/2,b.y+b.h/2); if(d<R){ b.health-=40; maybeEvictFromDamage(b);b.cracked=true; b.onFire=true; if(!b.fixed){b.vx+=(b.x-r.x)*0.05; b.vy-=3;} if(b.health<=0)checkBuildingDestroyed(b); }});
       military.forEach(m=>{ if(!m.alive||m.type==='bullet'||m.type==='boulder')return; const d=dist(r.x,r.y,m.x,m.y); if(d<R){ m.health-=30; if(m.health<=0)m.alive=false; }});
       r.life=0;
     }
@@ -5847,6 +8048,9 @@ function update(){
 
   // Mothership interior
   if(mothershipMode){updateMothership();return;}
+
+  // Pyramid tomb interior (Khet)
+  if(pyramidInteriorMode){updatePyramidInterior();return;}
 
   // Screen shake decay
   if(screenShake.intensity>0){
@@ -6082,7 +8286,7 @@ function updatePlanetShared(){
       // Minigun bullet — small impact, no big explosion
       if(m.y>=GROUND_LEVEL){m.life=0;for(let i=0;i<3;i++)particles.push({x:m.x,y:GROUND_LEVEL,vx:(Math.random()-0.5)*3,vy:-Math.random()*2,life:10,color:'#aa8',size:1});}
       blocks.forEach(b=>{if(!b.dead&&m.x>b.x&&m.x<b.x+b.w&&m.y>b.y&&m.y<b.y+b.h){
-        m.life=0;b.health-=8;b.cracked=true;if(!b.fixed)b.vx+=m.vx*0.05;checkBuildingDestroyed(b);
+        m.life=0;b.health-=8;maybeEvictFromDamage(b);b.cracked=true;if(!b.fixed)b.vx+=m.vx*0.05;checkBuildingDestroyed(b);
         for(let i=0;i<2;i++)debris.push({x:m.x,y:m.y,vx:(Math.random()-0.5)*3,vy:-Math.random()*2,life:20,size:1,color:b.color});
       }});
       humans.forEach(h=>{if(!h.collected&&Math.abs(m.x-h.bodyX)<10&&Math.abs(m.y-h.bodyY)<15){
@@ -6118,7 +8322,7 @@ function updatePlanetShared(){
     }
     // Heat distortion / smoke at base
     if(Math.random()>0.6)particles.push({x:ship.x+(Math.random()-0.5)*8,y:ship.y+15,vx:(Math.random()-0.5)*0.5,vy:1,life:15,color:'rgba(255,200,100,0.2)',size:8+Math.random()*5});
-    blocks.forEach(b=>{if(b.dead)return;if(Math.abs(b.x+b.w/2-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,b.x+b.w/2,b.y+b.h/2);if(d<flameRange&&b.y>ship.y){b.health-=flameDmg;b.cracked=true;b.onFire=true;if(!b.fixed)b.vx+=(Math.random()-0.5)*0.5;if(Math.random()>0.95)fires.push({x:b.x+Math.random()*b.w,y:b.y+Math.random()*b.h,life:120+Math.random()*100,size:Math.random()*10+5});checkBuildingDestroyed(b);}});
+    blocks.forEach(b=>{if(b.dead)return;if(Math.abs(b.x+b.w/2-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,b.x+b.w/2,b.y+b.h/2);if(d<flameRange&&b.y>ship.y){b.health-=flameDmg;maybeEvictFromDamage(b);b.cracked=true;b.onFire=true;if(!b.fixed)b.vx+=(Math.random()-0.5)*0.5;if(Math.random()>0.95)fires.push({x:b.x+Math.random()*b.w,y:b.y+Math.random()*b.h,life:120+Math.random()*100,size:Math.random()*10+5});checkBuildingDestroyed(b);}});
     humans.forEach(h=>{if(h.collected)return;if(Math.abs(h.bodyX-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,h.bodyX,h.bodyY);if(d<flameRange-20&&h.bodyY>ship.y){h.crying=true;h.panicLevel=Math.min(h.panicLevel+0.3,10);if(!h.ragdoll){h.walkDir=h.bodyX<ship.x?-1:1;h.walkSpeed=3;}}});
     // Flame kills cows
     cows.forEach(c=>{if(c.collected)return;if(Math.abs(c.x-ship.x)>flameRange)return;const d=dist(ship.x,ship.y+60,c.x,c.bodyY);if(d<flameRange-10&&c.bodyY>ship.y){
@@ -6129,6 +8333,9 @@ function updatePlanetShared(){
     // Boss damage from flamethrower (per frame)
     if(boss&&boss.alive){const bd=dist(ship.x,ship.y+60,boss.x,boss.y);if(bd<flameRange+30)damageBoss(flameDmg*0.3,'flame');}
   }else if(flameSfx._playing){flameSfx.pause();flameSfx._playing=false;}
+
+  // Lasso physics
+  if(ship.lasso) updateLasso();
 
   // Minigun (hold G)
   if(ship.minigunFiring&&playerMode==='ship'&&gameMode==='planet'){
@@ -6154,13 +8361,13 @@ function updatePlanetShared(){
       else{
         for(let bi=0;bi<blocks.length;bi++){const b=blocks[bi];if(b.dead)continue;
           if(f.x>b.x&&f.x<b.x+b.w&&f.y>b.y&&f.y<b.y+b.h+6){
-            f.y=b.y;f.vy=0;f.stuck=true;b.onFire=true;b.cracked=true;break;}
+            f.y=b.y;f.vy=0;f.stuck=true;b.onFire=true;maybeEvictFromDamage(b);b.cracked=true;break;}
         }
       }
     }
     if(particles.length<150&&Math.random()>0.7)particles.push({x:f.x+(Math.random()-0.5)*f.size,y:f.y,vx:(Math.random()-0.5)*1,vy:-Math.random()*2-0.5,life:12,color:['#f80','#fa0','#f40'][Math.floor(Math.random()*3)],size:Math.random()*3+1});
     // Spread to nearby blocks (more aggressive)
-    if(Math.random()>0.9)blocks.forEach(b=>{if(!b.dead&&Math.abs(f.x-b.x-b.w/2)<45&&Math.abs(f.y-b.y-b.h/2)<45){b.health-=1.2;b.cracked=true;b.onFire=true;}});
+    if(Math.random()>0.9)blocks.forEach(b=>{if(!b.dead&&Math.abs(f.x-b.x-b.w/2)<45&&Math.abs(f.y-b.y-b.h/2)<45){b.health-=1.2;maybeEvictFromDamage(b);b.cracked=true;b.onFire=true;}});
   });
   fires=fires.filter(f=>f.life>0);if(fires.length>50)fires.splice(0,fires.length-50);
 
@@ -6255,10 +8462,15 @@ function updatePlanetShared(){
           }
           // Ocean extinguishes
           if(currentPlanet&&currentPlanet.id==='earth'&&isOverOcean(h.bodyX)){h.onFire=false;h.burnTimer=0;}
-          // Burned down → ash
+          // Occasional blood drip while burning
+          if(Math.random()<0.04) bleedEffect(h,0,1,0.3);
+          // Burned down → ash + charred blood pool + few bone gibs
           if(h.burnTimer<=0){
             ashPiles.push({x:h.bodyX,y:GROUND_LEVEL-1,life:900,maxLife:900});
             for(let i=0;i<12;i++)particles.push({x:h.bodyX+(Math.random()-0.5)*14,y:GROUND_LEVEL-6,vx:(Math.random()-0.5)*1.6,vy:-Math.random()*1.8,life:32,color:'rgba(60,60,60,0.7)',size:Math.random()*2+1});
+            bloodPools.push({x:h.bodyX,y:GROUND_LEVEL,r:2,targetR:9+Math.random()*4,life:1400,maxLife:1400,color:'#2a0a06'});
+            // Charred bone fragments
+            for(let i=0;i<2;i++)gibs.push({x:h.bodyX+(Math.random()-0.5)*6,y:GROUND_LEVEL-4,vx:(Math.random()-0.5)*1.5,vy:-Math.random()*2,rot:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.2,size:3,life:400,kind:'torso',color:'#3a2a20',bloodC:'#1a0402',groundY:GROUND_LEVEL,onGround:false});
             h.collected=true;return;
           }
         }
@@ -6359,8 +8571,20 @@ function updatePlanetShared(){
         const mv=h.walkDir*h.walkSpeed;h.headX+=mv;h.bodyX+=mv;h.legLX+=mv;h.legRX+=mv;h.armLX+=mv;h.armRX+=mv;h.footLX+=mv;h.footRX+=mv;
         // Prevent walking into ocean
         if(currentPlanet&&currentPlanet.id==='earth'&&isOverOcean(h.bodyX)){h.walkDir*=-1;const bk=-mv*2;h.headX+=bk;h.bodyX+=bk;h.legLX+=bk;h.legRX+=bk;h.armLX+=bk;h.armRX+=bk;h.footLX+=bk;h.footRX+=bk;}}
-      const s=h.scale||1;h.headY=GROUND_LEVEL-40*s;h.bodyY=GROUND_LEVEL-28*s;h.legLY=GROUND_LEVEL-10*s;h.legRY=GROUND_LEVEL-10*s;h.armLY=GROUND_LEVEL-28*s;h.armRY=GROUND_LEVEL-28*s;h.footLY=GROUND_LEVEL;h.footRY=GROUND_LEVEL;
-      h.legLX=h.bodyX-4*s+Math.sin(h.walkTimer*0.1)*4*s;h.legRX=h.bodyX+4*s-Math.sin(h.walkTimer*0.1)*4*s;h.footLX=h.legLX-1+Math.sin(h.walkTimer*0.1)*5*s;h.footRX=h.legRX+1-Math.sin(h.walkTimer*0.1)*5*s;h.armLX=h.bodyX-8*s-Math.sin(h.walkTimer*0.1)*3;h.armRX=h.bodyX+8*s+Math.sin(h.walkTimer*0.1)*3;h.headX=h.bodyX;
+      const s=h.scale||1;
+      const panicMul=1+Math.min(h.panicLevel||0,10)*0.12;
+      const ph=h.walkTimer*0.1*panicMul;
+      const legSwing=Math.sin(ph)*4*s;
+      const armSwing=-Math.sin(ph)*3*s;
+      const bob=Math.abs(Math.sin(ph))*1.2*s;
+      h.headY=GROUND_LEVEL-40*s-bob; h.bodyY=GROUND_LEVEL-28*s-bob*0.6;
+      h.legLY=GROUND_LEVEL-10*s; h.legRY=GROUND_LEVEL-10*s;
+      h.armLY=GROUND_LEVEL-28*s-bob*0.4; h.armRY=GROUND_LEVEL-28*s-bob*0.4;
+      h.footLY=GROUND_LEVEL; h.footRY=GROUND_LEVEL;
+      h.legLX=h.bodyX-4*s+legSwing; h.legRX=h.bodyX+4*s-legSwing;
+      h.footLX=h.legLX-1+legSwing*1.25; h.footRX=h.legRX+1-legSwing*1.25;
+      h.armLX=h.bodyX-8*s+armSwing; h.armRX=h.bodyX+8*s-armSwing;
+      h.headX=h.bodyX+(h.panicLevel>3?Math.sin(ph*2)*0.8*s:0);
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
     }
   });
@@ -6509,6 +8733,10 @@ function updatePlanetShared(){
   // Particles (capped for performance)
   stepParticles();
   if(particles.length>150)particles.splice(0,particles.length-150);
+  stepBloodDroplets(); stepGibs(); stepBloodPools(); stepSkidMarks();
+  if(bloodPools.length>120)bloodPools.splice(0,bloodPools.length-120);
+  if(gibs.length>80)gibs.splice(0,gibs.length-80);
+  if(skidMarks.length>200)skidMarks.splice(0,skidMarks.length-200);
   debris.forEach(d=>{d.vy+=GRAVITY*0.5;d.x+=d.vx;d.y+=d.vy;d.life--;if(d.y>GROUND_LEVEL){d.y=GROUND_LEVEL;d.vy*=-0.3;d.vx*=0.8;}});debris=debris.filter(d=>d.life>0);
   if(debris.length>100)debris.splice(0,debris.length-100);
   tears.forEach(t=>{t.x+=t.vx;t.y+=t.vy;t.vy+=0.05;t.life--;});tears=tears.filter(t=>t.life>0);
@@ -6579,16 +8807,27 @@ function updatePlanetShared(){
     v.x+=v.vx;
     // Stay in home zone, avoid ocean
     const vMin=v.homeMin||100, vMax=v.homeMax||(worldWidth-100);
-    if(v.x<vMin||v.x>vMax)v.vx*=-1;
+    // Detect direction flip → spawn skid marks + tire smoke
+    const dirFlip = (v._prevVX!=null) && (Math.sign(v._prevVX)!==Math.sign(v.vx)) && Math.abs(v._prevVX)>0.5;
+    if(v.x<vMin||v.x>vMax){v.vx*=-1;}
     if(currentPlanet&&currentPlanet.id==='earth'){
-      // Check leading edge + small lookahead so wide buses don't drive into the surf
       const leadX = v.vx>0 ? v.x+v.w+20 : v.x-20;
       if(isOverOcean(leadX) || isOverOcean(v.x) || isOverOcean(v.x+v.w)){
         v.vx*=-1;
-        // Nudge back to safe ground
         while((isOverOcean(v.x) || isOverOcean(v.x+v.w)) && v.x>0 && v.x+v.w<worldWidth){ v.x += v.vx; }
       }
     }
+    if(dirFlip){
+      const wy=GROUND_LEVEL-2;
+      // Skid marks along wheel positions
+      const wx1=v.x+v.w*0.2, wx2=v.x+v.w*0.8;
+      skidMarks.push({x:wx1,y:wy,w:Math.min(40,Math.abs(v._prevVX)*16),life:600,maxLife:600});
+      skidMarks.push({x:wx2,y:wy,w:Math.min(40,Math.abs(v._prevVX)*16),life:600,maxLife:600});
+      // Tire smoke
+      for(let i=0;i<6;i++)particles.push({x:wx1+(Math.random()-0.5)*18,y:wy-1,vx:(Math.random()-0.5)*0.8,vy:-0.4-Math.random()*0.6,life:30+Math.random()*15,color:'rgba(180,180,180,0.7)',size:2+Math.random()*2});
+      for(let i=0;i<6;i++)particles.push({x:wx2+(Math.random()-0.5)*18,y:wy-1,vx:(Math.random()-0.5)*0.8,vy:-0.4-Math.random()*0.6,life:30+Math.random()*15,color:'rgba(180,180,180,0.7)',size:2+Math.random()*2});
+    }
+    v._prevVX=v.vx;
     // Stuck detection: vehicle pinned between ocean + home-zone walls → explode it.
     if(v._lastX!=null && Math.abs(v.x-v._lastX)<0.3) v._stuckFrames=(v._stuckFrames||0)+1;
     else v._stuckFrames=0;
@@ -6686,7 +8925,7 @@ function updatePlanetShared(){
           particles.push({x:mx,y:my,vx:(Math.random()-0.5)*3,vy:3+Math.random()*4,life:80,color:'#fa0',size:Math.random()*4+3});}
         for(let i=0;i<3;i++){const mx=camera.x+Math.random()*canvas.width;
           fires.push({x:mx,y:GROUND_LEVEL-Math.random()*20,life:200+Math.random()*100,size:Math.random()*12+5});}
-        blocks.forEach(b=>{if(Math.random()<0.1&&!b.dead){b.health-=20;b.cracked=true;checkBuildingDestroyed(b);}});
+        blocks.forEach(b=>{if(Math.random()<0.1&&!b.dead){b.health-=20;maybeEvictFromDamage(b);b.cracked=true;checkBuildingDestroyed(b);}});
       }},
       {name:'festival',chance:0.2,fn:()=>{
         showMessage('The locals are celebrating!');
@@ -6698,7 +8937,7 @@ function updatePlanetShared(){
       {name:'earthquake',chance:0.15,fn:()=>{
         if(currentPlanet&&currentPlanet.id==='earth')return; // no earthquakes on Earth
         showMessage('EARTHQUAKE!');triggerShake(12);
-        blocks.forEach(b=>{if(!b.dead&&Math.random()<0.15){b.fixed=false;b.vy=-2-Math.random()*3;b.vx=(Math.random()-0.5)*4;b.health-=10;b.cracked=true;}});
+        blocks.forEach(b=>{if(!b.dead&&Math.random()<0.15){b.fixed=false;b.vy=-2-Math.random()*3;b.vx=(Math.random()-0.5)*4;b.health-=10;maybeEvictFromDamage(b);b.cracked=true;}});
         humans.forEach(h=>{if(!h.collected&&!h.ragdoll&&Math.random()<0.3){h.ragdoll=true;h.crying=true;applyForce(h,(Math.random()-0.5)*3,-2);}});
       }},
       {name:'aurora',chance:0.2,fn:()=>{
@@ -6743,6 +8982,7 @@ function updateAlienOnFoot(){
   else if(keys['3'])alien.weapon=2;
   else if(keys['4'])alien.weapon=3;
   else if(keys['5'])alien.weapon=4;
+  else if(keys['6'])alien.weapon=5;
   if(keys['tab']&&!alien._tabPrev){alienSwitchWeapon(1);}
   alien._tabPrev=!!keys['tab'];
   // Fire (Q)
@@ -6750,6 +8990,61 @@ function updateAlienOnFoot(){
   // Tick cooldowns
   for(let ci=0;ci<alien.weaponCD.length;ci++) if(alien.weaponCD[ci]>0) alien.weaponCD[ci]--;
   alien.shootCooldown=Math.max(0,alien.shootCooldown-1);
+
+  // --- GRAPPLING HOOK (G) ---
+  const gNow = !!keys['g'];
+  if(gNow && !alien._gPrev){
+    if(alien.grapple){
+      alien.grapple = null; // release
+    } else {
+      const dir = alien.facing;
+      const sp = 14;
+      alien.grapple = {
+        phase:'flying',
+        x: alien.x + dir*10,
+        y: alien.y - 14,
+        vx: dir*sp*0.82,
+        vy: -sp*0.55,
+        anchorX:0, anchorY:0,
+        life:70,
+      };
+    }
+  }
+  alien._gPrev = gNow;
+  if(alien.grapple){
+    const g = alien.grapple;
+    if(g.phase==='flying'){
+      g.x += g.vx; g.y += g.vy;
+      g.vy += GRAVITY*0.25;
+      g.life--;
+      // Hit a block
+      let hit=null;
+      for(let bi=0;bi<blocks.length;bi++){
+        const bl=blocks[bi]; if(bl.dead)continue;
+        if(g.x>bl.x&&g.x<bl.x+bl.w&&g.y>bl.y&&g.y<bl.y+bl.h){ hit={x:g.x,y:g.y}; break; }
+      }
+      // Hit the ground above if we shot up
+      if(!hit && g.y <= LEAVE_THRESHOLD+100){ hit={x:g.x,y:g.y}; }
+      // Hit ground surface (can't grapple the floor — only useful for ceilings)
+      if(!hit && g.y>=GROUND_LEVEL-4){ alien.grapple=null; }
+      else if(hit){ g.phase='attached'; g.anchorX=hit.x; g.anchorY=hit.y; g.life=300; triggerShake(1); }
+      else if(g.life<=0){ alien.grapple=null; }
+    } else if(g.phase==='attached'){
+      g.life--;
+      const dx = g.anchorX - alien.x;
+      const dy = g.anchorY - alien.y + 10;
+      const d = Math.hypot(dx,dy)||1;
+      // Pull force toward anchor, decays near anchor to avoid overshoot
+      const pull = Math.min(0.9, 0.45 + d*0.001);
+      alien.vx += (dx/d)*pull;
+      alien.vy += (dy/d)*pull - GRAVITY*0.55;
+      // Auto-release when very close
+      if(d<18) alien.grapple=null;
+      // Rope trail sparkles
+      if(Math.random()<0.15) particles.push({x:alien.x+dx*Math.random(),y:alien.y-10+dy*Math.random(),vx:0,vy:0,life:6,color:'rgba(255,220,120,0.8)',size:1});
+      if(g.life<=0) alien.grapple=null;
+    }
+  }
 
   // Physics
   alien.vy+=GRAVITY*0.6;
@@ -6790,8 +9085,33 @@ function updateAlienOnFoot(){
     // Normal ground collision (surface or seabed if over ocean)
     const overOcean = currentPlanet&&currentPlanet.id==='earth'&&isOverOcean(alien.x);
     const floorY = overOcean ? SEABED_Y - 2 : GROUND_LEVEL - 2;
-    // Underwater drag (slower fall, partial buoyancy)
-    if(overOcean && alien.y > GROUND_LEVEL){ alien.vy *= 0.92; alien.vx *= 0.95; }
+    // Underwater: drag, buoyancy, auto-equip dive suit, oxygen
+    const submerged = overOcean && alien.y > WATER_SURFACE;
+    alien.underwater = submerged;
+    if(submerged){
+      // First-time pickup: snap on dive suit automatically
+      if(!alien.diveSuit){
+        alien.diveSuit=true;
+        alien.diveSuitShownT=180;
+        showMessage('Dive suit auto-deployed!');
+      }
+      // Smoother underwater physics with the suit
+      alien.vy *= alien.diveSuit ? 0.88 : 0.92;
+      alien.vx *= alien.diveSuit ? 0.92 : 0.95;
+      // Bubbles
+      alien.bubbleT=(alien.bubbleT||0)+1;
+      if(alien.bubbleT%8===0){
+        particles.push({x:alien.x+(Math.random()-0.5)*6, y:alien.y-20, vx:(Math.random()-0.5)*0.3, vy:-1.2-Math.random()*0.6, life:50+Math.random()*30, color:'rgba(200,230,255,0.6)', size:1.2+Math.random()*1.8});
+      }
+      // Oxygen (only matters without suit, but we track for HUD)
+      if(alien.diveSuit) alien.oxygen = Math.min(100, (alien.oxygen||100)+0.4);
+      else alien.oxygen = Math.max(0, (alien.oxygen||100)-0.25);
+    } else {
+      // Refill oxygen above water
+      alien.oxygen = Math.min(100, (alien.oxygen||100)+1.5);
+      alien.underwater=false;
+    }
+    if(alien.diveSuitShownT>0) alien.diveSuitShownT--;
     if(alien.y>=floorY){alien.y=floorY;alien.vy=0;alien.onGround=true;alien.jetpackFuel=Math.min(100,alien.jetpackFuel+0.3);}
     else{alien.onGround=false;}
   }
@@ -6828,6 +9148,61 @@ function updateAlienOnFoot(){
   camera.x=alien.x-canvas.width/2+screenShake.x;
   camera.y=alien.y-canvas.height/2+100+screenShake.y;
 
+  // Seabed cave entry (Earth: swim up to a cave mouth underwater + E/Enter, dive suit required)
+  if(p.id==='earth' && alien.underwater && alien.diveSuit){
+    for(let ui=0; ui<underwaterObjects.length; ui++){
+      const uo=underwaterObjects[ui];
+      if(uo.type!=='seabedCave') continue;
+      const dx=alien.x-uo.x, dy=alien.y-(uo.y - uo.h*0.4);
+      if(Math.abs(dx)<uo.w*0.7 && Math.abs(dy)<uo.h*0.9 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='cave';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You slip into the glowing cave...');
+        break;
+      }
+    }
+  }
+
+  // Pyramid tomb entry (Khet: walk to the open pyramid's door + E/Enter)
+  if(p.id==='tomb'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='openPyramid')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h; // ground level of pyramid base
+      if(Math.abs(alien.x-doorX)<20 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='tomb';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You step into the tomb...');
+        break;
+      }
+      // Hint
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){
+        b._doorHint=1;
+      }
+    }
+  }
+
   // Laser shots
   laserShots.forEach(ls=>{
     ls.x+=ls.vx;ls.y+=ls.vy;ls.life--;
@@ -6851,7 +9226,7 @@ function updateAlienOnFoot(){
     blocks.forEach(b=>{
       if(b.dead)return;
       if(ls.x>b.x&&ls.x<b.x+b.w&&ls.y>b.y&&ls.y<b.y+b.h){
-        ls.life=0;b.health-=15;b.cracked=true;
+        ls.life=0;b.health-=15;maybeEvictFromDamage(b);b.cracked=true;
         if(!b.fixed){b.vx+=ls.vx*0.1;}
         for(let i=0;i<4;i++)debris.push({x:ls.x,y:ls.y,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,life:30,size:Math.random()*2+1,color:b.color});
         checkBuildingDestroyed(b);
@@ -7024,8 +9399,20 @@ function updatePlanetSystems(){
         if(debugMode.active){ if(keys['f']){h.walkDir=1;h.walkSpeed=1.2;} else if(keys['b']){h.walkDir=-1;h.walkSpeed=1.2;} else if(keys['x']){h.walkSpeed=0;} }
         const mv=h.walkDir*h.walkSpeed;h.headX+=mv;h.bodyX+=mv;h.legLX+=mv;h.legRX+=mv;h.armLX+=mv;h.armRX+=mv;h.footLX+=mv;h.footRX+=mv;
       }
-      const s=h.scale||1;h.headY=GROUND_LEVEL-40*s;h.bodyY=GROUND_LEVEL-28*s;h.legLY=GROUND_LEVEL-10*s;h.legRY=GROUND_LEVEL-10*s;h.armLY=GROUND_LEVEL-28*s;h.armRY=GROUND_LEVEL-28*s;h.footLY=GROUND_LEVEL;h.footRY=GROUND_LEVEL;
-      h.legLX=h.bodyX-4*s+Math.sin(h.walkTimer*0.1)*4*s;h.legRX=h.bodyX+4*s-Math.sin(h.walkTimer*0.1)*4*s;h.footLX=h.legLX-1+Math.sin(h.walkTimer*0.1)*5*s;h.footRX=h.legRX+1-Math.sin(h.walkTimer*0.1)*5*s;h.armLX=h.bodyX-8*s-Math.sin(h.walkTimer*0.1)*3;h.armRX=h.bodyX+8*s+Math.sin(h.walkTimer*0.1)*3;h.headX=h.bodyX;
+      const s=h.scale||1;
+      const panicMul=1+Math.min(h.panicLevel||0,10)*0.12;
+      const ph=h.walkTimer*0.1*panicMul;
+      const legSwing=Math.sin(ph)*4*s;
+      const armSwing=-Math.sin(ph)*3*s;
+      const bob=Math.abs(Math.sin(ph))*1.2*s;
+      h.headY=GROUND_LEVEL-40*s-bob; h.bodyY=GROUND_LEVEL-28*s-bob*0.6;
+      h.legLY=GROUND_LEVEL-10*s; h.legRY=GROUND_LEVEL-10*s;
+      h.armLY=GROUND_LEVEL-28*s-bob*0.4; h.armRY=GROUND_LEVEL-28*s-bob*0.4;
+      h.footLY=GROUND_LEVEL; h.footRY=GROUND_LEVEL;
+      h.legLX=h.bodyX-4*s+legSwing; h.legRX=h.bodyX+4*s-legSwing;
+      h.footLX=h.legLX-1+legSwing*1.25; h.footRX=h.legRX+1-legSwing*1.25;
+      h.armLX=h.bodyX-8*s+armSwing; h.armRX=h.bodyX+8*s-armSwing;
+      h.headX=h.bodyX+(h.panicLevel>3?Math.sin(ph*2)*0.8*s:0);
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
     }
   });
@@ -7179,6 +9566,7 @@ function draw(){
   frameT = frameNow * 0.001;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   if(mothershipMode){drawMothership();return;}
+  if(pyramidInteriorMode){drawPyramidInterior();return;}
   if(gameMode==='space'){drawSpace();return;}
   drawPlanet();
 }
@@ -8214,6 +10602,75 @@ function drawPlanet(){
           ctx.beginPath(); ctx.moveTo(28, 2); ctx.lineTo(34, 2); ctx.stroke();
           ctx.restore();
         }
+
+        else if(obj.type === 'seabedCave') {
+          // Organic rock mouth carved into seabed — irregular silhouette + glow inside
+          const cx0 = obj.x, cy0 = obj.y, w = obj.w, h = obj.h;
+          const glow = 0.55 + Math.sin(_t*2 + obj.glowPhase)*0.15;
+          // Outer rocky lip (dark mass around the mouth)
+          ctx.fillStyle = '#1a1208';
+          ctx.beginPath();
+          ctx.moveTo(cx0 - w*0.8, cy0);
+          // Jagged rock perimeter above opening
+          const lipSteps = 14;
+          for(let s=0;s<=lipSteps;s++){
+            const tt = s/lipSteps;
+            const ang = Math.PI + tt*Math.PI; // sweep top half
+            const rx = Math.cos(ang)*w*0.9;
+            const wobble = (Math.sin(s*1.7 + obj.glowPhase)*8) + (s%2?4:-4);
+            const ry = Math.sin(ang)*h*1.1 + wobble;
+            ctx.lineTo(cx0+rx, cy0+ry);
+          }
+          ctx.lineTo(cx0 + w*0.8, cy0);
+          ctx.closePath();
+          ctx.fill();
+          // Inner black void (the mouth itself)
+          const mouthG = ctx.createRadialGradient(cx0, cy0-h*0.35, 4, cx0, cy0-h*0.35, w*0.85);
+          mouthG.addColorStop(0, `rgba(40,120,180,${0.6*glow})`);
+          mouthG.addColorStop(0.35, `rgba(10,40,80,${0.5*glow})`);
+          mouthG.addColorStop(1, 'rgba(0,0,0,0.95)');
+          ctx.fillStyle = mouthG;
+          ctx.beginPath();
+          ctx.ellipse(cx0, cy0-h*0.35, w*0.7, h*0.75, 0, Math.PI, 0);
+          ctx.fill();
+          // Stalactite teeth hanging from lip
+          ctx.fillStyle = '#0a0804';
+          for(let ti=0;ti<6;ti++){
+            const tx = cx0 - w*0.55 + ti*(w*1.1/5);
+            const th = 10 + ((ti*7)%12);
+            ctx.beginPath();
+            ctx.moveTo(tx-5, cy0-h*0.95);
+            ctx.lineTo(tx+5, cy0-h*0.95);
+            ctx.lineTo(tx, cy0-h*0.95 + th);
+            ctx.closePath(); ctx.fill();
+          }
+          // Glowing floating motes drifting out
+          for(let mi=0;mi<8;mi++){
+            const p = ((_t*0.4 + obj.motePhase + mi*0.7)%1);
+            const mx = cx0 + Math.sin(mi*1.3 + _t*0.5)*w*0.35;
+            const my = cy0 - h*0.3 - p*40;
+            ctx.fillStyle = `rgba(120,220,255,${(1-p)*0.8*glow})`;
+            ctx.beginPath(); ctx.arc(mx, my, 1.8, 0, Math.PI*2); ctx.fill();
+          }
+          // Moss/kelp tufts at base
+          ctx.strokeStyle = '#0a4a2a'; ctx.lineWidth = 2;
+          for(let ki=0;ki<5;ki++){
+            const kx = cx0 - w*0.5 + ki*(w/4);
+            const sway = Math.sin(_t + ki*1.3)*3;
+            ctx.beginPath(); ctx.moveTo(kx, cy0);
+            ctx.quadraticCurveTo(kx+sway, cy0-8, kx+sway*1.2, cy0-16);
+            ctx.stroke();
+          }
+          // Interact hint when alien is near and underwater
+          if(playerMode==='onfoot' && alien.underwater){
+            const dx = alien.x - cx0, dy = alien.y - (cy0 - h*0.4);
+            if(Math.abs(dx)<w*0.7 && Math.abs(dy)<h*0.9){
+              ctx.fillStyle = `rgba(180,240,255,${0.7+Math.sin(_t*4)*0.2})`;
+              ctx.font = 'bold 12px monospace'; ctx.textAlign='center';
+              ctx.fillText('[E] enter cave', cx0, cy0-h*1.2);
+            }
+          }
+        }
       });
       // --- DRAW UNDERWATER CAVES (long tunnels under towns) ---
       // Only draw caves if player is inside a cave
@@ -8813,6 +11270,10 @@ function drawPlanet(){
   });
   debris.forEach(d=>{ctx.fillStyle=d.color;ctx.globalAlpha=d.life/60;ctx.fillRect(d.x,d.y,d.size,d.size);ctx.globalAlpha=1;});
 
+  // --- GROUND-LEVEL GORE / TIRE MARKS (under humans) ---
+  drawSkidMarks();
+  drawBloodPools();
+
   // --- DRAW INHABITANTS (with frustum culling) ---
   humans.forEach(h=>{if(h.collected||h.hidden)return;
     if(h.bodyX<camera.x-60||h.bodyX>camera.x+canvas.width+60||h.bodyY<camera.y-80||h.bodyY>camera.y+canvas.height+40)return;
@@ -8825,6 +11286,9 @@ function drawPlanet(){
     if(c.x<camera.x-80||c.x>camera.x+canvas.width+80)return;
     renderCow(c);
   });
+
+  // Gibs (tumbling flesh)
+  drawGibs();
 
   // Tears
   tears.forEach(t=>{ctx.fillStyle=`rgba(100,150,255,${t.life/40})`;ctx.beginPath();ctx.arc(t.x,t.y,t.size,0,Math.PI*2);ctx.fill();});
@@ -8845,8 +11309,14 @@ function drawPlanet(){
   // Fires
   fires.forEach(f=>{if(f.x<camera.x-30||f.x>camera.x+canvas.width+30)return;
     const fa=Math.min(1,f.life/60);const ft=frameNow*0.005+f.x*0.1;
-    // Outer glow
-    ctx.fillStyle=`rgba(255,60,0,${fa*0.1})`;ctx.beginPath();ctx.arc(f.x,f.y,f.size*2,0,Math.PI*2);ctx.fill();
+    // Dynamic lighting glow — big soft orange wash over surroundings
+    const dg=ctx.createRadialGradient(f.x,f.y-f.size*0.3,0,f.x,f.y-f.size*0.3,f.size*6);
+    dg.addColorStop(0,`rgba(255,140,40,${fa*0.28})`);
+    dg.addColorStop(0.4,`rgba(255,90,10,${fa*0.1})`);
+    dg.addColorStop(1,'transparent');
+    ctx.fillStyle=dg;ctx.beginPath();ctx.arc(f.x,f.y-f.size*0.3,f.size*6,0,Math.PI*2);ctx.fill();
+    // Tight outer glow
+    ctx.fillStyle=`rgba(255,60,0,${fa*0.15})`;ctx.beginPath();ctx.arc(f.x,f.y,f.size*2,0,Math.PI*2);ctx.fill();
     // Fire tongues — 3 overlapping flame shapes
     for(let fi=0;fi<3;fi++){
       const fx=f.x+(Math.sin(ft*2+fi*2.1))*f.size*0.3;
@@ -9026,6 +11496,50 @@ function drawPlanet(){
     }
   });
 
+  // Chainsaw slashes — yellow saw arc with teeth
+  chainsawSlashes.forEach(s=>{
+    if(s.x<camera.x-60||s.x>camera.x+canvas.width+60)return;
+    const a=s.life/s.maxLife;
+    const range=42;
+    const cx=s.x+s.dir*range*0.5, cy=s.y;
+    // Slash arc
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate((1-a)*s.dir*1.2);
+    ctx.strokeStyle=`rgba(255,220,90,${a*0.9})`; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(0,0,range*0.8, -0.9, 0.9); ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${a*0.6})`; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,0,range*0.7, -0.9, 0.9); ctx.stroke();
+    // Saw teeth dots
+    for(let ti=-3;ti<=3;ti++){
+      const ta=ti*0.25;
+      ctx.fillStyle=`rgba(255,200,40,${a})`;
+      ctx.beginPath(); ctx.arc(Math.cos(ta)*range*0.8, Math.sin(ta)*range*0.8, 1.6,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  });
+  // Chainsaw held in hand while revving
+  if(chainsawRev>0 && playerMode==='onfoot'){
+    ctx.save();
+    const hx=alien.x+alien.facing*12, hy=alien.y-12;
+    ctx.translate(hx,hy);
+    ctx.scale(alien.facing,1);
+    // Engine body
+    ctx.fillStyle='#c33'; ctx.fillRect(-4,-4,10,8);
+    ctx.fillStyle='#333'; ctx.fillRect(-4,2,10,3);
+    // Bar
+    ctx.fillStyle='#888'; ctx.fillRect(6,-2,20,4);
+    // Spinning teeth
+    const spin=(frameNow*0.8)%8;
+    ctx.fillStyle='#fd4';
+    for(let ti=0;ti<5;ti++){
+      const tx=8+((ti*4+spin)%18);
+      ctx.beginPath(); ctx.moveTo(tx,-2); ctx.lineTo(tx+2,-4); ctx.lineTo(tx+3,-2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(tx,2); ctx.lineTo(tx+2,4); ctx.lineTo(tx+3,2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   plasmaBolts.forEach(b=>{
     if(b.x<camera.x-40||b.x>camera.x+canvas.width+40)return;
     ctx.fillStyle='rgba(100,255,150,0.25)';ctx.beginPath();ctx.arc(b.x,b.y,10,0,Math.PI*2);ctx.fill();
@@ -9108,10 +11622,42 @@ function drawPlanet(){
     // Body (all races/skins + bodyType variations)
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
 
+    // Dive suit overlay (drawn on top of body when the suit is on)
+    if(alien.diveSuit && alien.underwater){
+      drawDiveSuit(ax, ay, f);
+    }
+
     // --- Fuel bar ---
     const barY=ay-33-18;
     ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fillRect(ax-10,barY,20,2.5);
     ctx.fillStyle=alien.jetpackFuel>30?'#0af':'#f44';ctx.fillRect(ax-10,barY,20*(alien.jetpackFuel/100),2.5);
+
+    // --- GRAPPLING HOOK rope + hook ---
+    if(alien.grapple){
+      const g=alien.grapple;
+      const handX=ax+f*6, handY=ay-14;
+      const tipX = g.phase==='attached' ? g.anchorX : g.x;
+      const tipY = g.phase==='attached' ? g.anchorY : g.y;
+      // Rope
+      ctx.strokeStyle='rgba(220,200,140,0.9)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(handX,handY); ctx.lineTo(tipX,tipY); ctx.stroke();
+      ctx.strokeStyle='rgba(80,60,30,0.6)'; ctx.lineWidth=0.6;
+      ctx.beginPath(); ctx.moveTo(handX,handY); ctx.lineTo(tipX,tipY); ctx.stroke();
+      // Hook claw at tip (3 prongs, oriented along rope)
+      const rdx=tipX-handX, rdy=tipY-handY, ang=Math.atan2(rdy,rdx);
+      ctx.save(); ctx.translate(tipX,tipY); ctx.rotate(ang);
+      ctx.strokeStyle='#bbb'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(-3,0); ctx.lineTo(3,-3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-3,0); ctx.lineTo(3,3); ctx.stroke();
+      ctx.fillStyle='#ddd'; ctx.beginPath(); ctx.arc(0,0,1.8,0,Math.PI*2); ctx.fill();
+      // Pulse when anchored
+      if(g.phase==='attached'){
+        const pr=3+Math.sin(frameNow*0.2)*1.5;
+        ctx.strokeStyle='rgba(255,220,120,0.6)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(0,0,pr,0,Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   // Boss
@@ -9360,21 +11906,18 @@ function drawPlanet(){
     ctx.fillStyle='#888';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(tr('hud.health'),canvas.width/2,hy-3);
   }
 
-  // --- MISSION HUD ---
-  if(currentMission&&!missionComplete){
-    const prog=currentPlanet?planetProgress[currentPlanet.id]:null;
-    const mi=prog?prog.missionIndex:0;
-    ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(canvas.width/2-140,10,280,42);
-    ctx.strokeStyle='rgba(0,255,0,0.3)';ctx.lineWidth=1;ctx.strokeRect(canvas.width/2-140,10,280,42);
-    ctx.fillStyle='#0f0';ctx.font='10px monospace';ctx.textAlign='center';
-    ctx.fillText(`${tr('hud.mission')} [${mi}/5]: ${currentMission.desc}`,canvas.width/2,24);
-    ctx.fillStyle='#ff0';ctx.fillText(`${currentMission.progress}/${currentMission.target}  [+${currentMission.reward}]`,canvas.width/2,36);
-    // Chain progress dots
-    for(let i=0;i<5;i++){
-      ctx.fillStyle=i<mi?'#0f0':i===mi?'#ff0':'#333';
-      ctx.beginPath();ctx.arc(canvas.width/2-20+i*10,47,3,0,Math.PI*2);ctx.fill();
-    }
+  // --- OXYGEN BAR (underwater, on foot) ---
+  if(playerMode==='onfoot' && alien.underwater){
+    const ox=canvas.width/2-50, oy=70;
+    const o=Math.max(0,Math.min(100,alien.oxygen||0));
+    ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(ox-1,oy-1,102,8);
+    const col = alien.diveSuit ? '#4cf' : (o>30?'#8cf':'#f66');
+    ctx.fillStyle=col;ctx.fillRect(ox,oy,o,6);
+    ctx.fillStyle='#8af';ctx.font='8px monospace';ctx.textAlign='center';
+    ctx.fillText(alien.diveSuit?'OXYGEN (SUIT)':'OXYGEN',canvas.width/2,oy-3);
   }
+
+  // --- MISSION HUD --- (removed per user request — exploration-focused game)
 
   // --- UPGRADE PROMPT ---
   if(score>=10&&playerMode==='ship'){
@@ -9551,6 +12094,35 @@ function drawShipBody(pc,pa,pt,type){
 }
 
 function drawShip(){
+  // Lasso rope (drawn in world space, before the ship transform)
+  if(ship.lasso && ship.lasso.target){
+    const l=ship.lasso, tgt=l.target;
+    let tx,ty;
+    if(l.targetType==='block'){tx=tgt.x+tgt.w/2; ty=tgt.y+tgt.h/2;}
+    else {tx=tgt.bodyX; ty=tgt.bodyY;}
+    const sx=ship.x, sy=ship.y+18;
+    // Rope with slight sag
+    const midX=(sx+tx)/2, midY=(sy+ty)/2 + Math.min(18, Math.hypot(tx-sx,ty-sy)*0.08);
+    // Shadow
+    ctx.strokeStyle='rgba(0,0,0,0.5)';ctx.lineWidth=3.5;
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.quadraticCurveTo(midX,midY,tx,ty);ctx.stroke();
+    // Rope
+    ctx.strokeStyle='#d8c080';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.quadraticCurveTo(midX,midY,tx,ty);ctx.stroke();
+    // Rope highlights (dash effect)
+    ctx.strokeStyle='rgba(255,240,200,0.5)';ctx.lineWidth=0.8;
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.quadraticCurveTo(midX,midY,tx,ty);ctx.stroke();
+    ctx.setLineDash([]);
+    // Hook/claw at the target end
+    ctx.fillStyle='#888';
+    ctx.beginPath();ctx.arc(tx,ty,4,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#444';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(tx,ty,4,0,Math.PI*2);ctx.stroke();
+    // Spool point on ship
+    ctx.fillStyle='#444';
+    ctx.beginPath();ctx.arc(sx,sy,2.5,0,Math.PI*2);ctx.fill();
+  }
   ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.tilt);
   if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(frameNow*0.005)*0.05;}
   const pc=shipPaint.color,pa=shipPaint.accent,pt=shipPaint.trail;
@@ -9888,6 +12460,79 @@ function renderVehicle(v){
 
 function drawStar(c,cx,cy,r,pts){c.beginPath();for(let i=0;i<pts*2;i++){const a=Math.PI/2*3+i*Math.PI/pts;const rad=i%2===0?r:r*0.4;c.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);}c.closePath();c.fill();}
 // Draw a detailed alien preview at given position and scale with a skin
+// Dive suit overlay — helmet dome + air tank + fin-like drag — painted on top of the alien
+function drawDiveSuit(ax, ay, f){
+  const t=performance.now()*0.001;
+  // Helmet (glass dome around head)
+  const hy = ay - 30;
+  const hr = 10;
+  // Outer glass dome
+  const dg=ctx.createRadialGradient(ax-2, hy-2, 1, ax, hy, hr+2);
+  dg.addColorStop(0,'rgba(255,255,255,0.5)');
+  dg.addColorStop(0.4,'rgba(180,220,255,0.25)');
+  dg.addColorStop(1,'rgba(80,130,180,0.15)');
+  ctx.fillStyle=dg;
+  ctx.beginPath(); ctx.arc(ax, hy, hr+2, 0, Math.PI*2); ctx.fill();
+  // Ring at neck
+  ctx.fillStyle='#889';
+  ctx.fillRect(ax-hr-1, hy+hr-2, (hr+1)*2, 3);
+  ctx.strokeStyle='#556'; ctx.lineWidth=0.5;
+  ctx.strokeRect(ax-hr-1, hy+hr-2, (hr+1)*2, 3);
+  // Bolts around ring
+  ctx.fillStyle='#445';
+  for(let bi=0;bi<4;bi++){
+    ctx.beginPath(); ctx.arc(ax-hr+2+bi*5, hy+hr-0.5, 0.8, 0, Math.PI*2); ctx.fill();
+  }
+  // Reflection highlight on dome
+  ctx.fillStyle='rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.ellipse(ax-3, hy-4, 3, 2, -0.4, 0, Math.PI*2); ctx.fill();
+  // Dome rim outline
+  ctx.strokeStyle='rgba(140,180,220,0.6)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(ax, hy, hr+1.5, 0, Math.PI*2); ctx.stroke();
+
+  // Air tank on back
+  const tbX = ax - f*6;
+  const tbY = ay - 20;
+  ctx.fillStyle='#c93';
+  ctx.fillRect(tbX-2.5, tbY-4, 5, 12);
+  ctx.fillStyle='#eb4';
+  ctx.fillRect(tbX-2.5, tbY-4, 1.5, 12);
+  ctx.strokeStyle='#633'; ctx.lineWidth=0.5;
+  ctx.strokeRect(tbX-2.5, tbY-4, 5, 12);
+  // Hose from tank to helmet
+  ctx.strokeStyle='#222'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(tbX, tbY-4);
+  ctx.quadraticCurveTo(ax-f*3, hy+2, ax-f*1, hy+hr-2);
+  ctx.stroke();
+
+  // Flipper-like fins on feet (small subtle overlay)
+  ctx.fillStyle='rgba(60,100,140,0.75)';
+  ctx.beginPath();
+  ctx.moveTo(ax-4, ay-1);
+  ctx.lineTo(ax-8, ay+3);
+  ctx.lineTo(ax-2, ay+2);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(ax+4, ay-1);
+  ctx.lineTo(ax+8, ay+3);
+  ctx.lineTo(ax+2, ay+2);
+  ctx.closePath(); ctx.fill();
+
+  // Occasional bubbles from helmet top
+  const bp=(t*2)%1;
+  ctx.fillStyle=`rgba(220,240,255,${0.5*(1-bp)})`;
+  ctx.beginPath(); ctx.arc(ax+f*2, hy-hr-2-bp*6, 1.4+bp*0.8, 0, Math.PI*2); ctx.fill();
+
+  // Flash highlight when first-equipped
+  if(alien.diveSuitShownT>120){
+    const pulse=(alien.diveSuitShownT-120)/60;
+    ctx.strokeStyle=`rgba(140,220,255,${pulse})`;
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(ax, hy, hr+4+pulse*3, 0, Math.PI*2); ctx.stroke();
+  }
+}
+
 function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   const _r2=skin.id==='classic'?0:0.55;
   const _sb2=(g)=>skinTint(g,skin.body,_r2);
@@ -10406,8 +13051,19 @@ const planetMusic={earth:mkAudio('earth-music.wav',0,true),asteroid:mkAudio('eer
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
 const missileSfx=mkAudio('missile-sfx.wav',0.4,false);
+const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
+const underwaterSfx=mkAudio('underwater-ambience.wav',0,true);
 spaceAmbience.loop=true;spaceAmbience.volume=0;
+underwaterSfx.loop=true;underwaterSfx.volume=0;
 let ambienceTarget=0,ambiencePlaying=false;
+let underwaterTarget=0,underwaterPlaying=false;
+function isPlayerUnderwater(){
+  if(gameMode!=='planet'||!currentPlanet)return false;
+  // Ship underwater: diving in ocean below ground level, or inside an underwater cave
+  if(!mothershipMode && ship.y>GROUND_LEVEL && (isOverOcean(ship.x) || isInsideCave(ship.x,ship.y)))return true;
+  // On-foot alien underwater (in cave sandbox or cave walk) — approximate
+  return false;
+}
 function updateAmbience(){
   // Space ambience
   ambienceTarget=(gameMode==='space'&&!mothershipMode)?0.03:0;
@@ -10415,6 +13071,12 @@ function updateAmbience(){
   spaceAmbience.volume=Math.max(0,Math.min(1,spaceAmbience.volume+diff*0.02));
   if(ambienceTarget>0&&!ambiencePlaying){spaceAmbience.play().catch(()=>{});ambiencePlaying=true;}
   if(spaceAmbience.volume<0.01&&ambienceTarget===0&&ambiencePlaying){spaceAmbience.pause();ambiencePlaying=false;}
+  // Underwater ambience
+  underwaterTarget=isPlayerUnderwater()?0.18:0;
+  const udiff=underwaterTarget-underwaterSfx.volume;
+  underwaterSfx.volume=Math.max(0,Math.min(1,underwaterSfx.volume+udiff*0.03));
+  if(underwaterTarget>0&&!underwaterPlaying){underwaterSfx.play().catch(()=>{});underwaterPlaying=true;}
+  if(underwaterSfx.volume<0.01&&underwaterTarget===0&&underwaterPlaying){underwaterSfx.pause();underwaterPlaying=false;}
   // Mothership music
   if(mothershipMode){
     if(mothershipMusic.paused)mothershipMusic.play().catch(()=>{});
@@ -10450,7 +13112,7 @@ function gameLoop(){
     else{
       if(keys['w']||keys['arrowup']){pauseMenu.sel--;pauseMenu._cool=10;}
       if(keys['s']||keys['arrowdown']){pauseMenu.sel++;pauseMenu._cool=10;}
-      const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU'];
+      const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU','EXIT GAME'];
       pauseMenu.sel=((pauseMenu.sel%items.length)+items.length)%items.length;
       if(keys['escape']){keys['escape']=false;pauseMenu.active=false;pauseMenu._cool=10;}
       if(keys['enter']||keys[' ']){
@@ -10458,6 +13120,12 @@ function gameLoop(){
         if(pauseMenu.sel===0){pauseMenu.active=false;}
         else if(pauseMenu.sel===1){saveGame();showMessage('Game saved!');pauseMenu.active=false;}
         else if(pauseMenu.sel===2){saveGame();gameStarted=false;mainMenuMode='menu';mainMenuSel=0;pauseMenu.active=false;}
+        else if(pauseMenu.sel===3){
+          // Exit game — stop the loop and show the start-screen overlay (same as main menu exit)
+          saveGame();
+          const ss=document.getElementById('start-screen'); if(ss) ss.style.display='flex';
+          gameStarted=false; mainMenuMode=null; pauseMenu.active=false;
+        }
       }
     }
     // Draw pause overlay
@@ -10667,6 +13335,7 @@ function exitDebugMode(){
   mainMenuSel=0;
   // Reset arrays so a later real game start is clean
   humans=[]; cows=[]; vehicles=[]; military=[]; hazards=[]; particles=[]; speechBubbles=[];
+  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[];
 }
 
 // Auto-save periodically
@@ -10699,7 +13368,7 @@ function drawMainMenu(){
   // titleY = bottom edge of logo bounding box.
   const titleY=ch*0.55;
   // Hide logo in debug preview so both puppets are clearly visible.
-  const hideLogo = mainMenuMode==='debugPreview';
+  const hideLogo = mainMenuMode==='debugPreview' || mainMenuMode==='sandboxCaves' || mainMenuMode==='sandboxCaveWalk';
   if(!hideLogo){
     if(!window._logoImg){window._logoImg=new Image();window._logoImg.src='logo.png';}
     const li=window._logoImg;
@@ -10732,7 +13401,7 @@ function drawMainMenu(){
     items.push({label:'NEW GAME', action:'new'});
     items.push({label:'ALIEN SKINS', action:'skins'});
     items.push({label:'SHIP SKINS', action:'shipskins'});
-    items.push({label:'DEBUG UNITS', action:'debug'});
+    items.push({label:'DEBUG', action:'debug'});
     items.push({label:'EXIT', action:'exit'});
     const menuY=ch*0.52;
     const itemH=42;
@@ -10841,42 +13510,1138 @@ function drawMainMenu(){
     ctx.fillText('A/D to browse  |  ENTER/SPACE to equip  |  ESC to back to races',cw/2,ch-20);
   }
   else if(mainMenuMode==='shipskins'){
-    // Ship skin selector
-    ctx.fillStyle='rgba(0,255,0,0.5)';ctx.font='bold 16px monospace';ctx.textAlign='center';
-    ctx.fillText('SELECT SHIP SKIN',cw/2,ch*0.15);
+    // --- Step 1: SHIP TYPE selector ---
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText('CHOOSE SHIP TYPE',cw/2,ch*0.12);
 
-    const cols=4, skinW=110, skinH=90, gap=12;
-    const totalW=cols*(skinW+gap)-gap;
+    const cols=4, cardW=200, cardH=200, gap=18;
+    const rows=Math.ceil(SHIP_TYPES.length/cols);
+    const totalW=cols*(cardW+gap)-gap;
+    const startX=cw/2-totalW/2;
+    const startY=ch*0.18;
+    mainMenuSel=((mainMenuSel%SHIP_TYPES.length)+SHIP_TYPES.length)%SHIP_TYPES.length;
+    SHIP_TYPES.forEach((st,i)=>{
+      const col=i%cols, row=Math.floor(i/cols);
+      const sx=startX+col*(cardW+gap), sy=startY+row*(cardH+gap);
+      const sel=i===mainMenuSel;
+      const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===st.id);
+      const preview=variants[0]||SHIP_PAINTS[0];
+      const isCur=(shipPaint.ship||'saucer')===st.id;
+      ctx.fillStyle=sel?'rgba(0,50,20,0.85)':'rgba(0,15,5,0.6)';
+      roundRect(ctx,sx,sy,cardW,cardH,8);ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.65+Math.sin(t*4)*0.2})`;ctx.lineWidth=2.5;roundRect(ctx,sx,sy,cardW,cardH,8);ctx.stroke();}
+      if(isCur){ctx.strokeStyle='rgba(255,215,0,0.7)';ctx.lineWidth=1.5;roundRect(ctx,sx+3,sy+3,cardW-6,cardH-6,6);ctx.stroke();}
+      // Ship preview
+      ctx.save();
+      ctx.translate(sx+cardW/2, sy+cardH*0.48);
+      ctx.scale(1.9,1.9);
+      drawShipBody(preview.color, preview.accent, preview.trail, st.id);
+      ctx.restore();
+      // Type name
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
+      ctx.font='bold 16px monospace';ctx.textAlign='center';
+      ctx.fillText(st.name.toUpperCase(),sx+cardW/2,sy+cardH-32);
+      // Description
+      ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='10px monospace';
+      ctx.fillText(st.description,sx+cardW/2,sy+cardH-14);
+      // Variant count
+      ctx.fillStyle='rgba(0,200,0,0.4)';ctx.font='9px monospace';
+      ctx.fillText(variants.length+(variants.length===1?' VARIANT':' VARIANTS'),sx+cardW/2,sy+18);
+      if(isCur){ctx.fillStyle='#fd0';ctx.font='14px monospace';ctx.fillText('\u2605',sx+cardW-14,sy+18);}
+    });
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('WASD/Arrows to browse  |  ENTER/SPACE to view variants  |  ESC to back',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='shipVariants'){
+    // --- Step 2: VARIANT selector for the type drilled into ---
+    const typeIdx=window._mmShipTypeIdx||0;
+    const type=SHIP_TYPES[typeIdx]||SHIP_TYPES[0];
+    const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===type.id);
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText(type.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
+    ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
+    ctx.fillText(type.description,cw/2,ch*0.16);
+
+    const cols=Math.min(variants.length,4), cardW=190, cardH=180, gap=16;
+    const totalW=cols*(cardW+gap)-gap;
     const startX=cw/2-totalW/2;
     const startY=ch*0.22;
-    mainMenuSel=((mainMenuSel%SHIP_PAINTS.length)+SHIP_PAINTS.length)%SHIP_PAINTS.length;
-    SHIP_PAINTS.forEach((sp,i)=>{
+    mainMenuSel=((mainMenuSel%variants.length)+variants.length)%variants.length;
+    variants.forEach((sp,i)=>{
       const col=i%cols, row=Math.floor(i/cols);
-      const sx=startX+col*(skinW+gap), sy=startY+row*(skinH+gap);
+      const sx=startX+col*(cardW+gap), sy=startY+row*(cardH+gap);
       const sel=i===mainMenuSel;
       const isCur=shipPaint.name===sp.id;
-      // Card
-      ctx.fillStyle=sel?'rgba(0,40,0,0.8)':'rgba(0,10,0,0.5)';
-      roundRect(ctx,sx,sy,skinW,skinH,6);ctx.fill();
-      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.6+Math.sin(t*4)*0.2})`;ctx.lineWidth=2;roundRect(ctx,sx,sy,skinW,skinH,6);ctx.stroke();}
-      if(isCur){ctx.strokeStyle='rgba(255,215,0,0.6)';ctx.lineWidth=1.5;roundRect(ctx,sx+2,sy+2,skinW-4,skinH-4,4);ctx.stroke();}
-      // Draw ship preview using shared body renderer
-      const px=sx+skinW/2, py=sy+40;
-      const sc2=1.1;
+      ctx.fillStyle=sel?'rgba(0,45,15,0.85)':'rgba(0,12,5,0.6)';
+      roundRect(ctx,sx,sy,cardW,cardH,8);ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.65+Math.sin(t*4)*0.2})`;ctx.lineWidth=2;roundRect(ctx,sx,sy,cardW,cardH,8);ctx.stroke();}
+      if(isCur){ctx.strokeStyle='rgba(255,215,0,0.7)';ctx.lineWidth=1.5;roundRect(ctx,sx+3,sy+3,cardW-6,cardH-6,6);ctx.stroke();}
       ctx.save();
-      ctx.translate(px,py);
-      ctx.scale(sc2,sc2);
+      ctx.translate(sx+cardW/2, sy+cardH*0.48);
+      ctx.scale(1.8,1.8);
       drawShipBody(sp.color, sp.accent, sp.trail, sp.ship||'saucer');
       ctx.restore();
-      // Name + cost
-      ctx.fillStyle=sel?'#0f0':'rgba(0,200,0,0.5)';ctx.font='8px monospace';ctx.textAlign='center';
-      ctx.fillText(sp.name,px,sy+skinH-14);
-      if(sp.cost>0){ctx.fillStyle=sel?'#fd0':'rgba(200,200,0,0.4)';ctx.fillText(sp.cost+' pts',px,sy+skinH-5);}
-      else{ctx.fillStyle='rgba(0,200,0,0.3)';ctx.fillText('FREE',px,sy+skinH-5);}
-      if(isCur){ctx.fillStyle='#fd0';ctx.fillText('\u2605',sx+skinW-10,sy+12);}
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.6)';
+      ctx.font=sel?'bold 13px monospace':'12px monospace';ctx.textAlign='center';
+      ctx.fillText(sp.name,sx+cardW/2,sy+cardH-24);
+      if(sp.cost>0){ctx.fillStyle=sel?'#fd0':'rgba(200,200,0,0.45)';ctx.font='10px monospace';ctx.fillText(sp.cost+' pts',sx+cardW/2,sy+cardH-10);}
+      else{ctx.fillStyle='rgba(0,200,0,0.35)';ctx.font='10px monospace';ctx.fillText('FREE',sx+cardW/2,sy+cardH-10);}
+      if(isCur){ctx.fillStyle='#fd0';ctx.font='13px monospace';ctx.fillText('\u2605',sx+cardW-12,sy+16);}
     });
-    ctx.fillStyle='rgba(0,200,0,0.25)';ctx.font='11px monospace';ctx.textAlign='center';
-    ctx.fillText('A/D to browse  |  ENTER/SPACE to select  |  ESC to back',cw/2,ch-20);
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('A/D to browse  |  ENTER/SPACE to equip  |  ESC to back to types',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='debug'){
+    // Top-level debug menu: WORLD / SANDBOX
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText('DEBUG',cw/2,ch*0.18);
+    const items=[
+      {label:'WORLD', sub:'Jump into any planet with any unit'},
+      {label:'SANDBOX', sub:'Preview scenes, caves, and systems'},
+    ];
+    mainMenuSel=((mainMenuSel%items.length)+items.length)%items.length;
+    const menuY=ch*0.42;
+    const itemH=64;
+    items.forEach((it,i)=>{
+      const iy=menuY+i*itemH;
+      const sel=i===mainMenuSel;
+      ctx.fillStyle=sel?'rgba(0,60,20,0.85)':'rgba(0,20,8,0.6)';
+      roundRect(ctx,cw/2-200,iy-20,400,52,8);ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.65+Math.sin(t*4)*0.2})`;ctx.lineWidth=2.5;roundRect(ctx,cw/2-200,iy-20,400,52,8);ctx.stroke();}
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.6)';
+      ctx.font=sel?'bold 20px monospace':'18px monospace';
+      ctx.fillText(it.label,cw/2,iy+4);
+      ctx.fillStyle=sel?'rgba(180,255,180,0.7)':'rgba(0,200,0,0.35)';
+      ctx.font='11px monospace';
+      ctx.fillText(it.sub,cw/2,iy+22);
+    });
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('W/S to select  |  ENTER/SPACE to open  |  ESC to back',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='sandbox'){
+    // Sandbox submenu — for now just CAVES (room to grow)
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText('SANDBOX',cw/2,ch*0.18);
+    const items=[
+      {label:'CAVES', sub:'Preview the three underwater caves'},
+    ];
+    mainMenuSel=((mainMenuSel%items.length)+items.length)%items.length;
+    const menuY=ch*0.42;
+    const itemH=64;
+    items.forEach((it,i)=>{
+      const iy=menuY+i*itemH;
+      const sel=i===mainMenuSel;
+      ctx.fillStyle=sel?'rgba(0,60,20,0.85)':'rgba(0,20,8,0.6)';
+      roundRect(ctx,cw/2-200,iy-20,400,52,8);ctx.fill();
+      if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.65+Math.sin(t*4)*0.2})`;ctx.lineWidth=2.5;roundRect(ctx,cw/2-200,iy-20,400,52,8);ctx.stroke();}
+      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.6)';
+      ctx.font=sel?'bold 20px monospace':'18px monospace';
+      ctx.fillText(it.label,cw/2,iy+4);
+      ctx.fillStyle=sel?'rgba(180,255,180,0.7)':'rgba(0,200,0,0.35)';
+      ctx.font='11px monospace';
+      ctx.fillText(it.sub,cw/2,iy+22);
+    });
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('W/S to select  |  ENTER/SPACE to open  |  ESC to back',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='sandboxCaves'){
+    // Show 3 cave previews side by side (crystals, bones, ruins)
+    ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
+    ctx.fillText('CAVES',cw/2,ch*0.09);
+    const caves=[
+      {name:'THE CRYSTAL DEPTHS', type:'crystals', glow:'#4080ff', accent:'#60f0ff', desc:'Glowing blue crystal spires'},
+      {name:'THE BONE TUNNELS',   type:'bones',    glow:'#ff4040', accent:'#ffaa60', desc:'Skeletal remains in red gloom'},
+      {name:'THE SUNKEN KINGDOM', type:'ruins',    glow:'#ffd700', accent:'#80ff40', desc:'Golden ruins of an old people'},
+      {name:'THE SUN PYRAMID',    type:'pyramid',  glow:'#ffaa40', accent:'#ffd880', desc:'Open tomb in the desert'},
+    ];
+    const cardW=Math.min(260,(cw-120)/caves.length), cardH=ch*0.62, gap=14;
+    const totalW=caves.length*cardW+(caves.length-1)*gap;
+    const startX=cw/2-totalW/2;
+    const startY=ch*0.16;
+    mainMenuSel=((mainMenuSel%caves.length)+caves.length)%caves.length;
+    caves.forEach((c,i)=>{
+      const sx=startX+i*(cardW+gap), sy=startY;
+      const sel=i===mainMenuSel;
+      // Card background
+      ctx.fillStyle='#000';ctx.fillRect(sx,sy,cardW,cardH);
+      ctx.save();
+      ctx.beginPath();ctx.rect(sx+1,sy+1,cardW-2,cardH-2);ctx.clip();
+      // === CAVE BACKGROUND ===
+      // Deep rock gradient
+      const bg=ctx.createLinearGradient(sx,sy,sx,sy+cardH);
+      bg.addColorStop(0,'#0a0608');bg.addColorStop(0.5,'#1a1214');bg.addColorStop(1,'#080406');
+      ctx.fillStyle=bg;ctx.fillRect(sx,sy,cardW,cardH);
+      // Glow wash from accent color
+      const gwash=ctx.createRadialGradient(sx+cardW/2,sy+cardH*0.6,0,sx+cardW/2,sy+cardH*0.6,cardW*0.9);
+      gwash.addColorStop(0,c.glow+'33');gwash.addColorStop(1,'transparent');
+      ctx.fillStyle=gwash;ctx.fillRect(sx,sy,cardW,cardH);
+      // Ceiling silhouette (jagged)
+      ctx.fillStyle='#060404';
+      ctx.beginPath();ctx.moveTo(sx,sy);
+      for(let px=0;px<=cardW;px+=16){
+        const ny=sy+18+Math.abs(Math.sin(px*0.05+i*1.3))*22+Math.sin(px*0.2+i)*6;
+        ctx.lineTo(sx+px,ny);
+      }
+      ctx.lineTo(sx+cardW,sy);ctx.closePath();ctx.fill();
+      // Stalactites hanging
+      for(let si=0;si<6;si++){
+        const stx=sx+10+si*(cardW-20)/5+(i*7%8);
+        const stLen=12+((si+i)%3)*8;
+        const stBase=sy+20+Math.abs(Math.sin(stx*0.05+i*1.3))*22;
+        ctx.fillStyle='#0a0808';
+        ctx.beginPath();ctx.moveTo(stx-3,stBase);ctx.lineTo(stx+3,stBase);ctx.lineTo(stx,stBase+stLen);ctx.closePath();ctx.fill();
+        // Drip
+        if((si+i)%2===0){
+          ctx.fillStyle=c.accent+'99';
+          ctx.beginPath();ctx.arc(stx,stBase+stLen+2+Math.sin(t*2+si)*1,1.2,0,Math.PI*2);ctx.fill();
+        }
+      }
+      // Floor silhouette
+      const floorY=sy+cardH-28;
+      ctx.fillStyle='#040202';
+      ctx.beginPath();ctx.moveTo(sx,sy+cardH);
+      for(let px=0;px<=cardW;px+=14){
+        const ny=floorY-Math.abs(Math.sin(px*0.06+i*0.8))*14-Math.sin(px*0.18+i)*4;
+        ctx.lineTo(sx+px,ny);
+      }
+      ctx.lineTo(sx+cardW,sy+cardH);ctx.closePath();ctx.fill();
+
+      // === THEME-SPECIFIC CONTENT ===
+      if(c.type==='crystals'){
+        // Crystal spires growing up
+        for(let ci=0;ci<7;ci++){
+          const cx2=sx+20+ci*(cardW-40)/6;
+          const cy2=floorY-Math.abs(Math.sin(cx2*0.06+i*0.8))*10;
+          const ch2=20+((ci*7)%4)*9;
+          const cw2=6+((ci*3)%3)*2;
+          const hue=200+ci*8;
+          const cg=ctx.createLinearGradient(cx2,cy2,cx2,cy2-ch2);
+          cg.addColorStop(0,`hsla(${hue},90%,45%,0.95)`);
+          cg.addColorStop(1,`hsla(${hue},95%,75%,0.95)`);
+          ctx.fillStyle=cg;
+          ctx.beginPath();ctx.moveTo(cx2-cw2,cy2);ctx.lineTo(cx2,cy2-ch2);ctx.lineTo(cx2+cw2,cy2);ctx.closePath();ctx.fill();
+          // Facet line
+          ctx.strokeStyle=`hsla(${hue},100%,90%,0.7)`;ctx.lineWidth=1;
+          ctx.beginPath();ctx.moveTo(cx2,cy2);ctx.lineTo(cx2,cy2-ch2);ctx.stroke();
+          // Glow
+          const glow=ctx.createRadialGradient(cx2,cy2-ch2/2,0,cx2,cy2-ch2/2,18);
+          glow.addColorStop(0,`hsla(${hue},100%,70%,${0.35+Math.sin(t*3+ci)*0.1})`);
+          glow.addColorStop(1,'transparent');
+          ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cx2,cy2-ch2/2,18,0,Math.PI*2);ctx.fill();
+        }
+        // Floating sparkles
+        for(let pi=0;pi<14;pi++){
+          const px=sx+10+((pi*41+t*15)%(cardW-20));
+          const py=sy+40+((pi*29)%(cardH-80));
+          ctx.fillStyle=`rgba(150,220,255,${0.4+Math.sin(t*3+pi)*0.3})`;
+          ctx.fillRect(px,py,1.5,1.5);
+        }
+      } else if(c.type==='bones'){
+        // Scattered bones on the floor
+        for(let bi=0;bi<8;bi++){
+          const bx=sx+14+bi*(cardW-28)/7;
+          const by=floorY-2-Math.abs(Math.sin(bx*0.06+i*0.8))*10;
+          const bl=14+((bi*5)%4)*3;
+          ctx.strokeStyle='#ddd8c8';ctx.lineWidth=2.5;
+          ctx.lineCap='round';
+          const ang=(bi%3-1)*0.4;
+          ctx.beginPath();
+          ctx.moveTo(bx-Math.cos(ang)*bl/2,by-Math.sin(ang)*bl/2);
+          ctx.lineTo(bx+Math.cos(ang)*bl/2,by+Math.sin(ang)*bl/2);
+          ctx.stroke();
+          // Bone ends
+          ctx.fillStyle='#e8e2d0';
+          ctx.beginPath();ctx.arc(bx-Math.cos(ang)*bl/2,by-Math.sin(ang)*bl/2,2,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bx+Math.cos(ang)*bl/2,by+Math.sin(ang)*bl/2,2,0,Math.PI*2);ctx.fill();
+        }
+        // Big skull centerpiece
+        const skx=sx+cardW/2, sky=floorY-22;
+        ctx.fillStyle='#e8e2d0';
+        ctx.beginPath();ctx.arc(skx,sky,14,0,Math.PI*2);ctx.fill();
+        ctx.fillRect(skx-8,sky+8,16,10);
+        // Eye sockets
+        ctx.fillStyle='#000';
+        ctx.beginPath();ctx.arc(skx-5,sky-2,3,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(skx+5,sky-2,3,0,Math.PI*2);ctx.fill();
+        // Red glow inside eyes
+        ctx.fillStyle=`rgba(255,60,60,${0.5+Math.sin(t*3)*0.3})`;
+        ctx.beginPath();ctx.arc(skx-5,sky-2,1.5,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(skx+5,sky-2,1.5,0,Math.PI*2);ctx.fill();
+        // Nose
+        ctx.fillStyle='#000';
+        ctx.beginPath();ctx.moveTo(skx,sky+2);ctx.lineTo(skx-2,sky+6);ctx.lineTo(skx+2,sky+6);ctx.closePath();ctx.fill();
+        // Teeth
+        for(let ti=0;ti<5;ti++){ctx.fillRect(skx-7+ti*3,sky+13,2,4);}
+        // Embers drifting
+        for(let ei=0;ei<8;ei++){
+          const ex=sx+10+((ei*53+t*12)%(cardW-20));
+          const ey=sy+cardH-30-((ei*37+t*20)%(cardH-60));
+          ctx.fillStyle=`rgba(255,${100+ei*10},60,${0.6+Math.sin(t*4+ei)*0.3})`;
+          ctx.fillRect(ex,ey,1.5,1.5);
+        }
+      } else if(c.type==='ruins'){
+        // Ancient columns
+        for(let ci=0;ci<4;ci++){
+          const cx2=sx+30+ci*(cardW-60)/3;
+          const colH=50+((ci*7)%3)*10;
+          const baseY=floorY-2;
+          // Broken top marker
+          const broken=ci%2===0;
+          const topY=baseY-(broken?colH*0.7:colH);
+          // Column body
+          ctx.fillStyle='#b09060';
+          ctx.fillRect(cx2-5,topY,10,baseY-topY);
+          // Fluting
+          ctx.strokeStyle='#8a6838';ctx.lineWidth=0.8;
+          for(let fi=-1;fi<=1;fi++){
+            ctx.beginPath();ctx.moveTo(cx2+fi*2.5,topY);ctx.lineTo(cx2+fi*2.5,baseY);ctx.stroke();
+          }
+          // Base
+          ctx.fillStyle='#8a6838';ctx.fillRect(cx2-7,baseY-4,14,4);
+          // Capital (or broken)
+          if(!broken){
+            ctx.fillStyle='#c8a070';ctx.fillRect(cx2-7,topY-4,14,4);
+            ctx.fillRect(cx2-8,topY-7,16,3);
+          } else {
+            // Jagged break
+            ctx.fillStyle='#6a4828';
+            ctx.beginPath();
+            ctx.moveTo(cx2-5,topY);
+            ctx.lineTo(cx2-3,topY-3);ctx.lineTo(cx2,topY+1);ctx.lineTo(cx2+3,topY-2);ctx.lineTo(cx2+5,topY);
+            ctx.closePath();ctx.fill();
+          }
+        }
+        // Gold coins / treasure scatter
+        for(let gi=0;gi<10;gi++){
+          const gx=sx+14+gi*(cardW-28)/9;
+          const gy=floorY-2-Math.abs(Math.sin(gx*0.06+i*0.8))*10;
+          ctx.fillStyle='#ffd700';
+          ctx.beginPath();ctx.ellipse(gx,gy,3,1.5,0,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#ffee88';
+          ctx.beginPath();ctx.ellipse(gx,gy-0.5,1.5,0.8,0,0,Math.PI*2);ctx.fill();
+        }
+        // Floating motes
+        for(let pi=0;pi<10;pi++){
+          const px=sx+10+((pi*41+t*8)%(cardW-20));
+          const py=sy+40+((pi*29+t*6)%(cardH-80));
+          ctx.fillStyle=`rgba(255,220,120,${0.4+Math.sin(t*2+pi)*0.3})`;
+          ctx.fillRect(px,py,1.3,1.3);
+        }
+        // Fallen statue piece (rubble)
+        ctx.fillStyle='#9c7848';
+        ctx.fillRect(sx+cardW*0.6, floorY-8, 18, 6);
+        ctx.fillRect(sx+cardW*0.62, floorY-13, 10, 5);
+      } else if(c.type==='pyramid'){
+        // Sky wash repaint (overrides cave bg for exterior feel)
+        const sky=ctx.createLinearGradient(sx,sy,sx,floorY);
+        sky.addColorStop(0,'#1a2a48');
+        sky.addColorStop(0.6,'#6a5038');
+        sky.addColorStop(1,'#b08858');
+        ctx.fillStyle=sky;ctx.fillRect(sx,sy+2,cardW,floorY-sy);
+        // Sun
+        const sunX=sx+cardW*0.8, sunY=sy+cardH*0.25;
+        const sunG=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,40);
+        sunG.addColorStop(0,'rgba(255,230,160,0.9)');sunG.addColorStop(1,'transparent');
+        ctx.fillStyle=sunG;ctx.fillRect(sx,sy,cardW,cardH);
+        ctx.fillStyle='#ffd880';ctx.beginPath();ctx.arc(sunX,sunY,10,0,Math.PI*2);ctx.fill();
+        // Sand floor
+        ctx.fillStyle='#d0a868';ctx.fillRect(sx,floorY,cardW,sy+cardH-floorY);
+        ctx.fillStyle='rgba(100,70,40,0.35)';
+        for(let di=0;di<5;di++){ctx.beginPath();ctx.ellipse(sx+di*cardW/4,floorY+6+(di%2)*3,20,3,0,0,Math.PI*2);ctx.fill();}
+        // Pyramid silhouette (stepped)
+        const pcx=sx+cardW*0.38, pBase=floorY, pH=cardH*0.58;
+        const pW=cardW*0.55;
+        // Back shadow pyramid
+        ctx.fillStyle='#6a4828';
+        ctx.beginPath();ctx.moveTo(pcx-pW/2,pBase);ctx.lineTo(pcx,pBase-pH);ctx.lineTo(pcx+pW/2,pBase);ctx.closePath();ctx.fill();
+        // Lit face
+        ctx.fillStyle='#d8a858';
+        ctx.beginPath();ctx.moveTo(pcx-pW/2,pBase);ctx.lineTo(pcx,pBase-pH);ctx.lineTo(pcx,pBase);ctx.closePath();ctx.fill();
+        // Stepped blocks
+        ctx.strokeStyle='rgba(50,30,10,0.5)';ctx.lineWidth=0.8;
+        const steps=9;
+        for(let si=1;si<steps;si++){
+          const ty=pBase-(pH*si/steps);
+          const hw=pW/2*(1-si/steps);
+          ctx.beginPath();ctx.moveTo(pcx-hw,ty);ctx.lineTo(pcx+hw,ty);ctx.stroke();
+        }
+        // Dark entrance door
+        const doorW=pW*0.14, doorH=pH*0.22;
+        ctx.fillStyle='#0a0604';
+        ctx.fillRect(pcx-doorW/2, pBase-doorH, doorW, doorH);
+        // Door frame (sandstone blocks)
+        ctx.strokeStyle='#805830';ctx.lineWidth=1.5;
+        ctx.strokeRect(pcx-doorW/2, pBase-doorH, doorW, doorH);
+        // Glyphs
+        ctx.fillStyle='rgba(200,150,80,0.7)';ctx.font='bold 6px monospace';ctx.textAlign='center';
+        ctx.fillText('\u2600', pcx, pBase-doorH-4);
+        // Palm tree bit
+        const pxx=sx+cardW*0.82, pyy=floorY;
+        ctx.strokeStyle='#6a4a28';ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(pxx,pyy);ctx.lineTo(pxx-2,pyy-24);ctx.stroke();
+        ctx.fillStyle='#3a6828';
+        for(let fi=0;fi<5;fi++){
+          const fa=-Math.PI/2+(fi-2)*0.4;
+          ctx.beginPath();ctx.ellipse(pxx-2+Math.cos(fa)*8,pyy-24+Math.sin(fa)*4,9,3,fa,0,Math.PI*2);ctx.fill();
+        }
+        // Heat shimmer / dust motes
+        for(let pi=0;pi<10;pi++){
+          const dx=sx+10+((pi*53+t*20)%(cardW-20));
+          const dy=floorY-((pi*31+t*15)%(cardH*0.5));
+          ctx.fillStyle=`rgba(255,220,160,${0.3+Math.sin(t*3+pi)*0.2})`;
+          ctx.fillRect(dx,dy,1.2,1.2);
+        }
+      }
+      // Vignette
+      const vg=ctx.createRadialGradient(sx+cardW/2,sy+cardH/2,Math.min(cardW,cardH)*0.3,sx+cardW/2,sy+cardH/2,Math.max(cardW,cardH)*0.7);
+      vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.6)');
+      ctx.fillStyle=vg;ctx.fillRect(sx,sy,cardW,cardH);
+      ctx.restore();
+      // Frame
+      ctx.strokeStyle=sel?`rgba(0,255,0,${0.75+Math.sin(t*4)*0.2})`:'rgba(0,120,0,0.4)';
+      ctx.lineWidth=sel?3:1.5;
+      ctx.strokeRect(sx,sy,cardW,cardH);
+      // Accent bar (color of cave)
+      ctx.fillStyle=c.glow;ctx.fillRect(sx,sy,cardW,3);
+      // Name plate
+      ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(sx,sy+cardH-42,cardW,42);
+      ctx.fillStyle=sel?'#0f0':c.accent;
+      ctx.font='bold 13px monospace';ctx.textAlign='center';
+      ctx.fillText(c.name,sx+cardW/2,sy+cardH-24);
+      ctx.fillStyle='rgba(200,220,200,0.55)';ctx.font='10px monospace';
+      ctx.fillText(c.desc,sx+cardW/2,sy+cardH-10);
+    });
+    ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('A/D to browse  |  ENTER to walk in  |  ESC to back',cw/2,ch-20);
+  }
+  else if(mainMenuMode==='sandboxCaveWalk' && caveWalkState){
+    const cs=caveWalkState;
+    const caves=[
+      {name:'THE CRYSTAL DEPTHS', type:'crystals', glow:'#4080ff', accent:'#60f0ff'},
+      {name:'THE BONE TUNNELS',   type:'bones',    glow:'#ff4040', accent:'#ffaa60'},
+      {name:'THE SUNKEN KINGDOM', type:'ruins',    glow:'#ffd700', accent:'#80ff40'},
+      {name:'THE SUN PYRAMID',    type:'pyramid',  glow:'#ffaa40', accent:'#ffd880'},
+    ];
+    const c=caves[cs.caveIdx]||caves[0];
+    const a=cs.alien;
+    const floorY=ch*0.78;
+    const ceilY=ch*0.18;
+    const entryX=280; // world-x of the cave mouth center
+    // Camera follows alien
+    const camX=Math.max(0,Math.min(cs.worldW-cw, a.x-cw/2));
+    const outside = false; // always render interior view — exterior looked weird
+    // Mouth geometry (world-space) — organic irregular opening
+    const mouthHalfW=78;         // half-width of mouth opening at floor
+    const mouthTopY=ceilY+36;    // how high the mouth apex reaches
+    const mouthBotY=floorY;
+    // Build irregular mouth outline once per frame (deterministic on index)
+    // Points go from floor-left, up over the apex, back down to floor-right
+    const mouthPtsWorld=[];
+    {
+      const N=28;
+      for(let i=0;i<=N;i++){
+        const tt=i/N;
+        const ang=Math.PI*(1-tt); // left (PI) -> top (PI/2) -> right (0)
+        const rx=Math.cos(ang)*mouthHalfW;
+        const ry=-Math.sin(ang)*(mouthBotY-mouthTopY);
+        // Deterministic roughness (doesn't shimmer per-frame)
+        const s=i*131;
+        const noise=Math.sin(s*0.7)*3 + Math.sin(s*1.3+1.1)*2 + ((s*17)%5);
+        const nx=Math.cos(ang+1.57)*noise*0.4;
+        const ny=Math.sin(ang+1.57)*noise*0.5;
+        // Slight asymmetry so it doesn't look like a perfect arch
+        const asymX = (tt-0.5)*6*Math.sin(i*0.4);
+        mouthPtsWorld.push([entryX+rx+nx+asymX, mouthBotY+ry+ny]);
+      }
+    }
+    // Helper to trace outline in screen space (camera-adjusted)
+    function traceMouth(){
+      for(let i=0;i<mouthPtsWorld.length;i++){
+        const p=mouthPtsWorld[i];
+        const sx=p[0]-camX, sy=p[1];
+        if(i===0)ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
+      }
+    }
+
+    const pyramidOutside = (c.type==='pyramid' && !cs.entered);
+    if(pyramidOutside){
+      // === DESERT SKY ===
+      const sky=ctx.createLinearGradient(0,0,0,floorY);
+      sky.addColorStop(0,'#1a2a48');
+      sky.addColorStop(0.55,'#6a5038');
+      sky.addColorStop(1,'#b08858');
+      ctx.fillStyle=sky;ctx.fillRect(0,0,cw,floorY);
+      // Sun with halo
+      const sunX=cw*0.85-camX*0.1, sunY=ch*0.22;
+      const halo=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,160);
+      halo.addColorStop(0,'rgba(255,230,160,0.5)');halo.addColorStop(1,'transparent');
+      ctx.fillStyle=halo;ctx.fillRect(0,0,cw,floorY);
+      ctx.fillStyle='#ffe8a0';ctx.beginPath();ctx.arc(sunX,sunY,24,0,Math.PI*2);ctx.fill();
+      // Distant dune silhouettes (parallax)
+      ctx.fillStyle='#8a6838';
+      for(let dn=0;dn<6;dn++){
+        const dx0=((dn*400 - camX*0.3)%(cw+400)+cw+400)%(cw+400)-200;
+        ctx.beginPath();ctx.moveTo(dx0-60, floorY);
+        for(let px=-60;px<=260;px+=10){
+          ctx.lineTo(dx0+px, floorY-20-Math.abs(Math.sin(px*0.02+dn))*26);
+        }
+        ctx.lineTo(dx0+260, floorY);ctx.closePath();ctx.fill();
+      }
+      ctx.fillStyle='#6a4a28';
+      for(let dn=0;dn<5;dn++){
+        const dx0=((dn*320+160 - camX*0.5)%(cw+320)+cw+320)%(cw+320)-160;
+        ctx.beginPath();ctx.moveTo(dx0-60, floorY);
+        for(let px=-60;px<=220;px+=10){
+          ctx.lineTo(dx0+px, floorY-10-Math.abs(Math.sin(px*0.03+dn*1.7))*16);
+        }
+        ctx.lineTo(dx0+220, floorY);ctx.closePath();ctx.fill();
+      }
+
+      // === THE PYRAMID (world-space around entryX) ===
+      const pBaseY=floorY;
+      const pH=ch*0.64;
+      const pW=cw*0.9;
+      const pcxW=entryX; // center in world coords
+      const pcx=pcxW-camX;
+      // Back shadow pyramid (darker receding face)
+      ctx.fillStyle='#5a3e1e';
+      ctx.beginPath();ctx.moveTo(pcx-pW/2,pBaseY);ctx.lineTo(pcx,pBaseY-pH);ctx.lineTo(pcx+pW/2,pBaseY);ctx.closePath();ctx.fill();
+      // Lit front-left face
+      ctx.fillStyle='#d8a858';
+      ctx.beginPath();ctx.moveTo(pcx-pW/2,pBaseY);ctx.lineTo(pcx,pBaseY-pH);ctx.lineTo(pcx,pBaseY);ctx.closePath();ctx.fill();
+      // Stepped block tiers across the full pyramid
+      const tiers=14;
+      for(let ti=1;ti<tiers;ti++){
+        const ty=pBaseY-(pH*ti/tiers);
+        const hw=(pW/2)*(1-ti/tiers);
+        // Horizontal band
+        ctx.strokeStyle='rgba(60,36,14,0.55)';ctx.lineWidth=1.2;
+        ctx.beginPath();ctx.moveTo(pcx-hw,ty);ctx.lineTo(pcx+hw,ty);ctx.stroke();
+        // Vertical block seams
+        ctx.strokeStyle='rgba(60,36,14,0.25)';ctx.lineWidth=0.8;
+        const nb=Math.max(3,Math.floor(hw/18));
+        for(let bi=-nb;bi<=nb;bi++){
+          const bx=pcx+bi*(hw/nb);
+          const byTop=ty;
+          const byBot=pBaseY-(pH*(ti-1)/tiers);
+          ctx.beginPath();ctx.moveTo(bx,byTop);ctx.lineTo(bx,byBot);ctx.stroke();
+        }
+      }
+      // Capstone highlight
+      ctx.fillStyle='#ffd880';
+      ctx.beginPath();ctx.moveTo(pcx-8,pBaseY-pH+18);ctx.lineTo(pcx,pBaseY-pH);ctx.lineTo(pcx+8,pBaseY-pH+18);ctx.closePath();ctx.fill();
+
+      // === DOOR (open tomb entrance) ===
+      const doorW=90, doorH=150;
+      const doorLeft=pcx-doorW/2, doorTop=pBaseY-doorH;
+      // Dark doorway interior
+      ctx.fillStyle='#050302';
+      ctx.fillRect(doorLeft, doorTop, doorW, doorH);
+      // Inner glow (torchlight peeking out)
+      const dg=ctx.createRadialGradient(pcx, pBaseY-doorH*0.4, 2, pcx, pBaseY-doorH*0.4, doorW*1.1);
+      dg.addColorStop(0,'rgba(255,170,60,0.55)');
+      dg.addColorStop(0.6,'rgba(180,80,20,0.25)');
+      dg.addColorStop(1,'transparent');
+      ctx.fillStyle=dg;ctx.fillRect(doorLeft-20, doorTop-20, doorW+40, doorH+40);
+      // Carved stone frame (sandstone blocks)
+      ctx.fillStyle='#b88860';
+      ctx.fillRect(doorLeft-10, doorTop-10, 10, doorH+20); // left frame
+      ctx.fillRect(doorLeft+doorW, doorTop-10, 10, doorH+20); // right frame
+      ctx.fillRect(doorLeft-10, doorTop-10, doorW+20, 12); // lintel
+      // Block lines on frame
+      ctx.strokeStyle='rgba(60,36,14,0.55)';ctx.lineWidth=1;
+      for(let fy=doorTop-10;fy<pBaseY;fy+=18){
+        ctx.beginPath();ctx.moveTo(doorLeft-10,fy);ctx.lineTo(doorLeft,fy);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(doorLeft+doorW,fy);ctx.lineTo(doorLeft+doorW+10,fy);ctx.stroke();
+      }
+      // Hieroglyphs above the door
+      ctx.fillStyle='#6a4420';ctx.font='bold 16px monospace';ctx.textAlign='center';
+      ctx.fillText('\u2600 \u25B2 \u2736 \u25B2 \u2600', pcx, doorTop-18);
+
+      // === SAND FLOOR ===
+      ctx.fillStyle='#d0a868';
+      ctx.fillRect(0,floorY,cw,ch-floorY);
+      ctx.fillStyle='rgba(100,70,40,0.35)';
+      for(let ri=0;ri<30;ri++){
+        const rx=((ri*73 - camX*0.7)%cw+cw)%cw;
+        const ry=floorY+3+(ri%5)*3;
+        ctx.fillRect(rx,ry,2,1);
+      }
+      // Ripple lines
+      ctx.strokeStyle='rgba(140,100,60,0.25)';ctx.lineWidth=1;
+      for(let ri=0;ri<5;ri++){
+        const ry=floorY+6+ri*8;
+        ctx.beginPath();
+        for(let rx=0;rx<=cw;rx+=10){ctx.lineTo(rx,ry+Math.sin((rx+ri*30)*0.05)*1.5);}
+        ctx.stroke();
+      }
+      // Small rocks scattered
+      ctx.fillStyle='#8a6838';
+      for(let ri=0;ri<12;ri++){
+        const rwx=ri*280+40;
+        const rsx=rwx-camX;
+        if(rsx<-30||rsx>cw+30)continue;
+        if(Math.abs(rwx-entryX)<pW/2)continue;
+        ctx.beginPath();ctx.ellipse(rsx,floorY+4+(ri%3)*2,6+(ri%3)*2,2.5,0,0,Math.PI*2);ctx.fill();
+      }
+      // Bones / skeleton near the door (tomb vibes)
+      {
+        const bx=pcx+pW*0.32, by=floorY-2;
+        if(bx>-40&&bx<cw+40){
+          ctx.strokeStyle='#e0d6b8';ctx.lineWidth=2;ctx.lineCap='round';
+          ctx.beginPath();ctx.moveTo(bx-10,by);ctx.lineTo(bx+10,by-1);ctx.stroke();
+          ctx.fillStyle='#e8dcb8';
+          ctx.beginPath();ctx.arc(bx+14,by-4,4,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#000';
+          ctx.beginPath();ctx.arc(bx+13,by-5,0.9,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bx+15.5,by-5,0.9,0,Math.PI*2);ctx.fill();
+        }
+      }
+      // Heat shimmer motes
+      for(let pi=0;pi<18;pi++){
+        const dx=((pi*91+t*15)%(cw+60))-30;
+        const dy=floorY-((pi*47+t*11)%120);
+        ctx.fillStyle=`rgba(255,220,160,${0.25+Math.sin(t*3+pi)*0.15})`;
+        ctx.fillRect(dx,dy,1.2,1.2);
+      }
+
+      // === PLAYER ALIEN (desert) ===
+      const ax=a.x-camX, ay=pBaseY+a.y;
+      ctx.fillStyle='rgba(0,0,0,0.45)';
+      ctx.beginPath();ctx.ellipse(ax,pBaseY+2,14,3,0,0,Math.PI*2);ctx.fill();
+      drawAlienPreview(ax, ay, 1.0, getAlienSkin(), a.facing, a.walkT);
+
+      // Enter prompt when near door
+      if(Math.abs(a.x-entryX)<70){
+        const px=pcx, py=doorTop-48;
+        const pulse=0.75+Math.sin(t*4)*0.25;
+        ctx.fillStyle=`rgba(0,0,0,${0.6*pulse})`;
+        ctx.fillRect(px-82,py-14,164,22);
+        ctx.strokeStyle=`rgba(255,220,140,${pulse})`;ctx.lineWidth=1.5;
+        ctx.strokeRect(px-82,py-14,164,22);
+        ctx.fillStyle=`rgba(255,230,160,${pulse})`;
+        ctx.font='bold 12px monospace';ctx.textAlign='center';
+        ctx.fillText('[ENTER] ENTER THE TOMB', px, py+2);
+      }
+
+      // HUD
+      ctx.fillStyle=c.accent;ctx.font='bold 14px monospace';ctx.textAlign='left';
+      ctx.fillText(c.name,20,30);
+      ctx.fillStyle='rgba(240,220,180,0.6)';ctx.font='10px monospace';
+      ctx.fillText('(outside — desert)', 20,46);
+      ctx.fillStyle='rgba(0,200,0,0.5)';ctx.font='11px monospace';ctx.textAlign='center';
+      ctx.fillText('A/D: Walk   SPACE/W: Jump   ENTER: Enter tomb   ESC: Back',cw/2,ch-16);
+    } else { // === NORMAL CAVE RENDER (non-pyramid or pyramid-entered) ===
+    if(outside){
+      // === 1. OUTSIDE SCENE — water background (only when alien hasn't entered) ===
+      const waterG=ctx.createLinearGradient(0,0,0,floorY);
+      waterG.addColorStop(0,'#041020');waterG.addColorStop(1,'#0b2038');
+      ctx.fillStyle=waterG;ctx.fillRect(0,0,cw,floorY);
+      // Water caustic lines
+      for(let i=0;i<10;i++){
+        const wy=((i*41+t*20)%(floorY));
+        ctx.fillStyle=`rgba(120,180,220,${0.06+Math.sin(t+i)*0.03})`;
+        ctx.fillRect(0,wy,cw,1);
+      }
+      // Bubbles rising outside (only in the outside half of the screen)
+      for(let bi=0;bi<10;bi++){
+        const bwx=(bi*133)%Math.max(100,entryX-40);
+        const bsx=bwx-camX;
+        if(bsx<-10||bsx>cw)continue;
+        const by=floorY-((t*30+bi*50)%floorY);
+        ctx.fillStyle=`rgba(180,220,255,${0.4+Math.sin(t*2+bi)*0.2})`;
+        ctx.beginPath();ctx.arc(bsx,by,1.5+bi%2,0,Math.PI*2);ctx.fill();
+      }
+      // Distant seabed rocks outside
+      for(let ri=0;ri<5;ri++){
+        const rwx=ri*70-30;
+        const rsx=rwx-camX;
+        if(rsx<-40||rsx>entryX-camX-10)continue;
+        ctx.fillStyle='#1a1612';
+        ctx.beginPath();ctx.ellipse(rsx,floorY-3,12+ri*2,5,0,0,Math.PI*2);ctx.fill();
+      }
+    } else {
+      // === 1b. INSIDE SCENE — pitch black cave fills the screen ===
+      ctx.fillStyle='#000';ctx.fillRect(0,0,cw,ch);
+    }
+
+    // === 2. CAVE INTERIOR ===
+    const mx=entryX-camX; // screen-x of cave mouth center
+    ctx.save();
+    if(outside){
+      // Alien hasn't entered — cave interior must be hidden. Clip to mouth area and
+      // paint pitch black so the mouth reads as an unknown dark hole.
+      ctx.beginPath();
+      traceMouth();
+      for(let px=mx+mouthHalfW;px<=cw+80;px+=14){
+        const wx=px+camX;
+        const ny=ceilY+Math.abs(Math.sin(wx*0.04))*30+Math.sin(wx*0.15)*8;
+        ctx.lineTo(px,ny);
+      }
+      ctx.lineTo(cw+80, mouthBotY);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle='#000';ctx.fillRect(0,0,cw,ch);
+    } else {
+      // Alien is inside — paint cave interior covering the entire canvas (no mouth clip).
+      // Interior dark background
+      const bg=ctx.createLinearGradient(0,ceilY,0,floorY);
+      bg.addColorStop(0,'#0a0608');bg.addColorStop(0.5,'#1a1214');bg.addColorStop(1,'#060406');
+      ctx.fillStyle=bg;ctx.fillRect(0,0,cw,ch);
+      // Accent glow deeper inside
+      const deepGlowX=Math.max(mx+220,cw*0.55);
+      const gw=ctx.createRadialGradient(deepGlowX,ch*0.55,0,deepGlowX,ch*0.55,cw*0.9);
+      gw.addColorStop(0,c.glow+'33');gw.addColorStop(1,'transparent');
+      ctx.fillStyle=gw;ctx.fillRect(0,0,cw,ch);
+      // Cave ceiling rocks (interior only — already clipped)
+      ctx.fillStyle='#050303';
+      ctx.beginPath();ctx.moveTo(mx-mouthHalfW-2,0);
+      for(let px=Math.max(0,mx-mouthHalfW);px<=cw+20;px+=10){
+        const wx=px+camX;
+        const ny=ceilY+Math.abs(Math.sin(wx*0.04))*30+Math.sin(wx*0.15)*8;
+        ctx.lineTo(px,ny);
+      }
+      ctx.lineTo(cw+20,0);ctx.closePath();ctx.fill();
+      // Stalactites inside
+      for(let si=0;si<40;si++){
+        const swx=entryX+30+si*90+((si*17)%40);
+        if(swx<camX-40||swx>camX+cw+40)continue;
+        const sx=swx-camX;
+        const baseY=ceilY+Math.abs(Math.sin(swx*0.04))*30;
+        const len=14+((si*7)%4)*7;
+        ctx.fillStyle='#0a0604';
+        ctx.beginPath();ctx.moveTo(sx-4,baseY);ctx.lineTo(sx+4,baseY);ctx.lineTo(sx,baseY+len);ctx.closePath();ctx.fill();
+        // Drip
+        if((si+((t*2)|0))%5===0){
+          ctx.fillStyle=c.accent+'aa';
+          ctx.beginPath();ctx.arc(sx,baseY+len+3+Math.sin(t*2+si)*1,1.2,0,Math.PI*2);ctx.fill();
+        }
+      }
+      // Interior rocky floor
+      ctx.fillStyle='#0a0604';ctx.fillRect(0,floorY,cw,ch-floorY);
+      ctx.fillStyle='#1a0f08';
+      for(let bx=Math.floor(camX/50)*50;bx<camX+cw+50;bx+=50){
+        const sx=bx-camX;
+        const bh=4+((bx*13)%8);
+        ctx.beginPath();ctx.moveTo(sx,floorY);ctx.lineTo(sx+20,floorY-bh);ctx.lineTo(sx+40,floorY);ctx.closePath();ctx.fill();
+      }
+      // Dust motes drifting inside
+      for(let di=0;di<16;di++){
+        const dwx=entryX+80+((di*97+t*12)%(cs.worldW-entryX-100));
+        const dsx=dwx-camX;
+        if(dsx<-10||dsx>cw+10)continue;
+        const dy=ceilY+50+((di*43+t*6)%(floorY-ceilY-80));
+        ctx.fillStyle=`rgba(220,200,160,${0.2+Math.sin(t*1.5+di)*0.15})`;
+        ctx.fillRect(dsx,dy,1.2,1.2);
+      }
+    }
+    ctx.restore();
+
+    if(outside){
+      // === 3. SEABED FLOOR (sand outside the cave) ===
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0,floorY,cw,ch-floorY);
+      ctx.clip();
+      ctx.fillStyle='#2a2018';ctx.fillRect(0,floorY,cw,ch-floorY);
+      ctx.fillStyle='rgba(80,70,50,0.4)';
+      for(let i=0;i<60;i++){
+        const px=((i*37-camX*0.5)%cw+cw)%cw;
+        const py=floorY+2+(i%5)*3;
+        ctx.fillRect(px,py,2,1);
+      }
+      ctx.strokeStyle='rgba(120,100,70,0.25)';ctx.lineWidth=1;
+      for(let i=0;i<6;i++){
+        const ry=floorY+4+i*6;
+        ctx.beginPath();
+        for(let rx=0;rx<=cw;rx+=10){ctx.lineTo(rx,ry+Math.sin(rx*0.05+i)*1.5);}
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Re-paint cave interior floor where it pokes through the mouth
+      ctx.save();
+      ctx.beginPath();
+      traceMouth();
+      ctx.lineTo(cw+80, mouthTopY);
+      ctx.lineTo(cw+80, ch);
+      ctx.lineTo(mx-mouthHalfW, ch);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle='#000';ctx.fillRect(0,floorY,cw,ch-floorY);
+      ctx.restore();
+    } else {
+      // Inside: cave floor fills the whole bottom
+      ctx.fillStyle='#0a0604';ctx.fillRect(0,floorY,cw,ch-floorY);
+      ctx.fillStyle='#1a0f08';
+      for(let bx=Math.floor(camX/50)*50;bx<camX+cw+50;bx+=50){
+        const sx=bx-camX;
+        const bh=4+((bx*13)%8);
+        ctx.beginPath();ctx.moveTo(sx,floorY);ctx.lineTo(sx+20,floorY-bh);ctx.lineTo(sx+40,floorY);ctx.closePath();ctx.fill();
+      }
+    }
+
+    // === 4. CLIFF ROCK FACE — only render the cliff/mouth from OUTSIDE ===
+    // Once the alien walks into the mouth, the outside world (cliff, mouth decorations) is hidden.
+    if(outside && mx>-200 && mx<cw+200){
+      // --- Deep inner shadow — paint a black pool just inside the mouth so the opening
+      //     reads as a dark hole rather than a flat cutout ---
+      ctx.save();
+      ctx.beginPath();traceMouth();ctx.closePath();ctx.clip();
+      const innerShade=ctx.createRadialGradient(mx,mouthBotY-20,2,mx,mouthBotY-20,mouthHalfW*1.6);
+      innerShade.addColorStop(0,'rgba(0,0,0,0)');
+      innerShade.addColorStop(0.55,'rgba(0,0,0,0.55)');
+      innerShade.addColorStop(1,'rgba(0,0,0,0.92)');
+      ctx.fillStyle=innerShade;ctx.fillRect(mx-mouthHalfW-4,mouthTopY-10,mouthHalfW*2+8,mouthBotY-mouthTopY+20);
+      ctx.restore();
+
+      // --- Main stone mass with carved mouth (evenodd: outer shape minus mouth) ---
+      const cliffG=ctx.createLinearGradient(0,0,0,floorY);
+      cliffG.addColorStop(0,'#2e2822');
+      cliffG.addColorStop(0.5,'#3a3128');
+      cliffG.addColorStop(1,'#221b14');
+      ctx.fillStyle=cliffG;
+      ctx.beginPath();
+      // Outer silhouette: jagged mountain top, wraps down the right side to floor
+      ctx.moveTo(mx-mouthHalfW-100, mouthBotY);
+      // Left face going up
+      ctx.lineTo(mx-mouthHalfW-100, 40);
+      // Jagged mountain ridge across the top to the right
+      for(let px=mx-mouthHalfW-100;px<=cw+80;px+=14){
+        const wx=px+camX;
+        // Layered noise -> rugged natural ridge
+        const base=36;
+        const n1=Math.abs(Math.sin(wx*0.018))*26;
+        const n2=Math.sin(wx*0.07)*10;
+        const n3=Math.sin(wx*0.19)*4;
+        ctx.lineTo(px, base - n1 + n2 + n3);
+      }
+      ctx.lineTo(cw+80, mouthBotY);
+      ctx.closePath();
+      // Subtract mouth outline (reverse winding via evenodd)
+      ctx.moveTo(mouthPtsWorld[mouthPtsWorld.length-1][0]-camX, mouthPtsWorld[mouthPtsWorld.length-1][1]);
+      for(let i=mouthPtsWorld.length-2;i>=0;i--){
+        ctx.lineTo(mouthPtsWorld[i][0]-camX, mouthPtsWorld[i][1]);
+      }
+      ctx.closePath();
+      ctx.fill('evenodd');
+
+      // --- Darker recessed rock layer (second tone for depth/volume) ---
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(mx-mouthHalfW-100, mouthBotY);
+      ctx.lineTo(mx-mouthHalfW-100, 40);
+      for(let px=mx-mouthHalfW-100;px<=cw+80;px+=14){
+        const wx=px+camX;
+        const base=36;
+        const n1=Math.abs(Math.sin(wx*0.018))*26;
+        const n2=Math.sin(wx*0.07)*10;
+        const n3=Math.sin(wx*0.19)*4;
+        ctx.lineTo(px, base - n1 + n2 + n3);
+      }
+      ctx.lineTo(cw+80, mouthBotY);
+      ctx.closePath();
+      // Punch out mouth again
+      ctx.moveTo(mouthPtsWorld[mouthPtsWorld.length-1][0]-camX, mouthPtsWorld[mouthPtsWorld.length-1][1]);
+      for(let i=mouthPtsWorld.length-2;i>=0;i--){
+        ctx.lineTo(mouthPtsWorld[i][0]-camX, mouthPtsWorld[i][1]);
+      }
+      ctx.closePath();
+      ctx.clip('evenodd');
+
+      // Chunky rock tiles (varied brick-like shapes, tinted darker)
+      ctx.fillStyle='rgba(0,0,0,0.18)';
+      for(let ry=30;ry<floorY;ry+=22){
+        const rowSeed=(ry*0.13)|0;
+        for(let rx=Math.floor((camX-80)/36)*36;rx<camX+cw+80;rx+=36){
+          const sx=rx-camX + ((rowSeed+rx*0.01)%2)*18;
+          const wx=rx+camX;
+          if(sx<-40||sx>cw+40)continue;
+          // Skip if this tile position would be inside/near mouth
+          const dx=(sx-mx);
+          if(Math.abs(dx)<mouthHalfW+18 && ry>mouthTopY-20 && ry<mouthBotY+10)continue;
+          const w=16+((wx*7)%8);
+          const h=14+((ry*11)%6);
+          ctx.fillRect(sx,ry,w,h);
+        }
+      }
+      // Light edge highlights on top of chunks
+      ctx.fillStyle='rgba(255,240,200,0.06)';
+      for(let ry=30;ry<floorY;ry+=22){
+        const rowSeed=(ry*0.13)|0;
+        for(let rx=Math.floor((camX-80)/36)*36;rx<camX+cw+80;rx+=36){
+          const sx=rx-camX + ((rowSeed+rx*0.01)%2)*18;
+          if(sx<-40||sx>cw+40)continue;
+          const dx=(sx-mx);
+          if(Math.abs(dx)<mouthHalfW+18 && ry>mouthTopY-20 && ry<mouthBotY+10)continue;
+          const w=16+(((rx+camX)*7)%8);
+          ctx.fillRect(sx,ry,w,1);
+        }
+      }
+      // Scattered cracks/fissures
+      ctx.strokeStyle='rgba(0,0,0,0.45)';ctx.lineWidth=1;
+      for(let ci=0;ci<30;ci++){
+        const wx=Math.floor(camX/40)*40 + ci*60 + ((ci*37)%30);
+        const sx=wx-camX;
+        if(sx<-20||sx>cw+20)continue;
+        const cy=30+((ci*71)%(floorY-60));
+        // Avoid mouth region
+        if(Math.abs(sx-mx)<mouthHalfW+16 && cy>mouthTopY-10 && cy<mouthBotY)continue;
+        ctx.beginPath();
+        ctx.moveTo(sx,cy);
+        ctx.lineTo(sx+((ci%3)-1)*3, cy+8);
+        ctx.lineTo(sx+((ci%5)-2)*2, cy+16);
+        ctx.stroke();
+      }
+      // Moss patches (green — underwater)
+      ctx.fillStyle='rgba(60,120,55,0.55)';
+      for(let mi=0;mi<18;mi++){
+        const wx=camX-60+mi*90+((mi*13)%30);
+        const sx=wx-camX;
+        if(sx<-20||sx>cw+20)continue;
+        const my=32+((mi*31)%(floorY-80));
+        if(Math.abs(sx-mx)<mouthHalfW+10 && my>mouthTopY-10 && my<mouthBotY)continue;
+        ctx.beginPath();
+        ctx.ellipse(sx,my,6+(mi%3)*2,2.5,0,0,Math.PI*2);ctx.fill();
+      }
+      ctx.restore();
+
+      // --- Stalactite "teeth" hanging down from the top rim of the mouth ---
+      const teethN=9;
+      for(let ti=0;ti<teethN;ti++){
+        const tt=(ti+0.5)/teethN;
+        // Sample a point along the upper half of the mouth outline
+        const sampleIdx=Math.floor(tt*(mouthPtsWorld.length-1));
+        const p=mouthPtsWorld[sampleIdx];
+        // Only use points on the upper arc (above floor)
+        if(p[1] > mouthBotY-20) continue;
+        const sx=p[0]-camX, sy=p[1];
+        const baseW=5+((ti*7)%3);
+        const len=10+((ti*13)%4)*6;
+        // Tooth body (dark rock)
+        const tg=ctx.createLinearGradient(sx,sy,sx,sy+len);
+        tg.addColorStop(0,'#3a2e20');
+        tg.addColorStop(1,'#0a0604');
+        ctx.fillStyle=tg;
+        ctx.beginPath();
+        ctx.moveTo(sx-baseW,sy-1);
+        ctx.lineTo(sx+baseW,sy-1);
+        ctx.lineTo(sx+baseW*0.4,sy+len*0.6);
+        ctx.lineTo(sx,sy+len);
+        ctx.lineTo(sx-baseW*0.4,sy+len*0.6);
+        ctx.closePath();ctx.fill();
+        // Highlight edge
+        ctx.strokeStyle='rgba(180,160,120,0.35)';ctx.lineWidth=0.8;
+        ctx.beginPath();ctx.moveTo(sx-baseW+1,sy+1);ctx.lineTo(sx-baseW*0.4+1,sy+len*0.55);ctx.stroke();
+        // Drip
+        if((ti+((t*2)|0))%4===0){
+          ctx.fillStyle=c.accent+'99';
+          ctx.beginPath();ctx.arc(sx,sy+len+3+Math.sin(t*2+ti)*1,1.3,0,Math.PI*2);ctx.fill();
+        }
+      }
+
+      // --- Stalagmites rising from the floor at the mouth base (outside and inside) ---
+      const stgN=5;
+      for(let si=0;si<stgN;si++){
+        const sWorld=entryX - mouthHalfW - 12 + si*(mouthHalfW*2 + 24)/stgN;
+        const sx=sWorld-camX;
+        if(sx<-10||sx>cw+10)continue;
+        const h=12+((si*17)%4)*5;
+        const w=4+((si*7)%3);
+        const sg=ctx.createLinearGradient(sx,floorY-h,sx,floorY);
+        sg.addColorStop(0,'#0a0604');
+        sg.addColorStop(1,'#3a2e20');
+        ctx.fillStyle=sg;
+        ctx.beginPath();
+        ctx.moveTo(sx-w,floorY);
+        ctx.lineTo(sx,floorY-h);
+        ctx.lineTo(sx+w,floorY);
+        ctx.closePath();ctx.fill();
+      }
+
+      // --- Hanging kelp / seaweed across the mouth (underwater ambience) ---
+      ctx.strokeStyle='rgba(50,120,60,0.75)';ctx.lineWidth=2;ctx.lineCap='round';
+      for(let ki=0;ki<8;ki++){
+        const tt=(ki+0.5)/8;
+        const sampleIdx=Math.floor(tt*(mouthPtsWorld.length-1));
+        const p=mouthPtsWorld[sampleIdx];
+        if(p[1] > mouthBotY-30) continue;
+        const sx=p[0]-camX, sy=p[1]+2;
+        const len=18+((ki*13)%4)*5;
+        const sway=Math.sin(t*1.5+ki*0.7)*5;
+        ctx.beginPath();
+        ctx.moveTo(sx,sy);
+        ctx.quadraticCurveTo(sx+sway*0.5, sy+len*0.5, sx+sway, sy+len);
+        ctx.stroke();
+        // Leaf blobs
+        ctx.fillStyle='rgba(70,150,70,0.6)';
+        ctx.beginPath();ctx.ellipse(sx+sway*0.3,sy+len*0.45,1.5,3,0,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.ellipse(sx+sway*0.7,sy+len*0.75,1.5,3,0,0,Math.PI*2);ctx.fill();
+      }
+      ctx.lineCap='butt';
+
+      // --- Rim/edge outline — subtle darker line on the mouth boundary for definition ---
+      ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=2;
+      ctx.beginPath();traceMouth();ctx.stroke();
+
+      // --- Soft glow from deep inside spilling out (only from upper arc of mouth) ---
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      const rim=ctx.createRadialGradient(mx,(mouthTopY+mouthBotY)*0.6,mouthHalfW*0.3,mx,(mouthTopY+mouthBotY)*0.6,mouthHalfW*2.4);
+      rim.addColorStop(0,c.glow+'22');
+      rim.addColorStop(0.5,c.glow+'10');
+      rim.addColorStop(1,'transparent');
+      ctx.fillStyle=rim;
+      ctx.fillRect(mx-mouthHalfW*2.4,mouthTopY-60,mouthHalfW*4.8,mouthBotY-mouthTopY+100);
+      ctx.restore();
+
+      // --- Light god-rays from the surface passing through water, stopping at the cliff top ---
+      // Only draw OUTSIDE (to the left of the mouth) to hint at surface light
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.fillStyle='rgba(120,180,220,0.05)';
+      for(let gi=0;gi<4;gi++){
+        const gx=40+gi*80 + Math.sin(t*0.5+gi)*20 - camX%200;
+        if(gx>mx-mouthHalfW-20 || gx<-30)continue;
+        ctx.beginPath();
+        ctx.moveTo(gx-4,0);
+        ctx.lineTo(gx+4,0);
+        ctx.lineTo(gx+20,floorY);
+        ctx.lineTo(gx-20,floorY);
+        ctx.closePath();ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // === THEME FEATURES (along the tunnel) ===
+    ctx.save();
+    for(let wx=Math.max(entryX,camX-100); wx<Math.min(cs.worldW,camX+cw+100); wx+=80){
+      const sx=wx-camX;
+      const seed=(wx*0.07)|0;
+      if(c.type==='crystals'){
+        // Crystals on floor
+        const stOnCeil=(seed%3===0);
+        const cx2=sx+((seed*13)%40);
+        const cy2=stOnCeil?ceilY+Math.abs(Math.sin(wx*0.04))*30+5:floorY-2;
+        const dir=stOnCeil?1:-1;
+        const ch2=20+((seed*7)%4)*6;
+        const cw2=5+((seed*3)%3)*2;
+        const hue=200+((seed*17)%60);
+        const cg=ctx.createLinearGradient(cx2,cy2,cx2,cy2+dir*ch2);
+        cg.addColorStop(0,`hsla(${hue},90%,45%,0.9)`);
+        cg.addColorStop(1,`hsla(${hue},95%,75%,0.9)`);
+        ctx.fillStyle=cg;
+        ctx.beginPath();ctx.moveTo(cx2-cw2,cy2);ctx.lineTo(cx2,cy2+dir*ch2);ctx.lineTo(cx2+cw2,cy2);ctx.closePath();ctx.fill();
+        // Glow
+        const glow=ctx.createRadialGradient(cx2,cy2+dir*ch2/2,0,cx2,cy2+dir*ch2/2,30);
+        glow.addColorStop(0,`hsla(${hue},100%,70%,${0.3+Math.sin(t*2+seed)*0.1})`);
+        glow.addColorStop(1,'transparent');
+        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cx2,cy2+dir*ch2/2,30,0,Math.PI*2);ctx.fill();
+      } else if(c.type==='bones'){
+        // Bones strewn across the floor
+        const bx=sx+((seed*11)%30);
+        const by=floorY-3;
+        if(seed%4===0){
+          // Skull
+          ctx.fillStyle='#e8e2d0';
+          ctx.beginPath();ctx.arc(bx,by-8,8,0,Math.PI*2);ctx.fill();
+          ctx.fillRect(bx-5,by-3,10,6);
+          ctx.fillStyle='#000';
+          ctx.beginPath();ctx.arc(bx-3,by-9,1.8,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bx+3,by-9,1.8,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle=`rgba(255,60,60,${0.5+Math.sin(t*3+seed)*0.3})`;
+          ctx.beginPath();ctx.arc(bx-3,by-9,0.9,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bx+3,by-9,0.9,0,Math.PI*2);ctx.fill();
+          for(let ti=0;ti<4;ti++){ctx.fillStyle='#000';ctx.fillRect(bx-4+ti*2.5,by-1,1.5,3);}
+        } else {
+          // Rib/femur
+          ctx.strokeStyle='#ddd8c8';ctx.lineWidth=3;
+          ctx.lineCap='round';
+          const ang=((seed%3)-1)*0.4;
+          const bl=18;
+          ctx.beginPath();
+          ctx.moveTo(bx-Math.cos(ang)*bl/2,by-Math.sin(ang)*bl/2);
+          ctx.lineTo(bx+Math.cos(ang)*bl/2,by+Math.sin(ang)*bl/2);
+          ctx.stroke();
+          ctx.fillStyle='#e8e2d0';
+          ctx.beginPath();ctx.arc(bx-Math.cos(ang)*bl/2,by-Math.sin(ang)*bl/2,2.5,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bx+Math.cos(ang)*bl/2,by+Math.sin(ang)*bl/2,2.5,0,Math.PI*2);ctx.fill();
+        }
+        // Embers
+        if(seed%2===0){
+          const ex=bx+(((t*20+seed)%20)-10);
+          const ey=by-20-((t*15+seed*3)%40);
+          ctx.fillStyle=`rgba(255,${120+seed%80},60,${0.5+Math.sin(t*3+seed)*0.3})`;
+          ctx.fillRect(ex,ey,1.8,1.8);
+        }
+      } else if(c.type==='ruins'){
+        // Ancient columns at intervals
+        if(seed%2===0){
+          const cx2=sx+20;
+          const baseY=floorY-2;
+          const broken=(seed%4===0);
+          const colH=broken?60:90;
+          const topY=baseY-colH;
+          // Column
+          ctx.fillStyle='#b09060';
+          ctx.fillRect(cx2-7,topY,14,baseY-topY);
+          ctx.strokeStyle='#8a6838';ctx.lineWidth=1;
+          for(let fi=-1;fi<=1;fi++){
+            ctx.beginPath();ctx.moveTo(cx2+fi*3.5,topY);ctx.lineTo(cx2+fi*3.5,baseY);ctx.stroke();
+          }
+          // Base
+          ctx.fillStyle='#8a6838';ctx.fillRect(cx2-10,baseY-5,20,5);
+          if(!broken){
+            // Capital
+            ctx.fillStyle='#c8a070';ctx.fillRect(cx2-10,topY-5,20,5);
+            ctx.fillRect(cx2-11,topY-9,22,4);
+          } else {
+            // Jagged break
+            ctx.fillStyle='#6a4828';
+            ctx.beginPath();
+            ctx.moveTo(cx2-7,topY);
+            ctx.lineTo(cx2-4,topY-4);ctx.lineTo(cx2,topY+2);ctx.lineTo(cx2+4,topY-3);ctx.lineTo(cx2+7,topY);
+            ctx.closePath();ctx.fill();
+          }
+        } else {
+          // Gold coins
+          for(let gi=0;gi<4;gi++){
+            const gx=sx+gi*14+10;
+            const gy=floorY-3;
+            ctx.fillStyle='#ffd700';
+            ctx.beginPath();ctx.ellipse(gx,gy,3,1.5,0,0,Math.PI*2);ctx.fill();
+            ctx.fillStyle='#ffee88';
+            ctx.beginPath();ctx.ellipse(gx,gy-0.5,1.5,0.8,0,0,Math.PI*2);ctx.fill();
+          }
+        }
+        // Motes
+        const px=sx+((seed*31+t*8)%60);
+        const py=ceilY+40+((seed*17+t*6)%(floorY-ceilY-80));
+        ctx.fillStyle=`rgba(255,220,120,${0.4+Math.sin(t*2+seed)*0.3})`;
+        ctx.fillRect(px,py,1.5,1.5);
+      }
+    }
+    ctx.restore();
+
+    // === PLAYER ALIEN ===
+    const pax=a.x-camX, pay=floorY+a.y;
+    // Shadow on floor
+    ctx.fillStyle='rgba(0,0,0,0.4)';
+    ctx.beginPath();ctx.ellipse(pax,floorY+2,12,3,0,0,Math.PI*2);ctx.fill();
+    drawAlienPreview(pax, pay, 1.0, getAlienSkin(), a.facing, a.walkT);
+
+    // === VIGNETTE ===
+    const vg=ctx.createRadialGradient(cw/2,ch/2,Math.min(cw,ch)*0.3,cw/2,ch/2,Math.max(cw,ch)*0.7);
+    vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.6)');
+    ctx.fillStyle=vg;ctx.fillRect(0,0,cw,ch);
+
+    // === HUD ===
+    ctx.fillStyle=c.accent;ctx.font='bold 14px monospace';ctx.textAlign='left';
+    ctx.fillText(c.name,20,30);
+    ctx.fillStyle='rgba(200,220,200,0.5)';ctx.font='10px monospace';
+    ctx.fillText(outside?'(outside the cave)':'(inside)', 20,46);
+    ctx.fillStyle='rgba(0,200,0,0.5)';ctx.font='11px monospace';ctx.textAlign='center';
+    ctx.fillText('A/D: Walk   SPACE/W: Jump   ESC: Back',cw/2,ch-16);
+    } // close else { NORMAL CAVE RENDER }
   }
   else if(mainMenuMode==='debugPlanet'){
     // Planet picker for debug mode — grid of planet cards
@@ -11015,7 +14780,7 @@ function updateMainMenu(){
       else if(action==='new'){startGame(false);}
       else if(action==='skins'){mainMenuMode='skins';mainMenuSel=ALIEN_SKINS.findIndex(s=>s.id===selectedSkin)||0;}
       else if(action==='shipskins'){mainMenuMode='shipskins';mainMenuSel=SHIP_PAINTS.findIndex(s=>s.id===shipPaint.name)||0;}
-      else if(action==='debug'){mainMenuMode='debugPlanet';mainMenuSel=0;}
+      else if(action==='debug'){mainMenuMode='debug';mainMenuSel=0;}
       else if(action==='exit'){
         // Show start-screen overlay and stop the game
         const ss=document.getElementById('start-screen'); if(ss) ss.style.display='flex';
@@ -11071,14 +14836,105 @@ function updateMainMenu(){
     if(keys['d']||keys['arrowright']){mainMenuSel++;window._mmCool=8;}
     if(keys['w']||keys['arrowup']){mainMenuSel-=4;window._mmCool=8;}
     if(keys['s']||keys['arrowdown']){mainMenuSel+=4;window._mmCool=8;}
-    mainMenuSel=((mainMenuSel%SHIP_PAINTS.length)+SHIP_PAINTS.length)%SHIP_PAINTS.length;
+    mainMenuSel=((mainMenuSel%SHIP_TYPES.length)+SHIP_TYPES.length)%SHIP_TYPES.length;
     if(keys['enter']||keys[' ']){
       keys['enter']=false;keys[' ']=false;window._mmCool=15;
-      const sp=SHIP_PAINTS[mainMenuSel];
+      window._mmShipTypeIdx=mainMenuSel;
+      const typeId=SHIP_TYPES[mainMenuSel].id;
+      const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===typeId);
+      const curIdx=variants.findIndex(v=>v.id===shipPaint.name);
+      mainMenuSel=curIdx>=0?curIdx:0;
+      mainMenuMode='shipVariants';
+    }
+    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='shipVariants'){
+    const typeIdx=window._mmShipTypeIdx||0;
+    const typeId=SHIP_TYPES[typeIdx].id;
+    const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===typeId);
+    if(keys['a']||keys['arrowleft']){mainMenuSel--;window._mmCool=8;}
+    if(keys['d']||keys['arrowright']){mainMenuSel++;window._mmCool=8;}
+    if(keys['w']||keys['arrowup']){mainMenuSel-=4;window._mmCool=8;}
+    if(keys['s']||keys['arrowdown']){mainMenuSel+=4;window._mmCool=8;}
+    mainMenuSel=((mainMenuSel%variants.length)+variants.length)%variants.length;
+    if(keys['enter']||keys[' ']){
+      keys['enter']=false;keys[' ']=false;window._mmCool=15;
+      const sp=variants[mainMenuSel];
       shipPaint={color:sp.color,accent:sp.accent,trail:sp.trail,name:sp.id,ship:sp.ship||'saucer'};
       localStorage.setItem('sadabduction_shippaint',JSON.stringify(shipPaint));
     }
+    if(keys['escape']){keys['escape']=false;mainMenuMode='shipskins';mainMenuSel=window._mmShipTypeIdx||0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='debug'){
+    const n=2;
+    if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=8;}
+    if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=8;}
+    mainMenuSel=((mainMenuSel%n)+n)%n;
+    if(keys['enter']||keys[' ']){
+      keys['enter']=false;keys[' ']=false;window._mmCool=15;
+      if(mainMenuSel===0){mainMenuMode='debugPlanet';mainMenuSel=0;}
+      else {mainMenuMode='sandbox';mainMenuSel=0;}
+    }
     if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='sandbox'){
+    const n=1;
+    if(keys['w']||keys['arrowup']){mainMenuSel--;window._mmCool=8;}
+    if(keys['s']||keys['arrowdown']){mainMenuSel++;window._mmCool=8;}
+    mainMenuSel=((mainMenuSel%n)+n)%n;
+    if(keys['enter']||keys[' ']){
+      keys['enter']=false;keys[' ']=false;window._mmCool=15;
+      if(mainMenuSel===0){mainMenuMode='sandboxCaves';mainMenuSel=0;}
+    }
+    if(keys['escape']){keys['escape']=false;mainMenuMode='debug';mainMenuSel=1;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='sandboxCaves'){
+    const _NCAVES=4;
+    if(keys['a']||keys['arrowleft']){mainMenuSel--;window._mmCool=8;}
+    if(keys['d']||keys['arrowright']){mainMenuSel++;window._mmCool=8;}
+    mainMenuSel=((mainMenuSel%_NCAVES)+_NCAVES)%_NCAVES;
+    if(keys['enter']||keys[' ']){
+      keys['enter']=false;keys[' ']=false;window._mmCool=15;
+      caveWalkState={
+        caveIdx: mainMenuSel,
+        worldW: 3200,
+        entered: false,
+        alien: {x: 120, y: 0, vx: 0, vy: 0, facing: 1, walkT: 0, onGround: true},
+      };
+      mainMenuMode='sandboxCaveWalk';
+    }
+    if(keys['escape']){keys['escape']=false;mainMenuMode='sandbox';mainMenuSel=0;window._mmCool=10;}
+  }
+  else if(mainMenuMode==='sandboxCaveWalk'){
+    const cs=caveWalkState;
+    if(!cs){mainMenuMode='sandboxCaves';return true;}
+    const a=cs.alien;
+    const walkSpd=2.8, jumpV=-8.5, grav=0.45;
+    const left=keys['a']||keys['arrowleft'];
+    const right=keys['d']||keys['arrowright'];
+    if(left){a.vx=-walkSpd; a.facing=-1;}
+    else if(right){a.vx=walkSpd; a.facing=1;}
+    else a.vx*=0.75;
+    if((keys[' ']||keys['w']||keys['arrowup']) && a.onGround){a.vy=jumpV; a.onGround=false;}
+    a.vy+=grav;
+    a.x+=a.vx; a.y+=a.vy;
+    if(a.y>=0){a.y=0; a.vy=0; a.onGround=true;}
+    if(a.x<40)a.x=40;
+    if(a.x>cs.worldW-40)a.x=cs.worldW-40;
+    if(Math.abs(a.vx)>0.1)a.walkT+=Math.abs(a.vx)*0.15;
+    // Pyramid: ENTER to enter the tomb when near the door
+    {
+      const pyrCaves=['crystals','bones','ruins','pyramid'];
+      if(pyrCaves[cs.caveIdx]==='pyramid' && !cs.entered){
+        const doorX=280;
+        if(Math.abs(a.x-doorX)<70 && (keys['enter']||keys['e'])){
+          keys['enter']=false; keys['e']=false;
+          cs.entered=true; a.x=doorX+20; a.vx=0;
+          window._mmCool=10;
+        }
+      }
+    }
+    if(keys['escape']){keys['escape']=false;mainMenuMode='sandboxCaves';mainMenuSel=cs.caveIdx;caveWalkState=null;window._mmCool=10;}
   }
   else if(mainMenuMode==='debugPlanet'){
     const cols=4;
@@ -11093,7 +14949,7 @@ function updateMainMenu(){
       mainMenuMode='debugUnits';
       mainMenuSel=0;
     }
-    if(keys['escape']){keys['escape']=false;mainMenuMode='menu';mainMenuSel=0;window._mmCool=10;}
+    if(keys['escape']){keys['escape']=false;mainMenuMode='debug';mainMenuSel=0;window._mmCool=10;}
   }
   else if(mainMenuMode==='debugUnits'){
     const flat=debugSelectedPlanet?flattenUnitCatalog(getDebugUnitCatalog(debugSelectedPlanet)):[];
