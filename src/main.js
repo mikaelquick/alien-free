@@ -1227,6 +1227,13 @@ const earthHumanTypes = [
   { type:'jogger', label:'Marathon Mike', scale:1, bodyWidth:4, headR:7, mass:0.9, colors:['#f60','#0cf'], hat:'headband', extra:null },
   { type:'businesswoman', label:'CEO Karen', scale:1, bodyWidth:5, headR:8, mass:1, colors:['#336','#633'], hat:null, extra:'briefcase' },
 ];
+// --- RARE COSTUME HUMANS (Earth only, ~4% spawn chance in city/suburb biomes) ---
+const costumeHumanTypes = [
+  { type:'president', label:'The President',  scale:1,    bodyWidth:6, headR:8, mass:1.1, colors:['#141824'], hat:'president',  extra:'briefcase', costume:'president' },
+  { type:'ghost',     label:'Ghost Wizard',   scale:1,    bodyWidth:5, headR:8, mass:0.9, colors:['#f0f0f0'], hat:'ghosthat',   extra:null,        costume:'ghost'     },
+  { type:'clown',     label:'Giggles',        scale:1.05, bodyWidth:6, headR:9, mass:1.1, colors:['#e33'],    hat:'clownhair',  extra:null,        costume:'clown'     },
+  { type:'astronaut', label:'NASA Astronaut', scale:1,    bodyWidth:5, headR:8, mass:1.1, colors:['#e8ecf0'], hat:null,         extra:null,        costume:'astronaut' },
+];
 const suburbHumanTypes = [
   { type:'farmer', label:'Farmer Bob', scale:1.05, bodyWidth:6, headR:8, mass:1.2, colors:['#684','#574','#463'], hat:'straw', extra:null },
   { type:'farmer', label:'Farm Girl', scale:0.9, bodyWidth:5, headR:8, mass:0.9, colors:['#786','#675','#564'], hat:'straw', extra:null },
@@ -2473,6 +2480,63 @@ function drawBuildingUnit(b) {
     ctx.beginPath(); ctx.arc(sx+w*0.7,sy+h*0.6,3,0,Math.PI*2); ctx.fill();
     break;
   }
+  case 'starship': {
+    // SpaceX Starship silhouette: long silver cylinder with nose cone + fins at base
+    const cx=sx+w/2;
+    // Main cylinder (stainless)
+    const sg=ctx.createLinearGradient(sx,sy,sx+w,sy);
+    sg.addColorStop(0,'#7a828a');sg.addColorStop(0.3,'#d0d4d8');sg.addColorStop(0.6,'#e8ecf0');sg.addColorStop(1,'#8a9098');
+    ctx.fillStyle=sg;
+    ctx.fillRect(sx,sy+h*0.15,w,h*0.72);
+    // Nose cone (top)
+    ctx.fillStyle='#d0d4d8';
+    ctx.beginPath();
+    ctx.moveTo(sx,sy+h*0.15);
+    ctx.quadraticCurveTo(cx,sy-h*0.05,sx+w,sy+h*0.15);
+    ctx.closePath();ctx.fill();
+    // Nose highlight
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    ctx.beginPath();ctx.moveTo(sx+w*0.35,sy+h*0.14);ctx.quadraticCurveTo(cx-2,sy+h*0.02,cx-w*0.05,sy+h*0.12);ctx.closePath();ctx.fill();
+    // Forward flaps
+    ctx.fillStyle='#6a7278';
+    ctx.beginPath();ctx.moveTo(sx,sy+h*0.28);ctx.lineTo(sx-w*0.18,sy+h*0.42);ctx.lineTo(sx,sy+h*0.38);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(sx+w,sy+h*0.28);ctx.lineTo(sx+w+w*0.18,sy+h*0.42);ctx.lineTo(sx+w,sy+h*0.38);ctx.closePath();ctx.fill();
+    // Heat-shield tile band (dark dotted texture on one side)
+    ctx.fillStyle='rgba(30,30,35,0.35)';
+    for(let ti=0;ti<14;ti++){
+      const ty=sy+h*0.18+ti*(h*0.68/14);
+      ctx.fillRect(sx+2,ty,w*0.45,h*0.68/14-1);
+    }
+    // "STARSHIP" text vertical
+    ctx.fillStyle='rgba(40,40,50,0.65)';ctx.font='bold 8px monospace';ctx.textAlign='center';
+    ctx.save();ctx.translate(cx+w*0.12,sy+h*0.5);ctx.rotate(-Math.PI/2);
+    ctx.fillText('STARSHIP',0,0);ctx.restore();
+    // Aft flaps
+    ctx.fillStyle='#5a6268';
+    ctx.beginPath();ctx.moveTo(sx,sy+h*0.78);ctx.lineTo(sx-w*0.22,sy+h*0.92);ctx.lineTo(sx,sy+h*0.87);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(sx+w,sy+h*0.78);ctx.lineTo(sx+w+w*0.22,sy+h*0.92);ctx.lineTo(sx+w,sy+h*0.87);ctx.closePath();ctx.fill();
+    // Engine bells (3)
+    ctx.fillStyle='#1a1a22';
+    const eby=sy+h*0.88, ebh=h*0.12;
+    for(let ei=0;ei<3;ei++){
+      const ex=sx+w*0.2+ei*w*0.3;
+      ctx.beginPath();ctx.moveTo(ex,eby);ctx.lineTo(ex+w*0.2,eby);ctx.lineTo(ex+w*0.16,eby+ebh);ctx.lineTo(ex+w*0.04,eby+ebh);ctx.closePath();ctx.fill();
+    }
+    // Landing legs (4 stubs)
+    ctx.strokeStyle='#4a4a52';ctx.lineWidth=2;
+    for(let lg=0;lg<4;lg++){
+      const lx=sx+w*0.15+lg*w*0.23;
+      ctx.beginPath();ctx.moveTo(lx,sy+h*0.88);ctx.lineTo(lx-6+lg*4,sy+h);ctx.stroke();
+    }
+    // Panel outline
+    ctx.strokeStyle='rgba(40,40,50,0.4)';ctx.lineWidth=1;
+    ctx.strokeRect(sx,sy+h*0.15,w,h*0.72);
+    // Hull rings
+    for(let rr=1;rr<5;rr++){
+      ctx.beginPath();ctx.moveTo(sx,sy+h*0.15+rr*(h*0.72/5));ctx.lineTo(sx+w,sy+h*0.15+rr*(h*0.72/5));ctx.stroke();
+    }
+    break;
+  }
   case 'militaryBase': {
     // Bunker body
     ctx.fillStyle=b.color||'#4a5a4a'; ctx.fillRect(sx,sy+h*0.45,w*0.65,h*0.55);
@@ -2592,6 +2656,10 @@ function generateInhabitant(x) {
       template=earthHumanTypes[Math.floor(Math.random()*earthHumanTypes.length)];
       skinColor=`hsl(${Math.random()*30+15},${Math.random()*20+40}%,${Math.random()*20+55}%)`;
     }
+    // Rare costume spawn on Earth (president / ghost / clown / astronaut)
+    if(p.id==='earth' && !window.prehistoricEra && Math.random()<0.04){
+      template = costumeHumanTypes[Math.floor(Math.random()*costumeHumanTypes.length)];
+    }
   }
 
   const s = template.scale;
@@ -2606,6 +2674,8 @@ function generateInhabitant(x) {
     footRX:x+5*s, footRY:gy, footRVX:0, footRVY:0,
     type:template.type, label:template.label||p.alienLabel||'Creature', scale:s,
     bodyWidth:template.bodyWidth, hat:template.hat||null, extra:template.extra||null,
+    costume:template.costume||null,
+    isAstronaut:template.costume==='astronaut' || false,
     isAlien:isAlienCreature,
     float:template.float||false,
     floatPhase:Math.random()*Math.PI*2,
@@ -3239,6 +3309,29 @@ function loadPlanet(planet) {
         }
       }
     }
+    // Moon: spawn 1-4 astronauts + one SpaceX Starship
+    if(planet.id==='moon'){
+      const shipX = worldWidth*0.5;
+      // Starship building (tall narrow rocket)
+      const shW=80, shH=260;
+      const sBuilding={x:shipX-shW/2, w:shW, blocks:[], destroyed:false, totalBlocks:1, brokenBlocks:0};
+      const sBlock={x:shipX-shW/2, y:GROUND_LEVEL-shH, w:shW, h:shH, vx:0, vy:0,
+        color:'#d4d8dc', accentColor:'#6a7278', fixed:true, mass:12, building:sBuilding, row:0, col:0,
+        health:500, maxHealth:500, cracked:false, onFire:false, burnTimer:0, exploding:false, explodeTimer:0,
+        hasWindow:false, windowLit:false, isDoor:false,
+        shape:'building', buildingType:'starship', windowSeed:Math.random()*1000, isTree:false};
+      sBuilding.blocks.push(sBlock); blocks.push(sBlock); buildings.push(sBuilding);
+      // Astronauts (1-4) wandering near the ship
+      const nAstro = 1 + Math.floor(Math.random()*4);
+      for(let i=0;i<nAstro;i++){
+        const ax = shipX + (Math.random()*600-300);
+        generateInhabitant(ax);
+        const h = humans[humans.length-1];
+        if(h){ h.isAstronaut = true; h.color='#e8ecf0'; h.skinColor='#f0d8b8'; }
+      }
+      popCount = nAstro;
+      initialPopulation = nAstro;
+    }
     // Saturn: gas giant — inhabitants drift in the cloud decks, handled by normal generation.
     if(!(planet.id==='earth' && window.prehistoricEra)) generateCows();
     generateUnderwaterObjects();
@@ -3448,6 +3541,14 @@ function updateMilitary(){
     // Bullets/boulders use life, not alive
     if(m.type!=='bullet'&&m.type!=='boulder'&&!m.alive)return;
 
+    // Detect damage this frame: passive soldiers become hostile when attacked
+    if(m.type!=='bullet'&&m.type!=='boulder'){
+      if(m._prevHealth!=null && m.health < m._prevHealth){
+        if(m.passive) provokeMilitary(m.x, m.y);
+      }
+      m._prevHealth = m.health;
+    }
+
     // Stunned: frozen in place — skip AI this frame
     if(m.type!=='bullet'&&m.type!=='boulder'&&m.stunTimer>0){
       m.stunTimer--;
@@ -3461,7 +3562,7 @@ function updateMilitary(){
 
     if(m.type==='soldier'){
       // Passive soldiers (Earth bases) just patrol near base until provoked
-      if(m.passive&&wantedLevel===0){
+      if(m.passive){
         // Patrol near base
         if(m.baseX!=null){
           if(m.x<m.baseX-40)m.facing=1;
@@ -3469,8 +3570,6 @@ function updateMilitary(){
           m.x+=m.facing*0.4;
         }
       }else{
-        // Aggro: activate passive soldiers
-        if(m.passive&&wantedLevel>0)m.passive=false;
         // Walk toward target, stop at range
         if(d>200)m.x+=m.facing*1.2;
         else if(d<120)m.x-=m.facing*0.8;
@@ -3628,25 +3727,18 @@ function getDifficultyLevel(){
   return prog?prog.missionIndex:0;
 }
 function updateWantedLevel(){
-  const oldLevel=wantedLevel;
-  const diff=getDifficultyLevel();
-  const scale=1-diff*0.15; // thresholds shrink 15% per mission
-  if(planetTerror<1*scale)wantedLevel=0;
-  else if(planetTerror<2.5*scale)wantedLevel=1;
-  else if(planetTerror<4*scale)wantedLevel=2;
-  else if(planetTerror<6*scale)wantedLevel=3;
-  else if(planetTerror<8*scale)wantedLevel=4;
-  else wantedLevel=5;
-
-  if(wantedLevel>oldLevel&&wantedLevel>=2){
-    alarmPulse=60;
-    showMessage(tr('msg.wantedLevel').replace('{n}',wantedLevel));
-  }
+  // Wanted-level system removed: military is now passive at Earth bases
+  // and only becomes hostile when the player provokes them (see provokeMilitary()).
   if(alarmPulse>0)alarmPulse--;
+}
 
-  // Spawn military — rate increases with difficulty
-  const spawnChance=0.97-diff*0.01-genocideCount*0.02; // 3% base, scales with difficulty + genocide
-  if(wantedLevel>0&&Math.random()>spawnChance)spawnMilitary();
+// Called when the player attacks military — flips nearby units hostile.
+function provokeMilitary(ax, ay){
+  wantedLevel=1; // keeps existing aggressive AI paths active
+  military.forEach(m=>{
+    if(m.type==='bullet'||m.type==='boulder'||!m.alive) return;
+    if(ax==null || dist(m.x,m.y,ax,ay) < 600) m.passive=false;
+  });
 }
 
 // --- MISSION FUNCTIONS ---
@@ -3847,7 +3939,6 @@ function updateStarmap(){
 function drawStarmap(){
   const mi=mothershipInterior,sm=mi.starmap,cw=canvas.width,ch=canvas.height,t=frameT;
   ctx.fillStyle='rgba(120,180,255,0.3)';ctx.font='10px monospace';ctx.textAlign='left';ctx.fillText('\u25C0 ESC Back',15,25);
-  ctx.fillStyle='rgba(120,180,255,0.7)';ctx.font='18px monospace';ctx.textAlign='center';ctx.fillText('STAR MAP',cw/2,28);
   // Star field
   for(let i=0;i<80;i++){const sx=(i*137.5+t*3)%cw,sy=(i*83.1+40)%ch;
     ctx.fillStyle=`rgba(180,200,255,${0.2+Math.sin(t*2+i)*0.15})`;ctx.fillRect(sx,sy,1,1);}
@@ -9756,19 +9847,28 @@ function updateSpace(){
       const whDist=dist(ship.x,ship.y,wh.spaceX,wh.spaceY);
       if(whDist<wh.radius*0.5){
         window.prehistoricEra=!window.prehistoricEra; // toggle: through once = past, through again = present
-        // Eject the ship opposite the wormhole's pull so you don't re-enter instantly
-        const ejAng=Math.atan2(ship.y-wh.spaceY,ship.x-wh.spaceX);
-        ship.x=wh.spaceX+Math.cos(ejAng)*(wh.radius*2+60);
-        ship.y=wh.spaceY+Math.sin(ejAng)*(wh.radius*2+60);
-        ship.vx=Math.cos(ejAng)*4; ship.vy=Math.sin(ejAng)*4;
+        // Drop the ship near Earth's current orbital position — the wormhole leads to Earth
+        // (past or present). This also prevents the player getting stranded when Earth
+        // has orbited far from its starting position.
+        const e=planets.find(p=>p.id==='earth');
+        if(e){
+          const dropAng=Math.random()*Math.PI*2;
+          ship.x=e.spaceX+Math.cos(dropAng)*(e.radius+300);
+          ship.y=e.spaceY+Math.sin(dropAng)*(e.radius+300);
+          ship.vx=Math.cos(dropAng)*2; ship.vy=Math.sin(dropAng)*2;
+          // Invalidate saved Earth state — it must regenerate for the new era
+          e.savedState=null;
+        } else {
+          const ejAng=Math.atan2(ship.y-wh.spaceY,ship.x-wh.spaceX);
+          ship.x=wh.spaceX+Math.cos(ejAng)*(wh.radius*2+60);
+          ship.y=wh.spaceY+Math.sin(ejAng)*(wh.radius*2+60);
+          ship.vx=Math.cos(ejAng)*4; ship.vy=Math.sin(ejAng)*4;
+        }
         if(window.prehistoricEra){
           showMessage("68,000,000 YEARS AGO — THE CRETACEOUS. Earth belongs to the dinosaurs now...");
         } else {
           showMessage("Back to the present day. Earth is as you left it.");
         }
-        // Invalidate saved Earth state — it must regenerate for the new era
-        const e=planets.find(p=>p.id==='earth');
-        if(e) e.savedState=null;
       }
     }
   }
@@ -12218,20 +12318,10 @@ function drawPlanet(){
     ctx.globalAlpha=1;
   }
 
-  // --- WANTED LEVEL STARS ---
-  if(wantedLevel>0){
-    const sx=canvas.width-20,sy=50;
-    ctx.textAlign='right';
-    for(let i=0;i<5;i++){
-      ctx.fillStyle=i<wantedLevel?(wantedLevel>=4?'#f44':'#fa0'):'rgba(255,255,255,0.15)';
-      ctx.font='18px monospace';
-      ctx.fillText('\u2605',sx-i*20,sy);
-    }
-    // Alarm pulse overlay
-    if(alarmPulse>0){
-      ctx.fillStyle=`rgba(255,0,0,${alarmPulse/60*0.08*Math.abs(Math.sin(frameNow*0.01))})`;
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-    }
+  // Wanted-level stars HUD removed — military only goes hostile when provoked
+  if(alarmPulse>0){
+    ctx.fillStyle=`rgba(255,0,0,${alarmPulse/60*0.08*Math.abs(Math.sin(frameNow*0.01))})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
   }
 
   // --- POPULATION COUNTER ---
@@ -12286,8 +12376,6 @@ function drawPlanet(){
       ctx.font='8px monospace';
       ctx.fillText(_lo[i].label,sx+sw/2+3,sy+22);
     }
-    ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';
-    ctx.fillText('Q: FIRE   1-5: SELECT   TAB: NEXT',canvas.width/2,hy+38);
   }
 
   // --- ALIEN HEALTH BAR (on foot) ---
@@ -13163,6 +13251,180 @@ function renderHuman(h){
       }
     });
   }
+  // --- COSTUME OVERLAYS (president / ghost / clown) ---
+  if(h.costume && !h.isDino){
+    const cs=h.scale||1, cw=h.bodyWidth||5;
+    if(h.costume==='president'){
+      // Dark suit lapels (V-shape), white shirt, red tie
+      ctx.fillStyle='#0a0e18';
+      ctx.beginPath();
+      ctx.moveTo(h.bodyX-cw-1, h.bodyY-3*cs);
+      ctx.lineTo(h.bodyX-1, h.bodyY+2*cs);
+      ctx.lineTo(h.bodyX-cw*0.3, h.bodyY+6*cs);
+      ctx.lineTo(h.bodyX-cw-1, h.bodyY+6*cs);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(h.bodyX+cw+1, h.bodyY-3*cs);
+      ctx.lineTo(h.bodyX+1, h.bodyY+2*cs);
+      ctx.lineTo(h.bodyX+cw*0.3, h.bodyY+6*cs);
+      ctx.lineTo(h.bodyX+cw+1, h.bodyY+6*cs);
+      ctx.closePath(); ctx.fill();
+      // White collar shirt
+      ctx.fillStyle='#f5f5f5';
+      ctx.beginPath();
+      ctx.moveTo(h.bodyX-1.5, h.bodyY-2*cs);
+      ctx.lineTo(h.bodyX+1.5, h.bodyY-2*cs);
+      ctx.lineTo(h.bodyX+2, h.bodyY+5*cs);
+      ctx.lineTo(h.bodyX-2, h.bodyY+5*cs);
+      ctx.closePath(); ctx.fill();
+      // Red tie
+      ctx.fillStyle='#c01828';
+      ctx.beginPath();
+      ctx.moveTo(h.bodyX-1, h.bodyY-1*cs);
+      ctx.lineTo(h.bodyX+1, h.bodyY-1*cs);
+      ctx.lineTo(h.bodyX+1.5, h.bodyY+4*cs);
+      ctx.lineTo(h.bodyX, h.bodyY+5.5*cs);
+      ctx.lineTo(h.bodyX-1.5, h.bodyY+4*cs);
+      ctx.closePath(); ctx.fill();
+      // Flag pin on lapel
+      ctx.fillStyle='#c33'; ctx.fillRect(h.bodyX-cw*0.7, h.bodyY, 1.2, 1);
+      ctx.fillStyle='#33c'; ctx.fillRect(h.bodyX-cw*0.7, h.bodyY+1, 1.2, 0.6);
+    } else if(h.costume==='clown'){
+      // Polka-dot suit — colored circles all over the body
+      const dots=[['#fc0',-cw*0.4,0],['#0c4',cw*0.5,1*cs],['#08f',-cw*0.2,3*cs],['#f4c',cw*0.3,4.5*cs],['#fc0',-cw*0.5,5.5*cs]];
+      dots.forEach(([dc,dx,dy])=>{ctx.fillStyle=dc;ctx.beginPath();ctx.arc(h.bodyX+dx,h.bodyY+dy,1.4,0,Math.PI*2);ctx.fill();});
+      // Big white ruffled collar
+      ctx.fillStyle='#fff';
+      for(let ri=0;ri<6;ri++){
+        const ra=(ri/6)*Math.PI - Math.PI*0.5;
+        ctx.beginPath();ctx.arc(h.bodyX+Math.cos(ra)*4, h.bodyY-2*cs+Math.sin(ra)*1.5, 2, 0, Math.PI*2);ctx.fill();
+      }
+      // Huge red shoes
+      ctx.fillStyle='#c00';
+      ctx.beginPath();ctx.ellipse(h.footLX-1, h.footLY, 4, 1.8, 0, 0, Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(h.footRX+1, h.footRY, 4, 1.8, 0, 0, Math.PI*2);ctx.fill();
+      // Red nose
+      ctx.fillStyle='#f22';
+      ctx.beginPath();ctx.arc(h.headX, h.headY+1, 1.8, 0, Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.beginPath();ctx.arc(h.headX-0.5, h.headY+0.5, 0.6, 0, Math.PI*2);ctx.fill();
+      // White face paint around mouth
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.ellipse(h.headX, h.headY+3, 3, 1.5, 0, 0, Math.PI*2);ctx.fill();
+      // Painted smile
+      ctx.strokeStyle='#c00';ctx.lineWidth=0.8;
+      ctx.beginPath();ctx.arc(h.headX, h.headY+2.5, 2, 0.2, Math.PI-0.2);ctx.stroke();
+    } else if(h.costume==='ghost'){
+      // Drape a white sheet over the entire figure. Sheet hangs from head down to feet.
+      const sheetTop=h.headY-h.headR-1;
+      const sheetBot=Math.max(h.footLY, h.footRY);
+      const sheetW=h.headR+6;
+      const flutter=Math.sin((h.walkTimer||0)*1.5)*1.2;
+      ctx.fillStyle='rgba(245,245,250,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(h.headX-sheetW*0.5, sheetTop);
+      ctx.quadraticCurveTo(h.headX-sheetW, h.bodyY, h.headX-sheetW-1+flutter, sheetBot);
+      // Wavy bottom hem
+      for(let wi=-3;wi<=3;wi++){
+        const wx=h.headX + wi*(sheetW/3);
+        const wy=sheetBot + ((wi%2===0)?1.5:-0.5);
+        ctx.lineTo(wx, wy);
+      }
+      ctx.quadraticCurveTo(h.headX+sheetW, h.bodyY, h.headX+sheetW*0.5, sheetTop);
+      ctx.closePath(); ctx.fill();
+      // Faint folds
+      ctx.strokeStyle='rgba(200,200,210,0.4)';ctx.lineWidth=0.6;
+      ctx.beginPath();ctx.moveTo(h.headX-sheetW*0.4, sheetTop+4);ctx.lineTo(h.headX-sheetW*0.7, sheetBot-2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(h.headX+sheetW*0.4, sheetTop+4);ctx.lineTo(h.headX+sheetW*0.7, sheetBot-2);ctx.stroke();
+      // Eye holes
+      ctx.fillStyle='#000';
+      ctx.beginPath();ctx.ellipse(h.headX-h.headR*0.45, h.headY-1, 1.6, 2.2, 0, 0, Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(h.headX+h.headR*0.45, h.headY-1, 1.6, 2.2, 0, 0, Math.PI*2);ctx.fill();
+      // Mouth hole
+      ctx.beginPath();ctx.ellipse(h.headX, h.headY+h.headR*0.5, 1.4, 2, 0, 0, Math.PI*2);ctx.fill();
+      // Pointy wizard hat on top (purple with star)
+      const htip=sheetTop-14, hbaseY=sheetTop+1, hbaseW=h.headR+2;
+      ctx.fillStyle='#4a2a70';
+      ctx.beginPath();
+      ctx.moveTo(h.headX, htip);
+      ctx.lineTo(h.headX-hbaseW, hbaseY);
+      ctx.lineTo(h.headX+hbaseW, hbaseY);
+      ctx.closePath(); ctx.fill();
+      // Brim
+      ctx.fillStyle='#2a1840';
+      ctx.beginPath();ctx.ellipse(h.headX, hbaseY, hbaseW+1.5, 1.5, 0, 0, Math.PI*2);ctx.fill();
+      // Gold star
+      ctx.fillStyle='#fc0';
+      const starY=htip+6;
+      ctx.beginPath();
+      for(let si=0;si<5;si++){
+        const sa=si*(Math.PI*2/5)-Math.PI/2;
+        ctx.lineTo(h.headX+Math.cos(sa)*1.6, starY+Math.sin(sa)*1.6);
+        const sa2=sa+Math.PI/5;
+        ctx.lineTo(h.headX+Math.cos(sa2)*0.7, starY+Math.sin(sa2)*0.7);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  // Hair/hat specific to costumes drawn after astronaut block too
+  if(h.hat==='president'){
+    // Slicked-back dark hair with highlight
+    ctx.fillStyle='#2a2418';
+    ctx.beginPath();ctx.ellipse(h.headX, h.headY-h.headR*0.7, h.headR*0.95, h.headR*0.55, 0, Math.PI, 0);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.fillRect(h.headX-h.headR*0.4, h.headY-h.headR*0.9, h.headR*0.2, 1);
+  }
+  if(h.hat==='clownhair'){
+    // Wild rainbow puff hair sticking out on sides + bald cap top
+    const clr=['#f40','#fc0','#0d4','#06f','#f0c'];
+    for(let ci=0;ci<5;ci++){
+      const ang=-Math.PI + ci*(Math.PI/4);
+      const cx2=h.headX+Math.cos(ang)*(h.headR+1);
+      const cy2=h.headY+Math.sin(ang)*(h.headR+1);
+      ctx.fillStyle=clr[ci%clr.length];
+      ctx.beginPath();ctx.arc(cx2, cy2, 2.2, 0, Math.PI*2);ctx.fill();
+    }
+    // Little tuft on top
+    ctx.fillStyle='#f40';
+    ctx.beginPath();ctx.arc(h.headX, h.headY-h.headR-1, 1.8, 0, Math.PI*2);ctx.fill();
+  }
+  // --- ASTRONAUT SPACESUIT OVERLAY (Moon) ---
+  if(h.isAstronaut && !h.isDino){
+    const s2=h.scale||1;
+    // Suit torso (white with shadow)
+    ctx.fillStyle='rgba(240,244,248,0.85)';
+    ctx.fillRect(h.bodyX-(h.bodyWidth||5)-1, h.bodyY-3*s2, (h.bodyWidth||5)*2+2, 10*s2);
+    // Chest panel (control module)
+    ctx.fillStyle='#c0c4c8';ctx.fillRect(h.bodyX-3, h.bodyY+1*s2, 6, 4);
+    ctx.fillStyle='#ff0';ctx.fillRect(h.bodyX-2, h.bodyY+2*s2, 1.5, 1);
+    ctx.fillStyle='#0f0';ctx.fillRect(h.bodyX+0.5, h.bodyY+2*s2, 1.5, 1);
+    // Life-support backpack (behind)
+    ctx.fillStyle='#8a8f95';
+    ctx.fillRect(h.bodyX-6, h.bodyY-3*s2, 4, 9*s2);
+    ctx.strokeStyle='#5a5f65';ctx.lineWidth=0.6;ctx.strokeRect(h.bodyX-6, h.bodyY-3*s2, 4, 9*s2);
+    // Boots
+    ctx.fillStyle='#d8dce0';
+    ctx.fillRect(h.footLX-3, h.footLY-2, 6, 3);
+    ctx.fillRect(h.footRX-3, h.footRY-2, 6, 3);
+    // Gloves
+    ctx.fillStyle='#e8ecf0';
+    ctx.beginPath();ctx.arc(h.armLX, h.armLY+(h.beingBeamed?-10*s2:8*s2), 2, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(h.armRX, h.armRY+(h.beingBeamed?-10*s2:8*s2), 2, 0, Math.PI*2);ctx.fill();
+    // Fishbowl helmet
+    ctx.fillStyle='rgba(180,210,240,0.25)';
+    ctx.beginPath();ctx.arc(h.headX, h.headY, h.headR+2, 0, Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(220,230,240,0.9)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(h.headX, h.headY, h.headR+2, 0, Math.PI*2);ctx.stroke();
+    // Visor shine
+    ctx.fillStyle='rgba(255,255,255,0.35)';
+    ctx.beginPath();ctx.ellipse(h.headX-h.headR*0.4, h.headY-h.headR*0.5, h.headR*0.35, h.headR*0.6, -0.3, 0, Math.PI*2);ctx.fill();
+    // Gold visor tint (bottom half)
+    ctx.fillStyle='rgba(255,200,80,0.15)';
+    ctx.beginPath();ctx.arc(h.headX, h.headY, h.headR+1, 0, Math.PI);ctx.fill();
+    // Flag patch on shoulder
+    ctx.fillStyle='#c0c0c8';ctx.fillRect(h.bodyX+2, h.bodyY-2*s2, 3, 2);
+    ctx.fillStyle='#c44';ctx.fillRect(h.bodyX+2, h.bodyY-2*s2, 1.5, 2);
+  }
   if(flipDir)ctx.restore();
   if(_floatApplied) ctx.restore();
 }
@@ -13567,7 +13829,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Back arm (skip for limbless body types)
-  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom'){
+  if(bt!=='larva' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug'){
     ctx.strokeStyle=_sb2(0x8a);ctx.lineWidth=1.8*s;ctx.lineCap='round';ctx.lineJoin='round';
     ctx.beginPath();ctx.moveTo(ax-f*4*s,ay-16*s);ctx.quadraticCurveTo(ax-f*9*s,ay-10*s,ax-f*11*s,ay-6*s);ctx.stroke();
     ctx.lineWidth=0.8*s;
@@ -13647,6 +13909,69 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle='#2a2030';
     ctx.beginPath();ctx.ellipse(ax-3*s+lo*0.7,ay,3.5*s,1.6*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(ax+3*s-lo*0.7,ay,3.5*s,1.6*s,0,0,Math.PI*2);ctx.fill();
+  } else if(bt==='spider'){
+    // 8 legs arching outward (4 per side) with staggered sway — spidery crawl
+    ctx.strokeStyle=_sb2(0x88);ctx.lineWidth=1.3*s;ctx.lineCap='round';
+    for(let lg=0;lg<4;lg++){
+      const sway=Math.sin(t2*4+lg*0.7)*1.8*s;
+      const swayR=Math.sin(t2*4+lg*0.7+Math.PI)*1.8*s;
+      const baseY=ay-(12-lg*1.2)*s;
+      const reach=(10+lg*1.5)*s;
+      const liftY=(6-lg*0.5)*s;
+      // left leg
+      ctx.beginPath();
+      ctx.moveTo(ax-2*s,baseY);
+      ctx.quadraticCurveTo(ax-reach,baseY-liftY+sway,ax-reach-2*s,ay+sway*0.4);
+      ctx.stroke();
+      // right leg
+      ctx.beginPath();
+      ctx.moveTo(ax+2*s,baseY);
+      ctx.quadraticCurveTo(ax+reach,baseY-liftY+swayR,ax+reach+2*s,ay+swayR*0.4);
+      ctx.stroke();
+    }
+    // Tiny claw tips
+    ctx.strokeStyle='#111';ctx.lineWidth=0.6*s;
+    for(let lg=0;lg<4;lg++){
+      const sway=Math.sin(t2*4+lg*0.7)*1.8*s;
+      const swayR=Math.sin(t2*4+lg*0.7+Math.PI)*1.8*s;
+      const reach=(10+lg*1.5)*s;
+      ctx.beginPath();ctx.moveTo(ax-reach-2*s,ay+sway*0.4);ctx.lineTo(ax-reach-3*s,ay+sway*0.4+1*s);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ax+reach+2*s,ay+swayR*0.4);ctx.lineTo(ax+reach+3*s,ay+swayR*0.4+1*s);ctx.stroke();
+    }
+  } else if(bt==='slug'){
+    // Inching peristaltic locomotion: muscular wave travels tail-to-head.
+    // walkPhase drives a traveling sine; idle falls back to breathing pulse.
+    const wp=walkPhase||0;
+    const wave=(u)=>Math.sin(wp*2 - u*2.4)*1.6*s;    // traveling wave along body
+    const idle=Math.sin(t2*2)*0.6*s;                  // slow idle pulse
+    // Sample the body at 4 points (tail → head) to build a rippling silhouette.
+    const p0x=ax-f*22*s, p0y=ay+1*s+wave(0)+idle;
+    const p1x=ax-f*14*s, p1y=ay-2*s+wave(0.4)+idle;
+    const p2x=ax-f*6*s,  p2y=ay-4*s+wave(0.8)+idle*0.5;
+    const p3x=ax+f*2*s,  p3y=ay-6*s+wave(1.2);
+    ctx.fillStyle=_sb2(0x88);
+    ctx.beginPath();
+    ctx.moveTo(p3x,p3y);
+    ctx.quadraticCurveTo(p2x,p2y-1*s,p1x,p1y);
+    ctx.quadraticCurveTo(ax-f*19*s,p1y-1*s,p0x,p0y);
+    // tail tip
+    ctx.quadraticCurveTo(ax-f*25*s,ay+2*s,ax-f*22*s,ay+3*s-wave(0)*0.3);
+    // underside (belly sprawls flat)
+    ctx.quadraticCurveTo(ax-f*14*s,ay+2.5*s+wave(0.4)*0.3,p3x,ay-3*s);
+    ctx.closePath();ctx.fill();
+    // Segment creases — highlight the peristaltic wave
+    ctx.strokeStyle=`rgba(0,0,0,0.18)`;ctx.lineWidth=0.8*s;
+    for(let seg=0;seg<4;seg++){
+      const u=0.2+seg*0.25;
+      const sx0=ax-f*(22-u*24)*s;
+      const sy0=ay-4*s+wave(u)+2*s;
+      ctx.beginPath();ctx.moveTo(sx0,sy0-2*s);ctx.lineTo(sx0+f*1*s,sy0+2.5*s);ctx.stroke();
+    }
+    // Slime trail glisten — drifts with the wave
+    ctx.fillStyle='rgba(255,255,255,0.22)';
+    ctx.beginPath();ctx.ellipse(ax-f*10*s,ay-1*s+wave(0.6)*0.4,6*s,0.8*s,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.beginPath();ctx.ellipse(ax-f*18*s,ay-0.5*s+wave(0.2)*0.4,4*s,0.6*s,0,0,Math.PI*2);ctx.fill();
   } else if(bt==='reptile'){
     // Crouched clawed legs + tail
     ctx.strokeStyle=_sa2(0x99);ctx.lineWidth=2.2*s;ctx.lineCap='round';
@@ -13679,8 +14004,9 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.beginPath();ctx.ellipse(ax+3*s-lo,ay,3*s,1.5*s,0,0,Math.PI*2);ctx.fill();
   }
 
-  // Jetpack (skip for limbless/floating types)
-  if(bt!=='larva' && bt!=='energy' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom'){
+  // Jetpack (skip for limbless/floating types + costume outfits that hide it — ghost sheet covers, astronaut/hero have own backpack/cape, clown goes jetpack-less)
+  const _hideJetpack = (bt==='humanoid' && skin.outfit && skin.outfit!=='tshirt' && skin.outfit!=='suit');
+  if(bt!=='larva' && bt!=='energy' && bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='spider' && bt!=='slug' && !_hideJetpack){
     ctx.fillStyle='#4a4a4a';ctx.fillRect(ax-f*4*s-3*s,ay-19*s,7*s,9*s);
     ctx.fillStyle='#5a5a5a';ctx.fillRect(ax-f*4*s-2*s,ay-18*s,5*s,2*s);
     ctx.fillStyle='#3a3a3a';ctx.fillRect(ax-f*4*s-1*s,ay-11*s,3*s,2*s);
@@ -13717,19 +14043,132 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.beginPath();ctx.arc(bxC,byC,0.8*s,0,Math.PI*2);ctx.fill();
     }
   } else if(bt==='humanoid'){
-    // Taller humanoid torso (narrower waist, broader shoulders)
-    const tg2=ctx.createLinearGradient(ax-6*s,ay-22*s,ax+6*s,ay-6*s);
-    tg2.addColorStop(0,_sb2(0xb0));tg2.addColorStop(0.5,_sb2(0xbb));tg2.addColorStop(1,_sb2(0xa0));
-    ctx.fillStyle=tg2;
-    ctx.beginPath();
-    ctx.moveTo(ax-6*s,ay-20*s);ctx.lineTo(ax+6*s,ay-20*s);
-    ctx.quadraticCurveTo(ax+5*s,ay-14*s,ax+4*s,ay-7*s);
-    ctx.lineTo(ax-4*s,ay-7*s);
-    ctx.quadraticCurveTo(ax-5*s,ay-14*s,ax-6*s,ay-20*s);
-    ctx.fill();
-    // Suit collar
-    ctx.fillStyle=_sb2(0x66);
-    ctx.fillRect(ax-3*s,ay-21*s,6*s,2*s);
+    // Taller humanoid torso. If skin has an `outfit`, render clothing; else draw bare-chest fallback.
+    const outfit=skin.outfit, oa=skin.outfitA||'#666', ob=skin.outfitB||'#333';
+    const torsoPath=()=>{
+      ctx.beginPath();
+      ctx.moveTo(ax-6*s,ay-20*s);ctx.lineTo(ax+6*s,ay-20*s);
+      ctx.quadraticCurveTo(ax+5*s,ay-14*s,ax+4*s,ay-7*s);
+      ctx.lineTo(ax-4*s,ay-7*s);
+      ctx.quadraticCurveTo(ax-5*s,ay-14*s,ax-6*s,ay-20*s);
+    };
+    if(outfit==='tshirt'){
+      ctx.fillStyle=oa; torsoPath(); ctx.fill();
+      // Short-sleeve band + subtle shadow
+      ctx.fillStyle='rgba(0,0,0,0.15)';
+      ctx.fillRect(ax-6*s,ay-10*s,12*s,1.2*s);
+    } else if(outfit==='suit'){
+      // Dark suit jacket
+      ctx.fillStyle=oa; torsoPath(); ctx.fill();
+      // White shirt strip down middle
+      ctx.fillStyle='#f8f8f8';
+      ctx.beginPath();ctx.moveTo(ax-1.8*s,ay-20*s);ctx.lineTo(ax+1.8*s,ay-20*s);
+      ctx.lineTo(ax+1.5*s,ay-7*s);ctx.lineTo(ax-1.5*s,ay-7*s);ctx.closePath();ctx.fill();
+      // Tie
+      ctx.fillStyle=ob;
+      ctx.beginPath();
+      ctx.moveTo(ax-1*s,ay-19*s);ctx.lineTo(ax+1*s,ay-19*s);
+      ctx.lineTo(ax+1.5*s,ay-10*s);ctx.lineTo(ax,ay-8*s);ctx.lineTo(ax-1.5*s,ay-10*s);
+      ctx.closePath();ctx.fill();
+      // Flag pin
+      ctx.fillStyle='#c33';ctx.fillRect(ax-4*s,ay-17*s,1.4*s,0.9*s);
+      ctx.fillStyle='#36c';ctx.fillRect(ax-4*s,ay-16*s,1.4*s,0.5*s);
+      // Lapel V-lines
+      ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=0.4*s;
+      ctx.beginPath();ctx.moveTo(ax-4*s,ay-20*s);ctx.lineTo(ax-1.5*s,ay-14*s);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ax+4*s,ay-20*s);ctx.lineTo(ax+1.5*s,ay-14*s);ctx.stroke();
+    } else if(outfit==='astronaut'){
+      // White spacesuit torso
+      ctx.fillStyle=oa; torsoPath(); ctx.fill();
+      // Chest control panel
+      ctx.fillStyle='#c0c4c8';ctx.fillRect(ax-3*s,ay-14*s,6*s,4*s);
+      ctx.fillStyle='#ff0';ctx.fillRect(ax-2.5*s,ay-13*s,1.2*s,1*s);
+      ctx.fillStyle='#0f0';ctx.fillRect(ax-0.3*s,ay-13*s,1.2*s,1*s);
+      ctx.fillStyle='#f80';ctx.fillRect(ax+1.3*s,ay-13*s,1.2*s,1*s);
+      // Flag patch on shoulder
+      ctx.fillStyle='#c0c0c8';ctx.fillRect(ax+2*s,ay-19*s,3*s,2*s);
+      ctx.fillStyle='#c44';ctx.fillRect(ax+2*s,ay-19*s,1.5*s,2*s);
+      // Life-support backpack (peeking behind, offset -f so it's on the back)
+      ctx.fillStyle=ob;
+      ctx.fillRect(ax-f*7*s,ay-20*s,3*s,13*s);
+      ctx.strokeStyle='#5a5f65';ctx.lineWidth=0.5*s;ctx.strokeRect(ax-f*7*s,ay-20*s,3*s,13*s);
+      // Suit seams
+      ctx.strokeStyle='rgba(180,180,190,0.6)';ctx.lineWidth=0.4*s;
+      ctx.beginPath();ctx.moveTo(ax,ay-20*s);ctx.lineTo(ax,ay-14*s);ctx.stroke();
+    } else if(outfit==='clown'){
+      // Polka-dot body
+      ctx.fillStyle=oa; torsoPath(); ctx.fill();
+      const dotCols=['#fc0','#0cf','#0c4','#f4c','#fff'];
+      for(let pd=0;pd<7;pd++){
+        const dcol=dotCols[pd%dotCols.length];
+        const dx=(-4+((pd*3.3)%8))*s;
+        const dy=(-18+((pd*2.7)%12))*s;
+        ctx.fillStyle=dcol;ctx.beginPath();ctx.arc(ax+dx,ay+dy,1.2*s,0,Math.PI*2);ctx.fill();
+      }
+      // Big white ruffled collar
+      ctx.fillStyle='#fff';
+      for(let ri=0;ri<6;ri++){
+        const ra=(ri/6)*Math.PI - Math.PI*0.5;
+        ctx.beginPath();ctx.arc(ax+Math.cos(ra)*5*s, ay-20*s+Math.sin(ra)*2*s, 2.2*s, 0, Math.PI*2);ctx.fill();
+      }
+      // Pompom buttons
+      ctx.fillStyle=ob;
+      for(let bn=0;bn<3;bn++){ctx.beginPath();ctx.arc(ax,ay-17*s+bn*4*s,1.3*s,0,Math.PI*2);ctx.fill();}
+    } else if(outfit==='hero'){
+      // Hero suit torso (primary color)
+      ctx.fillStyle=oa; torsoPath(); ctx.fill();
+      // Emblem badge on chest (yellow shield)
+      ctx.fillStyle='#f8d060';
+      ctx.beginPath();
+      ctx.moveTo(ax,ay-17*s);
+      ctx.lineTo(ax+3*s,ay-15*s);
+      ctx.lineTo(ax+2*s,ay-10*s);
+      ctx.lineTo(ax,ay-8*s);
+      ctx.lineTo(ax-2*s,ay-10*s);
+      ctx.lineTo(ax-3*s,ay-15*s);
+      ctx.closePath();ctx.fill();
+      ctx.strokeStyle='#f0a020';ctx.lineWidth=0.6*s;ctx.stroke();
+      // Emblem letter
+      ctx.fillStyle='#1e3a8a';ctx.font=`bold ${5*s}px monospace`;ctx.textAlign='center';
+      ctx.fillText('H',ax,ay-12*s);
+      // Cape flapping behind (trail direction = -f)
+      const capeW=Math.sin(t2*3)*2*s;
+      ctx.fillStyle=ob;
+      ctx.beginPath();
+      ctx.moveTo(ax-f*5*s,ay-20*s);
+      ctx.quadraticCurveTo(ax-f*(12+capeW)*s,ay-14*s,ax-f*9*s,ay-4*s);
+      ctx.lineTo(ax-f*4*s,ay-7*s);
+      ctx.closePath();ctx.fill();
+      // Belt line
+      ctx.fillStyle=ob;ctx.fillRect(ax-6*s,ay-8.5*s,12*s,1.2*s);
+      ctx.fillStyle='#f8d060';ctx.fillRect(ax-1*s,ay-8.5*s,2*s,1.2*s);
+    } else if(outfit==='ghost'){
+      // Flowing sheet covers entire body + hat drawn in head section
+      const sheetW=10*s, sheetTop=ay-26*s, sheetBot=ay+1*s;
+      const flutter=Math.sin(t2*3)*1.5*s;
+      ctx.fillStyle=oa;
+      ctx.beginPath();
+      ctx.moveTo(ax-sheetW*0.4,sheetTop);
+      ctx.quadraticCurveTo(ax-sheetW,ay-14*s,ax-sheetW-flutter,sheetBot);
+      // wavy hem
+      for(let wi=-4;wi<=4;wi++){
+        const wxp=ax+wi*(sheetW*0.5/4);
+        const wyp=sheetBot+((wi%2===0)?2*s:-0.5*s);
+        ctx.lineTo(wxp,wyp);
+      }
+      ctx.quadraticCurveTo(ax+sheetW,ay-14*s,ax+sheetW*0.4,sheetTop);
+      ctx.closePath();ctx.fill();
+      // folds
+      ctx.strokeStyle='rgba(160,160,180,0.35)';ctx.lineWidth=0.6*s;
+      ctx.beginPath();ctx.moveTo(ax-sheetW*0.3,sheetTop+3*s);ctx.lineTo(ax-sheetW*0.7,sheetBot-1*s);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ax+sheetW*0.3,sheetTop+3*s);ctx.lineTo(ax+sheetW*0.7,sheetBot-1*s);ctx.stroke();
+    } else {
+      // Fallback: plain torso in body color
+      const tg2=ctx.createLinearGradient(ax-6*s,ay-22*s,ax+6*s,ay-6*s);
+      tg2.addColorStop(0,_sb2(0xb0));tg2.addColorStop(0.5,_sb2(0xbb));tg2.addColorStop(1,_sb2(0xa0));
+      ctx.fillStyle=tg2; torsoPath(); ctx.fill();
+      ctx.fillStyle=_sb2(0x66);ctx.fillRect(ax-3*s,ay-21*s,6*s,2*s);
+    }
   } else if(bt==='blob'){
     // Gelatinous quivering blob body (bigger, translucent)
     const q=Math.sin(t2*4)*1.2*s;
@@ -13778,6 +14217,69 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       const stx=ax-2*s+st*2*s;
       ctx.beginPath();ctx.moveTo(stx,ay-7*s);ctx.lineTo(stx+0.5*s,ay-17*s);ctx.stroke();
     }
+  } else if(bt==='spider'){
+    // Bulbous abdomen (behind, oversized) + smaller cephalothorax (front)
+    const abdomPulse=Math.sin(t2*2)*0.6*s;
+    // Abdomen
+    const abg=ctx.createRadialGradient(ax-f*4*s,ay-12*s,1*s,ax-f*5*s,ay-12*s,12*s);
+    abg.addColorStop(0,_sb2(0xbb));abg.addColorStop(1,_sb2(0x77));
+    ctx.fillStyle=abg;
+    ctx.beginPath();ctx.ellipse(ax-f*5*s,ay-11*s,9*s+abdomPulse,7*s,0,0,Math.PI*2);ctx.fill();
+    // Abdomen pattern (dots/stripes)
+    ctx.fillStyle=_sa2(0x55);
+    for(let dt2=0;dt2<4;dt2++){
+      const da=dt2*0.5-0.75;
+      ctx.beginPath();ctx.arc(ax-f*5*s+Math.cos(da)*4*s,ay-11*s+Math.sin(da)*3*s,0.8*s,0,Math.PI*2);ctx.fill();
+    }
+    // Cephalothorax (front segment, smaller)
+    const cbg=ctx.createRadialGradient(ax+f*2*s,ay-13*s,1*s,ax+f*3*s,ay-12*s,6*s);
+    cbg.addColorStop(0,_sh2(0xcc));cbg.addColorStop(1,_sh2(0x88));
+    ctx.fillStyle=cbg;
+    ctx.beginPath();ctx.ellipse(ax+f*3*s,ay-12*s,5*s,4.5*s,0,0,Math.PI*2);ctx.fill();
+    // Fine hairs on abdomen
+    ctx.strokeStyle=_sb2(0x44);ctx.lineWidth=0.4*s;
+    for(let hr=0;hr<6;hr++){
+      const ha=hr*1.05-2.5;
+      ctx.beginPath();
+      ctx.moveTo(ax-f*5*s+Math.cos(ha)*8*s,ay-11*s+Math.sin(ha)*6*s);
+      ctx.lineTo(ax-f*5*s+Math.cos(ha)*10*s,ay-11*s+Math.sin(ha)*7.5*s);
+      ctx.stroke();
+    }
+  } else if(bt==='slug'){
+    // Massive bloated body + smaller head-stalk mound in front
+    const bulge=Math.sin(t2*1.5)*0.8*s;
+    const sg=ctx.createRadialGradient(ax-2*s,ay-10*s,1*s,ax,ay-8*s,16*s);
+    sg.addColorStop(0,_sb2(0xc8));sg.addColorStop(0.6,_sb2(0xa0));sg.addColorStop(1,_sb2(0x70));
+    ctx.fillStyle=sg;
+    ctx.beginPath();
+    ctx.moveTo(ax-10*s,ay-4*s);
+    ctx.quadraticCurveTo(ax-12*s-bulge,ay-14*s,ax-4*s,ay-20*s);
+    ctx.quadraticCurveTo(ax+6*s,ay-22*s,ax+11*s+bulge,ay-16*s);
+    ctx.quadraticCurveTo(ax+14*s,ay-8*s,ax+10*s,ay-3*s);
+    ctx.quadraticCurveTo(ax,ay-1*s,ax-10*s,ay-4*s);
+    ctx.closePath();ctx.fill();
+    // Belly rolls
+    ctx.strokeStyle=_sb2(0x55);ctx.lineWidth=0.6*s;
+    for(let rl=0;rl<3;rl++){
+      ctx.beginPath();
+      ctx.moveTo(ax-9*s,ay-(6+rl*3)*s);
+      ctx.quadraticCurveTo(ax,ay-(5+rl*3)*s,ax+9*s,ay-(6+rl*3)*s);
+      ctx.stroke();
+    }
+    // Slime highlights
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    ctx.beginPath();ctx.ellipse(ax-4*s,ay-16*s,3*s,1.5*s,-0.3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(ax+5*s,ay-13*s,2*s,1*s,0.2,0,Math.PI*2);ctx.fill();
+    // Stubby arms (tiny useless forelimbs)
+    ctx.strokeStyle=_sb2(0x77);ctx.lineWidth=1.8*s;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(ax-f*6*s,ay-13*s);ctx.quadraticCurveTo(ax-f*10*s,ay-11*s,ax-f*11*s,ay-8*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ax+f*6*s,ay-13*s);ctx.quadraticCurveTo(ax+f*10*s,ay-11*s,ax+f*11*s,ay-8*s);ctx.stroke();
+    // Tiny claws
+    ctx.strokeStyle=_sa2(0x33);ctx.lineWidth=0.5*s;
+    for(let cl=0;cl<3;cl++){
+      ctx.beginPath();ctx.moveTo(ax-f*11*s,ay-8*s);ctx.lineTo(ax-f*(12+cl*0.3)*s,ay-(7-cl)*s);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ax+f*11*s,ay-8*s);ctx.lineTo(ax+f*(12+cl*0.3)*s,ay-(7-cl)*s);ctx.stroke();
+    }
   } else if(bt==='insect'){
     // Segmented chitin torso
     ctx.fillStyle=_sb2(0xa0);
@@ -13812,7 +14314,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     // Short neck poking out of top segment
     ctx.fillStyle=_sb2(0xb0);
     ctx.fillRect(ax-2*s,ay-22*s,4*s,3*s);
-  } else if(bt==='energy' || bt==='blob' || bt==='tentacle' || bt==='mushroom'){
+  } else if(bt==='energy' || bt==='blob' || bt==='tentacle' || bt==='mushroom' || bt==='spider' || bt==='slug'){
     // No visible neck
   } else if(bt==='robot'){
     ctx.fillStyle=_sb2(0x90);ctx.fillRect(ax-3*s,ay-24*s,6*s,5*s);
@@ -13825,7 +14327,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Head position shifts
-  const _headShift = bt==='larva' ? -2*s : (bt==='blob' || bt==='tentacle') ? 10*s : bt==='mushroom' ? 4*s : 0;
+  const _headShift = bt==='larva' ? -2*s : (bt==='blob' || bt==='tentacle') ? 10*s : bt==='mushroom' ? 4*s : bt==='spider' ? 20*s : bt==='slug' ? 15*s : 0;
   const _isHuman = bt==='humanoid' && skin.hair;
 
   // Head
@@ -13840,20 +14342,134 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_sh2(0xa0);
     ctx.beginPath();ctx.ellipse(hx2-6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(hx2+6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
-    // Hair (top + sides)
-    ctx.fillStyle=skin.hair;
-    ctx.beginPath();
-    ctx.moveTo(hx2-6*s,hy2-2*s);
-    ctx.quadraticCurveTo(hx2-7*s,hy2-7*s,hx2-3*s,hy2-6*s);
-    ctx.quadraticCurveTo(hx2,hy2-8*s,hx2+3*s,hy2-6*s);
-    ctx.quadraticCurveTo(hx2+7*s,hy2-7*s,hx2+6*s,hy2-2*s);
-    ctx.quadraticCurveTo(hx2+3*s,hy2-4*s,hx2,hy2-4*s);
-    ctx.quadraticCurveTo(hx2-3*s,hy2-4*s,hx2-6*s,hy2-2*s);
-    ctx.closePath();ctx.fill();
+    // Hair (top + sides) — suppressed for ghost (under sheet) and astronaut (under helmet)
+    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut'){
+      ctx.fillStyle=skin.hair;
+      ctx.beginPath();
+      ctx.moveTo(hx2-6*s,hy2-2*s);
+      ctx.quadraticCurveTo(hx2-7*s,hy2-7*s,hx2-3*s,hy2-6*s);
+      ctx.quadraticCurveTo(hx2,hy2-8*s,hx2+3*s,hy2-6*s);
+      ctx.quadraticCurveTo(hx2+7*s,hy2-7*s,hx2+6*s,hy2-2*s);
+      ctx.quadraticCurveTo(hx2+3*s,hy2-4*s,hx2,hy2-4*s);
+      ctx.quadraticCurveTo(hx2-3*s,hy2-4*s,hx2-6*s,hy2-2*s);
+      ctx.closePath();ctx.fill();
+    }
+    // --- COSTUME HEAD OVERLAYS ---
+    if(skin.outfit==='clown'){
+      // Rainbow puff hair around the sides
+      const puffs=['#f40','#fc0','#0d4','#06f','#f0c','#fc0','#f40'];
+      for(let ci=0;ci<puffs.length;ci++){
+        const ang=-Math.PI - 0.2 + ci*(Math.PI+0.4)/(puffs.length-1);
+        const cx3=hx2+Math.cos(ang)*7*s;
+        const cy3=hy2+2*s+Math.sin(ang)*7*s;
+        ctx.fillStyle=puffs[ci];
+        ctx.beginPath();ctx.arc(cx3,cy3,2.4*s,0,Math.PI*2);ctx.fill();
+      }
+      // Red nose
+      ctx.fillStyle='#f22';
+      ctx.beginPath();ctx.arc(hx2,hy2+2*s,1.8*s,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.beginPath();ctx.arc(hx2-0.5*s,hy2+1.4*s,0.6*s,0,Math.PI*2);ctx.fill();
+      // White mouth paint + painted smile
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.ellipse(hx2,hy2+5*s,3.2*s,1.6*s,0,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#c00';ctx.lineWidth=0.8*s;
+      ctx.beginPath();ctx.arc(hx2,hy2+4.5*s,2*s,0.2,Math.PI-0.2);ctx.stroke();
+    } else if(skin.outfit==='ghost'){
+      // Sheet drapes over head (white hood)
+      ctx.fillStyle=skin.outfitA||'#f5f5fa';
+      ctx.beginPath();
+      ctx.moveTo(hx2-7*s,hy2+5*s);
+      ctx.quadraticCurveTo(hx2-8*s,hy2-8*s,hx2,hy2-10*s);
+      ctx.quadraticCurveTo(hx2+8*s,hy2-8*s,hx2+7*s,hy2+5*s);
+      ctx.quadraticCurveTo(hx2,hy2+7*s,hx2-7*s,hy2+5*s);
+      ctx.closePath();ctx.fill();
+      // Pointy wizard hat with gold star
+      const htipX=hx2, htipY=hy2-22*s, hbaseY=hy2-8*s;
+      ctx.fillStyle=skin.outfitB||'#4a2a70';
+      ctx.beginPath();
+      ctx.moveTo(htipX,htipY);
+      ctx.lineTo(hx2-8*s,hbaseY);
+      ctx.lineTo(hx2+8*s,hbaseY);
+      ctx.closePath();ctx.fill();
+      ctx.fillStyle='#2a1840';
+      ctx.beginPath();ctx.ellipse(hx2,hbaseY,9*s,1.8*s,0,0,Math.PI*2);ctx.fill();
+      // Gold star on hat
+      ctx.fillStyle='#fc0';
+      const starY=htipY+7*s;
+      ctx.beginPath();
+      for(let si=0;si<5;si++){
+        const sa=si*(Math.PI*2/5)-Math.PI/2;
+        ctx.lineTo(hx2+Math.cos(sa)*2*s, starY+Math.sin(sa)*2*s);
+        const sa2=sa+Math.PI/5;
+        ctx.lineTo(hx2+Math.cos(sa2)*0.9*s, starY+Math.sin(sa2)*0.9*s);
+      }
+      ctx.closePath();ctx.fill();
+      // Eye holes (black)
+      ctx.fillStyle='#000';
+      ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+1*s,1.4*s,2*s,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(hx2+2.2*s,hy2+1*s,1.4*s,2*s,0,0,Math.PI*2);ctx.fill();
+    } else if(skin.outfit==='astronaut'){
+      // Fishbowl helmet
+      ctx.fillStyle='rgba(180,210,240,0.22)';
+      ctx.beginPath();ctx.arc(hx2,hy2+1*s,10*s,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='rgba(230,240,250,0.95)';ctx.lineWidth=1.2*s;
+      ctx.beginPath();ctx.arc(hx2,hy2+1*s,10*s,0,Math.PI*2);ctx.stroke();
+      // Visor shine
+      ctx.fillStyle='rgba(255,255,255,0.35)';
+      ctx.beginPath();ctx.ellipse(hx2-3*s,hy2-3*s,3*s,5*s,-0.3,0,Math.PI*2);ctx.fill();
+      // Gold visor tint (bottom half)
+      ctx.fillStyle='rgba(255,200,80,0.18)';
+      ctx.beginPath();ctx.arc(hx2,hy2+1*s,10*s,0,Math.PI);ctx.fill();
+      // Neck ring
+      ctx.fillStyle='#c0c4c8';
+      ctx.fillRect(hx2-6*s,hy2+9*s,12*s,1.5*s);
+    } else if(skin.outfit==='hero'){
+      // Domino mask
+      ctx.fillStyle='#111';
+      ctx.beginPath();
+      ctx.moveTo(hx2-6*s,hy2+1*s);
+      ctx.quadraticCurveTo(hx2-6*s,hy2-2*s,hx2-3*s,hy2-2*s);
+      ctx.quadraticCurveTo(hx2,hy2-1*s,hx2+3*s,hy2-2*s);
+      ctx.quadraticCurveTo(hx2+6*s,hy2-2*s,hx2+6*s,hy2+1*s);
+      ctx.quadraticCurveTo(hx2+3*s,hy2+3*s,hx2,hy2+2*s);
+      ctx.quadraticCurveTo(hx2-3*s,hy2+3*s,hx2-6*s,hy2+1*s);
+      ctx.closePath();ctx.fill();
+    } else if(skin.outfit==='suit'){
+      // Slicked-back hair highlight already rendered via skin.hair; add shine stripe
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.fillRect(hx2-2*s,hy2-7*s,4*s,0.8*s);
+    }
   } else if(bt==='blob'){
     // No separate head — eyes float in top of blob body
   } else if(bt==='tentacle'){
     // No separate head — large eye on mantle
+  } else if(bt==='spider'){
+    // Spider has no separate head — cephalothorax already drawn in torso section
+  } else if(bt==='slug'){
+    // Wide Jabba-like head atop body: wide jowls, fat cheeks
+    const shg=ctx.createRadialGradient(hx2-3*s,hy2-4*s,1*s,hx2,hy2,12*s);
+    shg.addColorStop(0,_sh2(0xcc));shg.addColorStop(0.6,_sh2(0xa8));shg.addColorStop(1,_sh2(0x78));
+    ctx.fillStyle=shg;
+    ctx.beginPath();
+    // Wide jowly skull
+    ctx.moveTo(hx2-11*s,hy2+6*s);
+    ctx.quadraticCurveTo(hx2-13*s,hy2-4*s,hx2-8*s,hy2-10*s);
+    ctx.quadraticCurveTo(hx2,hy2-12*s,hx2+8*s,hy2-10*s);
+    ctx.quadraticCurveTo(hx2+13*s,hy2-4*s,hx2+11*s,hy2+6*s);
+    ctx.quadraticCurveTo(hx2+5*s,hy2+9*s,hx2,hy2+9*s);
+    ctx.quadraticCurveTo(hx2-5*s,hy2+9*s,hx2-11*s,hy2+6*s);
+    ctx.closePath();ctx.fill();
+    // Double chin wattle
+    ctx.strokeStyle=_sh2(0x60);ctx.lineWidth=0.7*s;
+    ctx.beginPath();ctx.moveTo(hx2-9*s,hy2+6*s);ctx.quadraticCurveTo(hx2,hy2+(8+breathe)*s,hx2+9*s,hy2+6*s);ctx.stroke();
+    // Wart/bump spots
+    ctx.fillStyle=_sh2(0x55);
+    const warts=[[-5,-5],[4,-6],[-2,0],[6,2],[-8,2]];
+    warts.forEach(([wx,wy])=>{ctx.beginPath();ctx.arc(hx2+wx*s,hy2+wy*s,0.9*s,0,Math.PI*2);ctx.fill();});
+    // Slime sheen
+    ctx.fillStyle='rgba(255,255,255,0.2)';
+    ctx.beginPath();ctx.ellipse(hx2-4*s,hy2-6*s,3*s,1.5*s,-0.3,0,Math.PI*2);ctx.fill();
   } else if(bt==='mushroom'){
     // Mushroom cap acting as head
     const cg=ctx.createRadialGradient(hx2-3*s,hy2-5*s,1*s,hx2,hy2,14*s);
@@ -13889,7 +14505,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Eyes + face
-  if(_isHuman){
+  if(_isHuman && skin.outfit!=='ghost'){
     // Small human eyes (white with iris)
     ctx.fillStyle='#fff';
     ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
@@ -13897,12 +14513,14 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_eyeCol2;
     ctx.beginPath();ctx.arc(hx2-2*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.arc(hx2+2.4*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
-    // Nose
-    ctx.strokeStyle=_sh2(0x80);ctx.lineWidth=0.7*s;
-    ctx.beginPath();ctx.moveTo(hx2,hy2+2*s);ctx.lineTo(hx2-0.5*s,hy2+4*s);ctx.lineTo(hx2+0.5*s,hy2+4*s);ctx.stroke();
-    // Mouth
-    ctx.strokeStyle='#a04040';ctx.lineWidth=0.8*s;
-    ctx.beginPath();ctx.moveTo(hx2-1.5*s,hy2+6*s);ctx.quadraticCurveTo(hx2,hy2+(6.5+breathe)*s,hx2+1.5*s,hy2+6*s);ctx.stroke();
+    // Nose (skip for clown — red nose already drawn)
+    if(skin.outfit!=='clown'){
+      ctx.strokeStyle=_sh2(0x80);ctx.lineWidth=0.7*s;
+      ctx.beginPath();ctx.moveTo(hx2,hy2+2*s);ctx.lineTo(hx2-0.5*s,hy2+4*s);ctx.lineTo(hx2+0.5*s,hy2+4*s);ctx.stroke();
+      // Mouth
+      ctx.strokeStyle='#a04040';ctx.lineWidth=0.8*s;
+      ctx.beginPath();ctx.moveTo(hx2-1.5*s,hy2+6*s);ctx.quadraticCurveTo(hx2,hy2+(6.5+breathe)*s,hx2+1.5*s,hy2+6*s);ctx.stroke();
+    }
   } else if(bt==='blob'){
     // Single or double eyes inside goo at top
     ctx.fillStyle='#fff';
@@ -13927,6 +14545,63 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     // Beak
     ctx.fillStyle='#1a0a0a';
     ctx.beginPath();ctx.moveTo(ax-1.5*s,ay-13*s);ctx.lineTo(ax+1.5*s,ay-13*s);ctx.lineTo(ax,ay-11*s);ctx.closePath();ctx.fill();
+  } else if(bt==='spider'){
+    // Cluster of 8 small eyes on cephalothorax (4 large front row, 4 small rear)
+    // Cephalothorax position: ax+f*3*s, ay-12*s
+    const cx2=ax+f*3*s, cy2=ay-12*s;
+    // Front row (4 larger)
+    ctx.fillStyle='#fff';
+    for(let ey=0;ey<4;ey++){
+      const ex=cx2+(ey-1.5)*1.8*s;
+      ctx.beginPath();ctx.arc(ex,cy2-0.5*s,1.1*s,0,Math.PI*2);ctx.fill();
+    }
+    ctx.fillStyle=_eyeCol2;
+    for(let ey=0;ey<4;ey++){
+      const ex=cx2+(ey-1.5)*1.8*s;
+      ctx.beginPath();ctx.arc(ex,cy2-0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+    }
+    // Back row (4 smaller)
+    ctx.fillStyle='#fff';
+    for(let ey=0;ey<4;ey++){
+      const ex=cx2+(ey-1.5)*1.4*s;
+      ctx.beginPath();ctx.arc(ex,cy2-2.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+    }
+    ctx.fillStyle=_eyeCol2;
+    for(let ey=0;ey<4;ey++){
+      const ex=cx2+(ey-1.5)*1.4*s;
+      ctx.beginPath();ctx.arc(ex,cy2-2.5*s,0.4*s,0,Math.PI*2);ctx.fill();
+    }
+    // Chelicerae (fangs) below cluster
+    ctx.strokeStyle=_sh2(0x33);ctx.lineWidth=0.9*s;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cx2-1.5*s,cy2+2.5*s);ctx.lineTo(cx2-1*s,cy2+4.5*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx2+1.5*s,cy2+2.5*s);ctx.lineTo(cx2+1*s,cy2+4.5*s);ctx.stroke();
+  } else if(bt==='slug'){
+    // Wide bulging eyes with heavy lids + huge slit mouth
+    // Eyes
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.ellipse(hx2-4*s,hy2-2*s,2.2*s,1.8*s,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(hx2+4*s,hy2-2*s,2.2*s,1.8*s,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=_eyeCol2;
+    const slEyeX=Math.sin(t2*0.8)*0.5*s;
+    ctx.beginPath();ctx.ellipse(hx2-4*s+slEyeX,hy2-2*s,1*s,1.3*s,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(hx2+4*s+slEyeX,hy2-2*s,1*s,1.3*s,0,0,Math.PI*2);ctx.fill();
+    // Heavy brow/lid (slits from above)
+    ctx.strokeStyle=_sh2(0x55);ctx.lineWidth=1.2*s;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(hx2-6.5*s,hy2-4*s);ctx.quadraticCurveTo(hx2-4*s,hy2-3.5*s,hx2-1.5*s,hy2-3.5*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hx2+6.5*s,hy2-4*s);ctx.quadraticCurveTo(hx2+4*s,hy2-3.5*s,hx2+1.5*s,hy2-3.5*s);ctx.stroke();
+    // Huge slit mouth (wide grin)
+    ctx.strokeStyle='#2a0a0a';ctx.lineWidth=1.5*s;
+    ctx.beginPath();
+    ctx.moveTo(hx2-7*s,hy2+3*s);
+    ctx.quadraticCurveTo(hx2,hy2+(5+breathe)*s,hx2+7*s,hy2+3*s);
+    ctx.stroke();
+    // Drool
+    ctx.strokeStyle='rgba(255,240,200,0.5)';ctx.lineWidth=0.6*s;
+    ctx.beginPath();ctx.moveTo(hx2+3*s,hy2+4.5*s);ctx.lineTo(hx2+3.3*s,hy2+(7+Math.sin(t2*2))*s);ctx.stroke();
+    // Nostril slits
+    ctx.strokeStyle=_sh2(0x44);ctx.lineWidth=0.5*s;
+    ctx.beginPath();ctx.moveTo(hx2-1*s,hy2+0.5*s);ctx.lineTo(hx2-1*s,hy2+1.8*s);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hx2+1*s,hy2+0.5*s);ctx.lineTo(hx2+1*s,hy2+1.8*s);ctx.stroke();
   } else if(bt==='mushroom'){
     // Eyes on stipe (below cap)
     ctx.fillStyle='#fff';
@@ -13968,7 +14643,7 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   }
 
   // Front arm + gun (skip for limbless types)
-  if(bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='larva'){
+  if(bt!=='blob' && bt!=='tentacle' && bt!=='mushroom' && bt!=='larva' && bt!=='spider' && bt!=='slug'){
     ctx.strokeStyle=_sb2(0xaa);ctx.lineWidth=1.8*s;
     ctx.beginPath();ctx.moveTo(ax+f*4*s,ay-17*s);ctx.quadraticCurveTo(ax+f*9*s,ay-14*s,ax+f*13*s,ay-12*s);ctx.stroke();
     ctx.lineWidth=0.8*s;ctx.strokeStyle=_sb2(0x99);
@@ -14116,7 +14791,7 @@ function gameLoop(){
     else{
       if(keys['w']||keys['arrowup']){pauseMenu.sel--;pauseMenu._cool=10;}
       if(keys['s']||keys['arrowdown']){pauseMenu.sel++;pauseMenu._cool=10;}
-      const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU','EXIT GAME'];
+      const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU','QUIT WITHOUT SAVING'];
       pauseMenu.sel=((pauseMenu.sel%items.length)+items.length)%items.length;
       if(keys['escape']){keys['escape']=false;pauseMenu.active=false;pauseMenu._cool=10;}
       if(keys['enter']||keys[' ']){
@@ -14125,10 +14800,8 @@ function gameLoop(){
         else if(pauseMenu.sel===1){saveGame();showMessage('Game saved!');pauseMenu.active=false;}
         else if(pauseMenu.sel===2){saveGame();gameStarted=false;mainMenuMode='menu';mainMenuSel=0;pauseMenu.active=false;}
         else if(pauseMenu.sel===3){
-          // Exit game — stop the loop and show the start-screen overlay (same as main menu exit)
-          saveGame();
-          const ss=document.getElementById('start-screen'); if(ss) ss.style.display='flex';
-          gameStarted=false; mainMenuMode=null; pauseMenu.active=false;
+          // Quit to menu without saving — drops any unsaved progress
+          gameStarted=false; mainMenuMode='menu'; mainMenuSel=0; pauseMenu.active=false;
         }
       }
     }
@@ -14139,7 +14812,7 @@ function gameLoop(){
     ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,cw,ch);
     ctx.fillStyle='#0f0';ctx.font='bold 28px monospace';ctx.textAlign='center';
     ctx.fillText('PAUSED',cw/2,ch*0.3);
-    const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU'];
+    const items=['RESUME','SAVE GAME','SAVE & QUIT TO MENU','QUIT WITHOUT SAVING'];
     items.forEach((label,i)=>{
       const iy=ch*0.42+i*45;
       const sel=i===pauseMenu.sel;
@@ -14396,11 +15069,8 @@ function drawMainMenu(){
       const lw=lh*(li.naturalWidth/li.naturalHeight);
       ctx.shadowColor='#0f0';ctx.shadowBlur=(25+Math.sin(t*2)*10)*la;
       ctx.drawImage(li,cw/2-lw/2,titleY-lh+driftY,lw,lh);
-    }else{
-      ctx.shadowColor='#0f0';ctx.shadowBlur=(30+Math.sin(t*2)*10)*la;
-      ctx.fillStyle='#0f0';ctx.font='bold 52px monospace';ctx.textAlign='center';
-      ctx.fillText('space',cw/2,titleY+driftY);
     }
+    // If the image hasn't loaded yet, show nothing (avoids a flash of placeholder text).
     ctx.restore();
   }
 
