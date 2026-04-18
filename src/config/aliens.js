@@ -66,11 +66,15 @@ export const ALIEN_RACES = [
       {id:'cyb_chrome', name:'Chrome Unit',    body:'#9090a0',  head:'#b0b0c0',  eyes:'#0ff', glow:'#4cf', accent:'#707080', cyber:true},
       {id:'cyb_red',    name:'Blood Protocol', body:'#6a2020',  head:'#8a3030',  eyes:'#f00', glow:'#f44', accent:'#4a1010', cyber:true},
   ]},
-  { id:'cosmic',    name:'Cosmic',    description:'Floating beings of energy',     bodyType:'energy', skins:[
+  { id:'cosmic',    name:'Cosmic',    description:'Floating beings of energy & phantom spirits', bodyType:'energy', skins:[
       {id:'rainbow',    name:'Prismatic',      body:'rainbow',  head:'rainbow',  eyes:'#fff', glow:'#fff', accent:'rainbow'},
       {id:'cos_nebula', name:'Nebula',         body:'#6030a0',  head:'#8040d0',  eyes:'#fff', glow:'#a0f', accent:'#4020a0'},
       {id:'cos_stars',  name:'Stardust',       body:'#e0d0ff',  head:'#fff0ff',  eyes:'#fff', glow:'#fff', accent:'#c0b0e0'},
       {id:'cos_void',   name:'Void Born',      body:'#101030',  head:'#202050',  eyes:'#f0f', glow:'#80f', accent:'#080820'},
+      {id:'wraith_pale', name:'Pale Haunt',    body:'#a8a8c0',  head:'#c0c0d8',  eyes:'#400', glow:'#cce', accent:'#808098'},
+      {id:'wraith_bone', name:'Bone Shade',    body:'#ebe4c8',  head:'#f4ecd0',  eyes:'#0f0', glow:'#fe8', accent:'#a89860'},
+      {id:'wraith_ash',  name:'Ash Revenant',  body:'#403a48',  head:'#5a5260',  eyes:'#f40', glow:'#f86', accent:'#2a2430'},
+      {id:'wraith_vngnc',name:'Vengeful',      body:'#1a0818',  head:'#3a1838',  eyes:'#0ff', glow:'#f0f', accent:'#0a000a'},
   ]},
   { id:'sluggoth',  name:'Sluggoth',  description:'Enormous slimy slug-crimelords', bodyType:'slug',   skins:[
       {id:'slug_green', name:'Swamp Baron',    body:'#7a8040',  head:'#a0a860',  eyes:'#fc0', glow:'#cd4', accent:'#4a5028'},
@@ -78,17 +82,29 @@ export const ALIEN_RACES = [
       {id:'slug_purple',name:'Velvet Despot',  body:'#6a4870',  head:'#8a68a0',  eyes:'#ff0', glow:'#f8f', accent:'#3a2840'},
       {id:'slug_pale',  name:'Maggot Tyrant',  body:'#d0c8a0',  head:'#e8e0c0',  eyes:'#400', glow:'#fea', accent:'#887858'},
   ]},
-  { id:'wraith',    name:'Wraith',    description:'Phantom spirits of dead stars', bodyType:'energy', skins:[
-      {id:'wraith_pale', name:'Pale Haunt',    body:'#a8a8c0',  head:'#c0c0d8',  eyes:'#400', glow:'#cce', accent:'#808098'},
-      {id:'wraith_bone', name:'Bone Shade',    body:'#ebe4c8',  head:'#f4ecd0',  eyes:'#0f0', glow:'#fe8', accent:'#a89860'},
-      {id:'wraith_ash',  name:'Ash Revenant',  body:'#403a48',  head:'#5a5260',  eyes:'#f40', glow:'#f86', accent:'#2a2430'},
-      {id:'wraith_vngnc',name:'Vengeful',      body:'#1a0818',  head:'#3a1838',  eyes:'#0ff', glow:'#f0f', accent:'#0a000a'},
-  ]},
   { id:'titan',     name:'Titan',     description:'Colossal armored constructs',   bodyType:'robot',  skins:[
       {id:'titan_iron', name:'Iron Guardian', body:'#606068',  head:'#78787e',  eyes:'#f80', glow:'#fc8', accent:'#40404a', cyber:true},
       {id:'titan_bronze',name:'Bronze Sentinel',body:'#8a5a2a',head:'#a87040',  eyes:'#0f0', glow:'#ff8', accent:'#603a1a', cyber:true},
       {id:'titan_gold', name:'Gilded Colossus',body:'#c8a040', head:'#e8c060',  eyes:'#f0f', glow:'#ff4', accent:'#806828', cyber:true},
       {id:'titan_obsd', name:'Obsidian Wall',  body:'#181820',  head:'#2a2a32',  eyes:'#f00', glow:'#f44', accent:'#0a0a0e', cyber:true},
+  ]},
+  { id:'southpark', name:'South Park', description:'Chunky round-headed cartoon visitors', bodyType:'humanoid', skins:[
+      {id:'sp_stan',    name:'Blue Poofball',   body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#6a3a1a', outfit:'tshirt', outfitA:'#1e4db3', outfitB:'#a02020'},
+      {id:'sp_kyle',    name:'Green Earflaps',  body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#046', glow:'#fff', accent:'#d4a878', hair:'#c03020', outfit:'tshirt', outfitA:'#2a8a2a', outfitB:'#c06020'},
+      {id:'sp_cart',    name:'Pink Chunk',      body:'#f2d4b4',  head:'#fce0c0',  eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#6a3a1a', outfit:'tshirt', outfitA:'#d04040', outfitB:'#f0d000'},
+      {id:'sp_kenny',   name:'Orange Hood',     body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#224', glow:'#fa0', accent:'#d4a878', hair:'#d08040', outfit:'tshirt', outfitA:'#f06000', outfitB:'#d04000'},
+      {id:'sp_butters', name:'Yellow Kid',      body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'tshirt', outfitA:'#40c040', outfitB:'#2060c0'},
+      {id:'sp_chef',    name:'Red Sweatered',   body:'#6a4832',  head:'#744e36',  eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#1a0a06', outfit:'tshirt', outfitA:'#d02020', outfitB:'#e0e0e0'},
+  ]},
+  { id:'dinosaur', name:'Saurian',    description:'Ancient reptile-kin of prehistoric Earth', bodyType:'reptile', skins:[
+      {id:'dino_rex',   name:'Tyrant King',     body:'#5a4030',  head:'#704a30',  eyes:'#ff0', glow:'#fa4', accent:'#3a2818'},
+      {id:'dino_rapt',  name:'Raptor',          body:'#408050',  head:'#50a060',  eyes:'#fa0', glow:'#8f4', accent:'#205030'},
+      {id:'dino_tric',  name:'Horned Bulwark',  body:'#5a7058',  head:'#708868',  eyes:'#000', glow:'#dfa', accent:'#384030'},
+      {id:'dino_spino', name:'Sail Stalker',    body:'#304860',  head:'#385878',  eyes:'#f40', glow:'#8cf', accent:'#182838'},
+      {id:'dino_anky',  name:'Armor Club',      body:'#6a5a30',  head:'#807040',  eyes:'#220', glow:'#fd8', accent:'#403820'},
+      {id:'dino_steg',  name:'Plate Back',      body:'#3a5838',  head:'#4a7048',  eyes:'#fc0', glow:'#cf4', accent:'#1a3018'},
+      {id:'dino_ptero', name:'Sky Rider',       body:'#a04040',  head:'#c05050',  eyes:'#ff0', glow:'#f66', accent:'#701818'},
+      {id:'dino_compy', name:'Tiny Swift',      body:'#a08040',  head:'#c0a050',  eyes:'#040', glow:'#fe8', accent:'#604818'},
   ]},
   { id:'arachnid',  name:'Arachnid',  description:'Eight-legged stalkers from web-worlds', bodyType:'spider', skins:[
       {id:'arach_black', name:'Widow',        body:'#1a1018',  head:'#2a1828',  eyes:'#f00', glow:'#f44', accent:'#0a0408'},

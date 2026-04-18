@@ -281,6 +281,8 @@ const RACE_LOADOUTS = {
   mushroom:  ['acid','wail','swarm','stunner','gwell','chainsaw'],
   cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
   cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
+  southpark: ['stunner','wail','rocket','acid','swarm','chainsaw'],
+  dinosaur:  ['plasma','acid','wail','rocket','stunner','chainsaw'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -9829,8 +9831,17 @@ function updateAlienOnFoot(){
   const walkSpeed=2.5;
   if(keys['a']||keys['arrowleft']){alien.vx-=0.5;alien.facing=-1;}
   if(keys['d']||keys['arrowright']){alien.vx+=0.5;alien.facing=1;}
-  // Jump (space)
+  // Jump (space) — or swim up when underwater
   if(keys[' ']&&alien.onGround){alien.vy=-7;alien.onGround=false;}
+  else if(keys[' ']&&alien.underwater){
+    // Swim stroke upward (stronger with dive suit); spawn bubbles
+    const kick = alien.diveSuit ? 0.55 : 0.35;
+    alien.vy -= kick;
+    if(alien.vy < -4) alien.vy = -4;
+    if((frameNow|0)%5===0){
+      particles.push({x:alien.x+(Math.random()-0.5)*8, y:alien.y-18, vx:(Math.random()-0.5)*0.4, vy:-1.4-Math.random()*0.6, life:40+Math.random()*20, color:'rgba(200,230,255,0.7)', size:1.2+Math.random()*1.6});
+    }
+  }
   // Jetpack (shift)
   if(keys['shift']&&alien.jetpackFuel>0){
     alien.vy-=0.5;alien.jetpackFuel-=0.6;
