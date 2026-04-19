@@ -3867,10 +3867,8 @@ function spawnMilitary(){
   const genocideMult=Math.min(18,Math.pow(3,genocideCount));
   const hpMult=(1+getDifficultyLevel()*0.15)*genocideMult;
 
-  if(p.id==='earth'){
-    // Earth military is disabled for now — will be reworked later.
-    return;
-  }
+  // Military is disabled on all planets for now — will be reworked later.
+  return;
   if(p.id==='mars'){
     if(wantedLevel>=2&&military.filter(m=>m.type==='soldier').length<wantedLevel*2){
       const sx=target.x+(Math.random()>0.5?1:-1)*(400+Math.random()*300);
@@ -13505,47 +13503,66 @@ function drawPlanet(){
     // Body (all races/skins + bodyType variations)
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
 
-    // --- Mind-control tether: crackling purple beam from alien's head to the puppet's head ---
+    // --- Mind-control tether: a psychic tentacle from the alien to the puppet's head ---
     if(mindControl && mindControl.target){
       const tgt=mindControl.target;
       const sx=ax, sy=ay-28;
-      const txp=tgt.headX-camera.x, typ=tgt.headY-camera.y;
+      // World coordinates (canvas is already translated for camera at this point).
+      // Handle horizontal world wrapping so a target just across the seam still reads as "close".
+      let txp=tgt.headX, typ=tgt.headY;
+      if(typeof worldWidth==='number'){
+        const rawDx=txp-sx;
+        if(rawDx> worldWidth/2) txp-=worldWidth;
+        else if(rawDx<-worldWidth/2) txp+=worldWidth;
+      }
       const now=frameNow*0.012;
-      // Outer soft glow
-      ctx.save();
-      ctx.strokeStyle='rgba(180,120,255,0.25)';ctx.lineWidth=7;
-      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(txp,typ);ctx.stroke();
-      // Jittery electric core — two overlapping zigzag polylines
       const dx=txp-sx, dy=typ-sy;
-      const segs=Math.max(6, Math.min(20, Math.hypot(dx,dy)/18|0));
-      for(let pass=0;pass<2;pass++){
-        ctx.strokeStyle=pass===0?'rgba(220,180,255,0.9)':'rgba(255,255,255,0.7)';
-        ctx.lineWidth=pass===0?1.6:0.8;
-        ctx.beginPath();ctx.moveTo(sx,sy);
-        for(let i=1;i<segs;i++){
-          const k=i/segs;
-          const cxp=sx+dx*k, cyp=sy+dy*k;
-          // Perpendicular jitter
-          const px=-dy, py=dx; const pl=Math.max(1,Math.hypot(px,py));
-          const jit=(Math.sin(now*1.3+i*0.9+pass*1.7)+Math.sin(now*2.1+i*0.6+pass*3))*3;
-          ctx.lineTo(cxp+(px/pl)*jit, cyp+(py/pl)*jit);
-        }
-        ctx.lineTo(txp,typ);
+      const len=Math.max(1,Math.hypot(dx,dy));
+      const segs=Math.max(10, Math.min(28, (len/12)|0));
+      // Perpendicular unit vector for wavy offset
+      const px=-dy/len, py=dx/len;
+      // Build tentacle spine points with organic sine wave
+      const pts=[];
+      for(let i=0;i<=segs;i++){
+        const k=i/segs;
+        // Wave amplitude peaks mid-tentacle, tapers at both ends
+        const amp=Math.sin(k*Math.PI)*8;
+        const w=(Math.sin(now*1.8+k*5)+Math.sin(now*1.1+k*3.3)*0.6)*amp;
+        pts.push({x:sx+dx*k+px*w, y:sy+dy*k+py*w, k});
+      }
+      ctx.save();
+      // Tapered tentacle body — draw several overlapping strokes, thickest first
+      const layers=[
+        {w:8, c:'rgba(120,60,180,0.35)'},   // outer glow
+        {w:5, c:'rgba(170,90,220,0.85)'},   // main body
+        {w:3, c:'rgba(210,140,240,0.95)'},  // mid highlight
+        {w:1.2, c:'rgba(250,220,255,0.9)'}  // crisp core
+      ];
+      for(const L of layers){
+        ctx.strokeStyle=L.c; ctx.lineWidth=L.w; ctx.lineCap='round'; ctx.lineJoin='round';
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.stroke();
       }
-      // Pulsing endpoint glows
+      // Suckers along the tentacle — small dark ovals, spaced, fade at ends
+      for(let i=2;i<pts.length-1;i+=2){
+        const p=pts[i], k=p.k;
+        const taper=Math.sin(k*Math.PI);
+        const r=1.4+taper*1.1;
+        ctx.fillStyle='rgba(70,20,100,0.8)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='rgba(255,200,255,0.5)';
+        ctx.beginPath(); ctx.arc(p.x-0.4, p.y-0.4, r*0.4, 0, Math.PI*2); ctx.fill();
+      }
+      // Pulsing grip at the puppet's head (tip)
       const pulse=0.5+Math.sin(now*3)*0.3;
-      const eg=ctx.createRadialGradient(txp,typ,0,txp,typ,10);
-      eg.addColorStop(0,`rgba(220,180,255,${pulse})`);
+      const eg=ctx.createRadialGradient(txp,typ,0,txp,typ,11);
+      eg.addColorStop(0,`rgba(220,160,255,${pulse})`);
       eg.addColorStop(1,'transparent');
-      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(txp,typ,10,0,Math.PI*2);ctx.fill();
-      const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,8);
-      sg.addColorStop(0,`rgba(220,180,255,${pulse*0.8})`);
-      sg.addColorStop(1,'transparent');
-      ctx.fillStyle=sg;ctx.beginPath();ctx.arc(sx,sy,8,0,Math.PI*2);ctx.fill();
-      // Crown ring orbiting the puppet's head
-      ctx.strokeStyle=`rgba(220,180,255,${0.5+Math.sin(now*4)*0.25})`;ctx.lineWidth=1.2;
-      ctx.beginPath();ctx.ellipse(txp,typ-2,9,3.5,Math.sin(now*2)*0.4,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(txp,typ,11,0,Math.PI*2);ctx.fill();
+      // Crown ring orbiting the puppet's head — clear "this one is controlled" marker
+      ctx.strokeStyle=`rgba(220,160,255,${0.55+Math.sin(now*4)*0.25})`;ctx.lineWidth=1.3;
+      ctx.beginPath();ctx.ellipse(txp,typ-2,10,3.8,Math.sin(now*2)*0.4,0,Math.PI*2);ctx.stroke();
       ctx.restore();
     }
 

@@ -20,3 +20,5 @@
 - [Project: On-foot weapons](project_onfoot_weapons.md) — 5 alien weapons (stunner, wail, plasma, g-well, swarm) + HUD
 - [Project: Mothership hub](project_mothership_hub.md) — walkable corridor + Star Map, Arena, Lab, Zoo Riot
 - [Project: Burning + jobs](project_burning_and_jobs.md) — day/night commuting, fire spread, ash piles
+- [Feedback: Prehistoric era](feedback_prehistoric_era.md) — no flags/astronauts/military/robots/rovers when window.prehistoricEra is true
+- [Project: Military disabled](project_military_disabled.md) — All-planet military off as of 2026-04-19 (AI was acting weird), rework later
