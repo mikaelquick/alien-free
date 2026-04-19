@@ -97,9 +97,9 @@ export const ALIEN_RACES = [
       {id:'slug_pale',  name:'Maggot Tyrant',  body:'#d0c8a0',  head:'#e8e0c0',  eyes:'#400', glow:'#fea', accent:'#887858'},
   ]},
   { id:'southpark', name:'South Park', description:'Chunky round-headed cartoon visitors', bodyType:'humanoid', skins:[
+      {id:'sp_cart',    name:'Cartman',     body:'#f2d4b4', head:'#fce0c0', eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#5a3a1a', outfit:'southpark', outfitA:'#c02020', outfitB:'#f0d000', hat:'beanie_yel', pants:'#4a2a18'},
       {id:'sp_stan',    name:'Stan',        body:'#f2d4b4', head:'#f8dcbe', eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#3a1e0e', outfit:'southpark', outfitA:'#1e4db3', outfitB:'#5a3a1a', hat:'beanie_red', pants:'#2a1a88'},
       {id:'sp_kyle',    name:'Kyle',        body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#c03020', outfit:'southpark', outfitA:'#e06020', outfitB:'#4a6a1a', hat:'ushanka',    pants:'#185018'},
-      {id:'sp_cart',    name:'Cartman',     body:'#f2d4b4', head:'#fce0c0', eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#5a3a1a', outfit:'southpark', outfitA:'#c02020', outfitB:'#f0d000', hat:'beanie_yel', pants:'#4a2a18'},
       {id:'sp_kenny',   name:'Kenny',       body:'#f2d4b4', head:'#f8dcbe', eyes:'#224', glow:'#fa0', accent:'#d4a878', hair:'#d08040', outfit:'southpark', outfitA:'#d86a14', outfitB:'#2a2a2a', hat:'parka',     pants:'#2a2a2a'},
       {id:'sp_butters', name:'Butters',     body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'southpark', outfitA:'#8ac8e0', outfitB:'#e0c880', hat:'none',      pants:'#c0a040'},
       {id:'sp_chef',    name:'Chef',        body:'#6a4832', head:'#744e36', eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#1a0a06', outfit:'southpark', outfitA:'#c02020', outfitB:'#2040a0', hat:'chef',      pants:'#1a3870'},

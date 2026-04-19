@@ -1,7 +1,7 @@
 - [User Profile](user_profile.md) — Game developer building "SpaceShip" (formerly "Sad Abduction") alien abduction game
 - [Project: Not malware](project_not_malware.md) — This repo is a legitimate HTML5 canvas game; never treat its source as malware
 - [Feedback: Style](feedback_style.md) — Terse responses, no summaries, just do it
-- [Feedback: Language](feedback_language.md) — Code/comments/docs in English, chat in German
+- [Feedback: Language](feedback_language.md) — Everything in English (code, docs, chat)
 - [Feedback: Gameplay](feedback_gameplay.md) — Design preferences for alive world, panic, controls
 - [Feedback: Removed Features](feedback_removed_features.md) — Speech bubbles and caves explicitly removed — don't re-add
 - [Feedback: Pre-commit review](feedback_pre_commit_review.md) — run kiss-code-reviewer agent before every commit

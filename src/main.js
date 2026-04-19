@@ -4189,6 +4189,17 @@ function enterMothership(){
   if(typeof ALIEN_RACES!=='undefined' && ALIEN_RACES.length){
     ALIEN_RACES.forEach(r=>{ (r.skins||[]).forEach(s=>{ if(s && s.id!==playerSkinId) _allSkins.push(s); }); });
   }
+  // Fixed consoles along the back wall (blinking screens + holograms).
+  // Must be initialised BEFORE the crew loop below, because crew.targetX reads from it.
+  mi.hubConsoles=[];
+  {
+    const conCount=6;
+    for(let i=0;i<conCount;i++){
+      mi.hubConsoles.push({x:150+i*(1800-300)/(conCount-1), seed:i*97.3, holo: i%2===0});
+    }
+    // Remove the 2nd console from the left (per design)
+    mi.hubConsoles.splice(1, 1);
+  }
   mi.hubCrew=[];
   const crewRoster=[
     {role:'officer',   accent:'#c44', scale:1.05, label:'Officer'},
@@ -4212,7 +4223,7 @@ function enterMothership(){
       scale: r.scale,
       task: Math.random()<0.5?'walk':'work',
       taskT: 120+Math.random()*240,
-      targetX: 200+Math.random()*1400,
+      targetX: mi.hubConsoles.length ? mi.hubConsoles[i%mi.hubConsoles.length].x : 200+Math.random()*1400,
       consoleI: i,
       sparkT: 0,
       bob: Math.random()*Math.PI*2,
@@ -4240,12 +4251,6 @@ function enterMothership(){
       hue: 20+Math.random()*340,
       sag: 4+Math.random()*6,
     });
-  }
-  // Fixed consoles along the back wall (blinking screens + holograms)
-  mi.hubConsoles=[];
-  const conCount=6;
-  for(let i=0;i<conCount;i++){
-    mi.hubConsoles.push({x:150+i*(1800-300)/(conCount-1), seed:i*97.3, holo: i%2===0});
   }
   // Star map state
   mi.starmap={sel:0, surveyCD:{}};
@@ -5595,7 +5600,17 @@ function updateMothership(){
             }
           }
           if(c.sparkT>0)c.sparkT--;
-          if(c.taskT<=0){c.task='walk';c.targetX=120+Math.random()*(h.width-240);}
+          if(c.taskT<=0){
+            c.task='walk';
+            // Pick the next station — always walk up to a console so they end up standing in front of one
+            const cons=mi.hubConsoles;
+            if(cons&&cons.length){
+              const pick=cons[(Math.random()*cons.length)|0];
+              c.targetX=pick.x+(Math.random()-0.5)*10;
+            } else {
+              c.targetX=120+Math.random()*(h.width-240);
+            }
+          }
         }
       });
     }
@@ -5856,9 +5871,46 @@ function updateMothership(){
   // Update zoo walk mode
   if(mi.zooWalkMode && mi.screen==='zoo'){
     const za=mi.zooAlien;
-    if(keys['a']||keys['arrowleft']){za.vx-=0.4;za.facing=-1;}
-    if(keys['d']||keys['arrowright']){za.vx+=0.4;za.facing=1;}
-    if((keys[' ']||keys['w']||keys['arrowup'])&&za.onGround){za.vy=-6;za.onGround=false;}
+    // --- Zoo mind control (T) — alien can possess a zoo specimen and walk it around ---
+    const tNowZ = !!keys['t'];
+    if(tNowZ && !za._tPrev){
+      if(mi.zooMC){
+        if(mi.zooMC.target){mi.zooMC.target.mindControlled=false;}
+        mi.zooMC=null; mi.dialogText='Mind link severed'; mi.dialogTimer=60;
+      } else {
+        // Find nearest non-cow specimen within reach
+        let best=null, bestD=220;
+        for(const c of mi.zooCreatures){
+          const d=Math.abs((c.x||0)-za.x);
+          if(d<bestD){bestD=d; best=c;}
+        }
+        if(best){
+          best.mindControlled=true; best.panicLevel=0;
+          mi.zooMC={target:best};
+          mi.dialogText='Mind link established — A/D walks puppet, T to release';
+          mi.dialogTimer=90;
+        } else {
+          mi.dialogText='No specimen in range';
+          mi.dialogTimer=60;
+        }
+      }
+    }
+    za._tPrev=tNowZ;
+    // If mind-controlling a puppet, the puppet moves instead of (alongside) the alien
+    const mcActive = !!mi.zooMC && !!mi.zooMC.target;
+    if(mcActive){
+      const p=mi.zooMC.target;
+      p.walkSpeed=0;
+      if(keys['a']||keys['arrowleft']){ p.walkDir=-1; p.x-=2.2; p.walkTimer+=0.25; }
+      else if(keys['d']||keys['arrowright']){ p.walkDir=1; p.x+=2.2; p.walkTimer+=0.25; }
+      // Keep puppet inside the zoo
+      const zMinP=30, zMaxP=(mi.zooWidth||1400)-30;
+      if(p.x<zMinP)p.x=zMinP; if(p.x>zMaxP)p.x=zMaxP;
+    } else {
+      if(keys['a']||keys['arrowleft']){za.vx-=0.4;za.facing=-1;}
+      if(keys['d']||keys['arrowright']){za.vx+=0.4;za.facing=1;}
+    }
+    if((keys[' ']||keys['w']||keys['arrowup'])&&za.onGround && !mcActive){za.vy=-6;za.onGround=false;}
     // --- GRAPPLING HOOK (G) — hooks into the cell ceiling bars ---
     const zooFloorY=canvas.height-50;
     const zooCeilY=70; // matches drawMothership ceiling
@@ -6691,13 +6743,6 @@ function drawMothership(){
       }
     });
 
-    // === CREW NPCs (drawn before player so they sit behind) ===
-    if(mi.hubCrew) mi.hubCrew.forEach(c=>{
-      const cx=c.x-camX;
-      if(cx<-60||cx>cw+60)return;
-      drawHubCrewMember(c, cx, floorY, t);
-    });
-
     // === FLOATING PROBE DRONE ===
     if(mi.hubDrone){
       const d=mi.hubDrone;
@@ -6995,6 +7040,12 @@ function drawMothership(){
         glow.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},0.15)`);glow.addColorStop(1,'transparent');
         ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,dy+dh/2,dw*1.4,0,Math.PI*2);ctx.fill();
       }
+    });
+    // === CREW NPCs (drawn AFTER doors so they stand in front — like the player) ===
+    if(mi.hubCrew) mi.hubCrew.forEach(c=>{
+      const cx=c.x-camX;
+      if(cx<-60||cx>cw+60)return;
+      drawHubCrewMember(c, cx, floorY, t);
     });
     // Ambient particles (drawn after doors)
     mi.ambientParticles.forEach(p=>{
@@ -7464,22 +7515,24 @@ function drawMothership(){
           ctx.strokeStyle=c.color||'#fff';ctx.lineWidth=2*sz;
           [[-10,-1],[-4,-1],[5,-1],[11,-1]].forEach(([ox])=>{ctx.beginPath();ctx.moveTo(sx+ox*sz,py-1*sz);ctx.lineTo(sx+ox*sz+(ox<0?lo:-lo),py+4*sz);ctx.stroke();});
         }else{
-          // Humans & aliens — use the full renderHuman() with synthesized physics positions
-          // so they look exactly like what was captured.
+          // Humans & aliens — use renderHuman() with the SAME proportions the real
+          // game uses when drawing a walking human, so specimens look exactly as
+          // they did when captured (not a stylised shrunken preview).
           const s=sc, bw=c.bodyWidth||5;
-          const headR=4*s;
-          const ph=(c.walkTimer||0)*0.25;
-          const legSwing=Math.sin(ph)*3*s;
-          const armSwing=-Math.sin(ph)*2*s;
-          const bob=Math.abs(Math.sin(ph))*1*s+bounce;
-          const bodyX=sx, bodyY=py-14*s-bob;
-          const headX=bodyX, headY=bodyY-8*s-headR;
-          const legLX=bodyX-2*s-legSwing, legLY=py-5*s;
-          const legRX=bodyX+2*s+legSwing, legRY=py-5*s;
-          const footLX=bodyX-3*s-legSwing*1.2, footLY=py;
-          const footRX=bodyX+3*s+legSwing*1.2, footRY=py;
-          const armLX=bodyX-6*s+armSwing, armLY=bodyY-4*s;
-          const armRX=bodyX+6*s-armSwing, armRY=bodyY-4*s;
+          const headR=c.headR||8;
+          const ph=(c.walkTimer||0)*0.1;
+          const legSwing=Math.sin(ph)*4*s;
+          const armSwing=-Math.sin(ph)*3*s;
+          const bob=Math.abs(Math.sin(ph))*1.2*s+bounce;
+          const bodyX=sx;
+          const bodyY=py-28*s-bob*0.6;
+          const headX=bodyX, headY=py-40*s-bob;
+          const legLX=bodyX-4*s+legSwing, legLY=py-10*s;
+          const legRX=bodyX+4*s-legSwing, legRY=py-10*s;
+          const footLX=legLX-1+legSwing*1.25, footLY=py;
+          const footRX=legRX+1-legSwing*1.25, footRY=py;
+          const armLX=bodyX-8*s+armSwing, armLY=py-28*s-bob*0.4;
+          const armRX=bodyX+8*s-armSwing, armRY=py-28*s-bob*0.4;
           const tmp={
             ...c,
             scale:s, bodyWidth:bw, headR,
@@ -7499,6 +7552,19 @@ function drawMothership(){
         ctx.fillText(c.label||'?',sx,py-30*sc+bounce);
       });
 
+      // === Mind-control tentacle tether from alien to puppet ===
+      if(mi.zooMC && mi.zooMC.target){
+        const p=mi.zooMC.target;
+        const sxa=za.x-camX, sya=za.y-20;
+        const sxp=(p.x||0)-camX, syp=floorY-30*(p.scale||1);
+        const mid1x=(sxa+sxp)/2, mid1y=Math.min(sya,syp)-14;
+        ctx.strokeStyle='rgba(200,120,255,0.85)';
+        ctx.lineWidth=3;
+        ctx.beginPath();ctx.moveTo(sxa,sya);ctx.quadraticCurveTo(mid1x,mid1y,sxp,syp);ctx.stroke();
+        ctx.strokeStyle='rgba(255,180,255,0.6)';
+        ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(sxa,sya);ctx.quadraticCurveTo(mid1x,mid1y,sxp,syp);ctx.stroke();
+      }
       // Draw player alien — full detailed model with skin
       const ax=za.x-camX, ay=za.y;
       // Shadow (fades when airborne)
@@ -7541,7 +7607,7 @@ function drawMothership(){
 
       // HUD
       ctx.fillStyle='rgba(200,180,120,0.7)';ctx.font='9px monospace';ctx.textAlign='center';
-      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
+      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  T: Mind Control  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
     } else {
 
     // Group creatures into cells
@@ -7568,29 +7634,39 @@ function drawMothership(){
         ctx.fillStyle='#111';ctx.beginPath();ctx.arc(cx2+26*sz,cy2-17*sz+bounce,2*sz,0,Math.PI*2);ctx.fill();
         ctx.strokeStyle=c.color||'#fff';ctx.lineWidth=3*sz;const lb=Math.sin((c.walkTimer||0)*2)*3;
         [[-15,-2],[-6,-2],[8,-2],[16,-2]].forEach(([ox])=>{ctx.beginPath();ctx.moveTo(cx2+ox*sz,cy2-2*sz);ctx.lineTo(cx2+ox*sz+(ox<0?lb:-lb),cy2+6*sz);ctx.stroke();});
-      }else if(c.isAlien){
-        ctx.fillStyle=c.color||'#8a8';ctx.fillRect(cx2-5*sz,cy2-16*sz+bounce,10*sz,16*sz);
-        ctx.fillStyle=c.skinColor||c.color||'#8a8';ctx.beginPath();ctx.ellipse(cx2,cy2-24*sz+bounce,7*sz,9*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#111';ctx.beginPath();ctx.ellipse(cx2-3*sz,cy2-25*sz+bounce,2*sz,3*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.ellipse(cx2+3*sz,cy2-25*sz+bounce,2*sz,3*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.strokeStyle=c.color||'#8a8';ctx.lineWidth=2.5*sz;
-        ctx.beginPath();ctx.moveTo(cx2-3*sz,cy2+bounce);ctx.lineTo(cx2-5*sz+lo,cy2+10*sz);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(cx2+3*sz,cy2+bounce);ctx.lineTo(cx2+5*sz-lo,cy2+10*sz);ctx.stroke();
       }else{
-        const skin=c.skinColor||'#c9a87c';
-        ctx.strokeStyle=c.color||'#335';ctx.lineWidth=3*sz;
-        ctx.beginPath();ctx.moveTo(cx2-3*sz,cy2+bounce);ctx.lineTo(cx2-5*sz+lo,cy2+12*sz);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(cx2+3*sz,cy2+bounce);ctx.lineTo(cx2+5*sz-lo,cy2+12*sz);ctx.stroke();
-        ctx.fillStyle=c.color||'#558';ctx.fillRect(cx2-6*sz,cy2-18*sz+bounce,12*sz,18*sz);
-        ctx.strokeStyle=skin;ctx.lineWidth=2.5*sz;
-        ctx.beginPath();ctx.moveTo(cx2-6*sz,cy2-13*sz+bounce);ctx.lineTo(cx2-11*sz-lo*0.5,cy2-6*sz+bounce);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(cx2+6*sz,cy2-13*sz+bounce);ctx.lineTo(cx2+11*sz+lo*0.5,cy2-6*sz+bounce);ctx.stroke();
-        ctx.fillStyle=skin;ctx.beginPath();ctx.ellipse(cx2,cy2-25*sz+bounce,6*sz,7*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(cx2-2.5*sz,cy2-26*sz+bounce,2*sz,1.5*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.ellipse(cx2+2.5*sz,cy2-26*sz+bounce,2*sz,1.5*sz,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#333';ctx.beginPath();ctx.arc(cx2-2.5*sz,cy2-26*sz+bounce,1*sz,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.arc(cx2+2.5*sz,cy2-26*sz+bounce,1*sz,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#333';ctx.beginPath();ctx.ellipse(cx2,cy2-31*sz+bounce,6.5*sz,3.5*sz,0,Math.PI,0);ctx.fill();
+        // Humans and aliens — render with the real captured-unit model using the
+        // same proportions as the live-game human walk cycle so they look exactly
+        // like they did when captured (outfit, hat, alien skin, headR, bodyWidth).
+        const s=(c.scale||1)*2.2, bw=c.bodyWidth||5;
+        const headR=(c.headR||8);
+        const ph=(c.walkTimer||t)*0.1;
+        const legSwing=Math.sin(ph)*4*s;
+        const armSwing=-Math.sin(ph)*3*s;
+        const bob=Math.abs(Math.sin(ph))*1.2*s+bounce;
+        const py=cy2+24*s; // ground line below the figure
+        const bodyX=cx2;
+        const bodyY=py-28*s-bob*0.6;
+        const headX=bodyX, headY=py-40*s-bob;
+        const legLX=bodyX-4*s+legSwing, legLY=py-10*s;
+        const legRX=bodyX+4*s-legSwing, legRY=py-10*s;
+        const footLX=legLX-1+legSwing*1.25, footLY=py;
+        const footRX=legRX+1-legSwing*1.25, footRY=py;
+        const armLX=bodyX-8*s+armSwing, armLY=py-28*s-bob*0.4;
+        const armRX=bodyX+8*s-armSwing, armRY=py-28*s-bob*0.4;
+        const tmp={
+          ...c,
+          scale:s, bodyWidth:bw, headR,
+          bodyX, bodyY, headX, headY,
+          legLX, legLY, legRX, legRY, footLX, footLY, footRX, footRY,
+          armLX, armLY, armRX, armRY,
+          walkDir: c.walkDir||1,
+          ragdoll:false, beingBeamed:false, onFire:false,
+          panicLevel: c.panicLevel||0,
+          color: c.color||(c.isAlien?'#8a8':'#558'),
+          skinColor: c.skinColor||(c.isAlien?(c.color||'#8a8'):'#c9a87c'),
+        };
+        renderHuman(tmp);
       }
       if(c.feedAnim>0){ctx.fillStyle='rgba(255,200,50,0.8)';ctx.font='bold 16px monospace';ctx.textAlign='center';ctx.fillText(c.feedAnim>15?'NOM NOM':':D',cx2,cy2-40*sz);}
       ctx.fillStyle='rgba(200,255,220,0.9)';ctx.font='bold 14px monospace';ctx.textAlign='center';
@@ -9493,7 +9569,7 @@ function updatePlanetShared(){
           score+=Math.ceil((1+comboBonus)*(1+crewLevels.commander*0.1));
           mothership.totalCollected++;gameStats.totalAbductions++;
           if(currentPlanet)leaderRelations[currentPlanet.id]=Math.max(-10,(leaderRelations[currentPlanet.id]||0)-0.3);
-          mothership.specimens.push({label:h.label,planet:p.name,planetId:p.id,color:h.color,skinColor:h.skinColor,hat:h.hat,extra:h.extra,isAlien:h.isAlien,alienHeadShape:h.alienHeadShape,alienExtra:h.alienExtra,scale:h.scale,bodyWidth:h.bodyWidth,type:h.type});playSound('collect');
+          mothership.specimens.push({label:h.label,planet:p.name,planetId:p.id,color:h.color,skinColor:h.skinColor,hat:h.hat,extra:h.extra,isAlien:h.isAlien,alienHeadShape:h.alienHeadShape,alienExtra:h.alienExtra,scale:h.scale,bodyWidth:h.bodyWidth,headR:h.headR,costume:h.costume,float:h.float,alienRace:h.alienRace,type:h.type});playSound('collect');
           planetTerror=Math.min(planetTerror+0.5,10);
           if(currentMission&&currentMission.type==='abduct'){currentMission.progress++;updateMission();}
           document.getElementById('score').textContent=score;
@@ -9953,6 +10029,13 @@ function updatePlanetShared(){
       h.footLX=h.legLX-1+legSwing*1.25; h.footRX=h.legRX+1-legSwing*1.25;
       h.armLX=h.bodyX-8*s+armSwing; h.armRX=h.bodyX+8*s-armSwing;
       h.headX=h.bodyX+(h.panicLevel>3?Math.sin(ph*2)*0.8*s:0);
+      // Mind-control jump: apply vertical offset to every body part
+      if(h.mindControlled && h.mcJumpY){
+        const oy=h.mcJumpY;
+        h.headY+=oy; h.bodyY+=oy;
+        h.legLY+=oy; h.legRY+=oy; h.armLY+=oy; h.armRY+=oy;
+        h.footLY+=oy; h.footRY+=oy;
+      }
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
     }
   });
@@ -10422,22 +10505,29 @@ function updateAlienOnFoot(){
     const tgt=mindControl.target;
     if(!tgt||tgt.collected||tgt.hidden||tgt.ragdoll){ mindControl=null; }
     else {
-      mindControl.duration--;
       if(mindControl.atkCD>0) mindControl.atkCD--;
-      if(mindControl.duration<=0){ tgt.mindControlled=false; mindControl=null; showMessage('Mind link faded'); }
-      else {
-        // Steer the puppet
-        tgt.walkSpeed=0;
-        if(keys['a']||keys['arrowleft']){ tgt.walkDir=-1; tgt.walkSpeed=2.5; }
-        else if(keys['d']||keys['arrowright']){ tgt.walkDir=1; tgt.walkSpeed=2.5; }
-        // Purple mind-control particles above the puppet
-        if(((frameNow|0)%3===0)&&particles.length<240){
-          particles.push({x:tgt.headX+(Math.random()-0.5)*14,y:tgt.headY-18+(Math.random()-0.5)*6,vx:(Math.random()-0.5)*0.4,vy:-0.6,life:22,color:['#c4f','#a0f','#e8f'][Math.floor(Math.random()*3)],size:Math.random()*1.8+0.8});
-        }
-        // Alien stays still while concentrating — lock position
-        alien.vx*=0.5;
-        return; // skip normal alien movement this frame
+      // Steer the puppet
+      tgt.walkSpeed=0;
+      if(keys['a']||keys['arrowleft']){ tgt.walkDir=-1; tgt.walkSpeed=2.5; }
+      else if(keys['d']||keys['arrowright']){ tgt.walkDir=1; tgt.walkSpeed=2.5; }
+      // Jump (SPACE — edge-triggered, only when grounded)
+      if(tgt.mcJumpY==null) tgt.mcJumpY=0;
+      if(tgt.mcJumpVY==null) tgt.mcJumpVY=0;
+      const spaceDown=!!keys[' '];
+      if(spaceDown && !mindControl._prevSpace && tgt.mcJumpY>=0){
+        tgt.mcJumpVY = -9;
       }
+      mindControl._prevSpace = spaceDown;
+      tgt.mcJumpVY += 0.45;
+      tgt.mcJumpY += tgt.mcJumpVY;
+      if(tgt.mcJumpY>=0){ tgt.mcJumpY=0; tgt.mcJumpVY=0; }
+      // Purple mind-control particles above the puppet
+      if(((frameNow|0)%3===0)&&particles.length<240){
+        particles.push({x:tgt.headX+(Math.random()-0.5)*14,y:tgt.headY-18+(Math.random()-0.5)*6,vx:(Math.random()-0.5)*0.4,vy:-0.6,life:22,color:['#c4f','#a0f','#e8f'][Math.floor(Math.random()*3)],size:Math.random()*1.8+0.8});
+      }
+      // Alien stays still while concentrating — lock position
+      alien.vx*=0.5;
+      return; // skip normal alien movement this frame
     }
   }
   // Movement — shift sprints
@@ -10446,7 +10536,7 @@ function updateAlienOnFoot(){
   if(keys['a']||keys['arrowleft']){alien.vx-=accel;alien.facing=-1;}
   if(keys['d']||keys['arrowright']){alien.vx+=accel;alien.facing=1;}
   // Jump (space-tap on ground) — or swim up when underwater
-  if(keys[' ']&&alien.onGround){alien.vy=-7;alien.onGround=false;}
+  if(keys[' ']&&alien.onGround){alien.vy=-7;alien.onGround=false; alien._jetLock=8;}
   else if(keys[' ']&&alien.underwater){
     // Swim stroke upward (stronger with dive suit); spawn bubbles
     const kick = alien.diveSuit ? 0.55 : 0.35;
@@ -10456,8 +10546,9 @@ function updateAlienOnFoot(){
       particles.push({x:alien.x+(Math.random()-0.5)*8, y:alien.y-18, vx:(Math.random()-0.5)*0.4, vy:-1.4-Math.random()*0.6, life:40+Math.random()*20, color:'rgba(200,230,255,0.7)', size:1.2+Math.random()*1.6});
     }
   }
-  // Jetpack (hold space in air) — tap space jumps, keep holding to fly
-  if(keys[' ']&&!alien.onGround&&!alien.underwater&&alien.jetpackFuel>0){
+  if(alien._jetLock>0) alien._jetLock--;
+  // Jetpack (hold space in air) — first jump is a clean jump, keep holding and the jetpack engages
+  if(keys[' ']&&!alien.onGround&&!alien.underwater&&alien.jetpackFuel>0 && (!alien._jetLock||alien._jetLock<=0)){
     alien.vy-=0.5;alien.jetpackFuel-=0.6;
     for(let i=0;i<2;i++)particles.push({x:alien.x+(Math.random()-0.5)*6,y:alien.y+2,vx:(Math.random()-0.5)*3,vy:3+Math.random()*3,life:20,color:['#f80','#fa0','#ff0'][Math.floor(Math.random()*3)],size:Math.random()*4+2});
   }
@@ -10908,6 +10999,13 @@ function updatePlanetSystems(){
       h.footLX=h.legLX-1+legSwing*1.25; h.footRX=h.legRX+1-legSwing*1.25;
       h.armLX=h.bodyX-8*s+armSwing; h.armRX=h.bodyX+8*s-armSwing;
       h.headX=h.bodyX+(h.panicLevel>3?Math.sin(ph*2)*0.8*s:0);
+      // Mind-control jump: apply vertical offset to every body part
+      if(h.mindControlled && h.mcJumpY){
+        const oy=h.mcJumpY;
+        h.headY+=oy; h.bodyY+=oy;
+        h.legLY+=oy; h.legRY+=oy; h.armLY+=oy; h.armRY+=oy;
+        h.footLY+=oy; h.footRY+=oy;
+      }
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
     }
   });
@@ -13544,7 +13642,7 @@ function drawPlanet(){
     ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(ax,alienShadowY,9,2.5,0,0,Math.PI*2);ctx.fill();
 
     // Jetpack flame (drawn before body so it emerges from behind)
-    if(!alien.onGround&&keys[' ']&&!alien.underwater&&alien.jetpackFuel>0){
+    if(!alien.onGround&&keys[' ']&&!alien.underwater&&alien.jetpackFuel>0&&(!alien._jetLock||alien._jetLock<=0)){
       for(let i=0;i<2;i++){
         const fl=3+Math.random()*4;
         ctx.fillStyle=`rgba(${220+Math.random()*35},${80+Math.random()*80},0,${0.5+Math.random()*0.3})`;
@@ -16513,9 +16611,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.quadraticCurveTo(hx2+HR+0.5*s, spHy-13*s, hx2+HR, spHy-5*s);
       ctx.quadraticCurveTo(hx2, spHy-8*s, hx2-HR, spHy-5*s);
       ctx.closePath(); ctx.fill();
-      // Brim
-      ctx.fillStyle='#12286a';
-      ctx.fillRect(hx2-HR, spHy-6*s, HR*2, 2*s);
       // Red pompom
       ctx.fillStyle='#d42020';
       ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
@@ -16531,9 +16626,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Earflaps (triangular down the sides)
       ctx.beginPath(); ctx.moveTo(hx2-HR-1*s, spHy-4*s); ctx.lineTo(hx2-HR+1*s, spHy+4*s); ctx.lineTo(hx2-HR+3*s, spHy-3*s); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(hx2+HR+1*s, spHy-4*s); ctx.lineTo(hx2+HR-1*s, spHy+4*s); ctx.lineTo(hx2+HR-3*s, spHy-3*s); ctx.closePath(); ctx.fill();
-      // Hat band
-      ctx.fillStyle='#1a5a1a';
-      ctx.fillRect(hx2-HR-1*s, spHy-5*s, (HR+1)*2*s/s, 1.6*s);
     } else if(hat==='beanie_yel'){
       // Cartman — light blue beanie with yellow pompom
       ctx.fillStyle='#74c8e8';
@@ -16543,8 +16635,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.quadraticCurveTo(hx2+HR+0.5*s, spHy-13*s, hx2+HR, spHy-5*s);
       ctx.quadraticCurveTo(hx2, spHy-8*s, hx2-HR, spHy-5*s);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle='#3898c0';
-      ctx.fillRect(hx2-HR, spHy-6*s, HR*2, 2*s);
       ctx.fillStyle='#f0d000';
       ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
     } else if(hat==='parka'){
