@@ -8951,6 +8951,9 @@ function hijackNearestVehicle(){
   if(!nearest){showMessage('No vehicle nearby'); return;}
   alien.drivingVehicle=nearest;
   nearest.hijacked=true;
+  // Once a vehicle has been taken over by aliens it stays "alien-modified" visually
+  // even after the player leaves — the futuristic hover/neon retrofit persists.
+  nearest.alienified=true;
   nearest.indestructible=true;
   nearest.vx=0;
   // Panic humans nearby
@@ -13369,7 +13372,19 @@ function drawPlanet(){
     ctx.fillStyle='#fa0';ctx.beginPath();ctx.arc(m.x,m.y-2,1,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
   }else{m.trail.forEach(t=>{ctx.globalAlpha=t.life/15*0.5;ctx.fillStyle='#f80';ctx.beginPath();ctx.arc(t.x,t.y,2,0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;ctx.save();ctx.translate(m.x,m.y);ctx.rotate(Math.atan2(m.vy,m.vx));ctx.fillStyle='#888';ctx.fillRect(-8,-2,16,4);ctx.fillStyle='#f44';ctx.fillRect(6,-2,3,4);ctx.fillStyle='#fa0';ctx.beginPath();ctx.arc(-10,0,3+Math.random()*2,0,Math.PI*2);ctx.fill();ctx.restore();}});
   // Beam
-  if(ship.beamActive){const bx=ship.x,by=ship.y+15,ty=GROUND_LEVEL,bW=BEAM_WIDTH+upgrades.beamWidth*30;const bg=ctx.createLinearGradient(bx,by,bx,ty);bg.addColorStop(0,'rgba(0,255,100,0.4)');bg.addColorStop(0.5,'rgba(0,255,100,0.2)');bg.addColorStop(1,'rgba(0,255,100,0.1)');ctx.beginPath();ctx.moveTo(bx-15,by);ctx.lineTo(bx-bW/2,ty);ctx.lineTo(bx+bW/2,ty);ctx.lineTo(bx+15,by);ctx.closePath();ctx.fillStyle=bg;ctx.fill();ctx.strokeStyle='rgba(0,255,100,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(bx,ty,bW/2,bW/6,0,0,Math.PI*2);ctx.stroke();}
+  if(ship.beamActive){
+    // Match the beam's emission width to the ship's underside so small ships don't
+    // appear to project a beam wider than their hull.
+    const SHIP_BELLY_HALF={saucer:15,xwing:12,tie:8,falcon:15,wedge:14,rocket:8,shuttle:12,scout:7,bomber:12,organic:14,crystal:12,arrowhead:10,cargo:14,viper:10,sphere:14,needle:4,swarm:6,warbird:12,eggufo:12,manta:14,jellybell:10,dagger:8,wheelship:13,beetlepod:13};
+    const shipHalf=SHIP_BELLY_HALF[shipPaint.ship||'saucer']??15;
+    const bx=ship.x,by=ship.y+15,ty=GROUND_LEVEL,bW=BEAM_WIDTH+upgrades.beamWidth*30;
+    // Clamp top half-width so the beam cannot be wider than the ship belly,
+    // and never wider than the beam's ground footprint.
+    const topHalf=Math.min(shipHalf, bW/2);
+    const bg=ctx.createLinearGradient(bx,by,bx,ty);bg.addColorStop(0,'rgba(0,255,100,0.4)');bg.addColorStop(0.5,'rgba(0,255,100,0.2)');bg.addColorStop(1,'rgba(0,255,100,0.1)');
+    ctx.beginPath();ctx.moveTo(bx-topHalf,by);ctx.lineTo(bx-bW/2,ty);ctx.lineTo(bx+bW/2,ty);ctx.lineTo(bx+topHalf,by);ctx.closePath();ctx.fillStyle=bg;ctx.fill();
+    ctx.strokeStyle='rgba(0,255,100,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(bx,ty,bW/2,bW/6,0,0,Math.PI*2);ctx.stroke();
+  }
   // --- VEHICLES ---
   vehicles.forEach(v=>{
     if(v.x+v.w<camera.x-60||v.x>camera.x+canvas.width+60)return;
@@ -13377,7 +13392,7 @@ function drawPlanet(){
       ctx.globalAlpha=v.exploding/40;ctx.fillStyle='#f80';ctx.beginPath();ctx.arc(v.x+v.w/2,v.y,15+Math.random()*10,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;return;
     }
     if(!v.alive)return;
-    if(v.hijacked) renderHijackedVehicle(v);
+    if(v.hijacked||v.alienified) renderHijackedVehicle(v);
     else renderVehicle(v);
   });
 
@@ -17524,7 +17539,7 @@ const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
 const missileSfx=mkAudio('missile-sfx.wav',0.1,false);
-const lassoSfx=mkAudio('lasso-whip.wav',0.12,false);
+const lassoSfx=mkAudio('lasso-whip.wav',0.05,false);
 const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
 // Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
 const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
