@@ -76,8 +76,8 @@ const KEY_ACTIONS = [
   {id:'jump',        label:'Jump',               canonical:' ',     context:'foot'},
   {id:'fire',        label:'Fire Weapon',        canonical:'q',     context:'foot'},
   {id:'interact',    label:'Interact / Enter',   canonical:'e',     context:'foot'},
-  {id:'jetpack',     label:'Jetpack',            canonical:'shift', context:'foot'},
-  {id:'grapple',     label:'Grappling Hook',     canonical:'g',     context:'foot'},
+  {id:'sprint',      label:'Sprint',             canonical:'shift', context:'foot'},
+  {id:'grapple',     label:'Grappling Hook',     canonical:'c',     context:'foot'},
   {id:'switchWeap',  label:'Next Weapon',        canonical:'tab',   context:'foot'},
   {id:'toggleMode',  label:'Enter/Exit Ship',    canonical:'enter', context:'both'},
   {id:'hijackVeh',   label:'Hijack/Deploy Vehicle', canonical:'b',     context:'both'},
@@ -5495,7 +5495,7 @@ function updateMothership(){
     // --- GRAPPLING HOOK (G) — hooks into the corridor ceiling ---
     // Ceiling height in alien-local coords: floor is y=0, ceiling ~ -(canvas.height-140)
     const hubCeilingY = -(canvas.height - 140);
-    const gNowH = !!keys['g'];
+    const gNowH = !!keys['c'];
     if(gNowH && !h._gPrev){
       if(h.grapple){ h.grapple=null; }
       else {
@@ -5862,7 +5862,7 @@ function updateMothership(){
     // --- GRAPPLING HOOK (G) — hooks into the cell ceiling bars ---
     const zooFloorY=canvas.height-50;
     const zooCeilY=70; // matches drawMothership ceiling
-    const gNowZ = !!keys['g'];
+    const gNowZ = !!keys['c'];
     if(gNowZ && !za._gPrev){
       if(za.grapple){ za.grapple=null; }
       else {
@@ -7118,7 +7118,7 @@ function drawMothership(){
     ctx.fillText(`Score: ${score}  |  Specimens: ${mothership.specimens.length}  |  Milk: ${milkScore}`,cw/2,46);
     // Bottom hint
     ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='10px monospace';ctx.textAlign='center';
-    ctx.fillText('A/D: Walk  |  SPACE: Jump  |  G: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
+    ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
 
   // ================================================================
   // BRIDGE - NPC portraits with speech
@@ -7541,7 +7541,7 @@ function drawMothership(){
 
       // HUD
       ctx.fillStyle='rgba(200,180,120,0.7)';ctx.font='9px monospace';ctx.textAlign='center';
-      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  G: Grapple  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
+      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
     } else {
 
     // Group creatures into cells
@@ -8044,6 +8044,11 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&e.key==='F4'){window._perfMode=!window._perfMode;showMessage(window._perfMode?'Performance mode ON':'Performance mode OFF');e.preventDefault();return;}
   if(!keys[k]&&k==='l'){flashlightOn=!flashlightOn;showMessage(flashlightOn?'Flashlight ON':'Flashlight OFF');return;}
   if(!keys[k]&&k==='t'&&playerMode==='onfoot'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){toggleMindControl();return;}
+  // Mind-control puppet actions
+  if(!keys[k]&&mindControl&&playerMode==='onfoot'&&gameMode==='planet'){
+    if(k==='q'){mindControlAttack(); keys[k]=true; e.preventDefault(); return;}
+    if(k==='f'){mindControlTransfer(); keys[k]=true; e.preventDefault(); return;}
+  }
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
     [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,lassoSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
@@ -8406,8 +8411,53 @@ function toggleMindControl(){
   }
   if(!best){showMessage('No target in range'); return;}
   best.mindControlled=true; best.panicLevel=0; best.crying=false; best.stunTimer=0;
-  mindControl = {target:best, duration:600};
-  showMessage('Mind link established — A/D to walk the puppet');
+  mindControl = {target:best, duration:600, atkCD:0};
+  showMessage('Mind link established — A/D walk, Q attack, F transfer, T abort');
+}
+
+// Puppet swings at the nearest other human.
+function mindControlAttack(){
+  if(!mindControl||!mindControl.target) return;
+  if((mindControl.atkCD||0)>0) return;
+  const p=mindControl.target;
+  // Find nearest other human within swing range
+  let victim=null, bestD=36;
+  for(const h of humans){
+    if(h===p||h.collected||h.hidden||h.ragdoll||h.isDino) continue;
+    const d=dist(p.bodyX,p.bodyY,h.bodyX,h.bodyY);
+    if(d<bestD){bestD=d; victim=h;}
+  }
+  mindControl.atkCD=22;
+  p.armSwing=1; p.armSwingTimer=10;
+  if(!victim){ return; }
+  const dir=victim.bodyX<p.bodyX?-1:1;
+  victim.ragdoll=true; victim.crying=true; victim.panicLevel=10;
+  applyForce(victim, dir*3, -3);
+  bleedEffect(victim, dir*2, -2, 1.4);
+  if(Math.random()<0.35) spawnGibs(victim, dir*2, -2, 1.2);
+  addScore(1);
+}
+
+// Transfer: alien teleports to puppet, puppet's body explodes.
+function mindControlTransfer(){
+  if(!mindControl||!mindControl.target) return;
+  const p=mindControl.target;
+  // Move alien to puppet position
+  alien.x=p.bodyX; alien.y=p.bodyY-6;
+  alien.vx=0; alien.vy=-2;
+  alien.onGround=false;
+  // Explode the body
+  spawnGibs(p, 0, -4, 3);
+  bleedEffect(p, 0, -3, 2.5);
+  p.ragdoll=true; p.mindControlled=false; p.panicLevel=10;
+  applyForce(p, (Math.random()-0.5)*2, -6);
+  if(!window._explosionFlashes) window._explosionFlashes=[];
+  window._explosionFlashes.push({x:p.bodyX,y:p.bodyY,r:6,maxR:38,life:14});
+  for(let i=0;i<24;i++){
+    particles.push({x:p.bodyX,y:p.bodyY,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6-1,life:30,color:['#c4f','#a0f','#f0c','#fff'][Math.floor(Math.random()*4)],size:Math.random()*2+1});
+  }
+  mindControl=null;
+  showMessage('Transferred');
 }
 
 // E-key on foot: scavenge UFO wrecks or breach hidden bunkers when near one.
@@ -8692,7 +8742,7 @@ function explodeMissile(m){
   if(boss&&boss.alive){const bd=dist(m.x,m.y,boss.x,boss.y);if(bd<R+50)damageBoss(10,'missile');}
 }
 
-function showMessage(msg){const el=document.getElementById('message');el.textContent=msg;el.style.opacity=1;messageTimer=180;}
+function showMessage(msg){/* bottom-center status message disabled */ const el=document.getElementById('message'); if(el){el.textContent='';el.style.opacity=0;} messageTimer=0;}
 
 function nukeplanet(){
   if(window._nukeCooldown>0)return;
@@ -10373,6 +10423,7 @@ function updateAlienOnFoot(){
     if(!tgt||tgt.collected||tgt.hidden||tgt.ragdoll){ mindControl=null; }
     else {
       mindControl.duration--;
+      if(mindControl.atkCD>0) mindControl.atkCD--;
       if(mindControl.duration<=0){ tgt.mindControlled=false; mindControl=null; showMessage('Mind link faded'); }
       else {
         // Steer the puppet
@@ -10389,11 +10440,12 @@ function updateAlienOnFoot(){
       }
     }
   }
-  // Movement
-  const walkSpeed=2.5;
-  if(keys['a']||keys['arrowleft']){alien.vx-=0.5;alien.facing=-1;}
-  if(keys['d']||keys['arrowright']){alien.vx+=0.5;alien.facing=1;}
-  // Jump (space) — or swim up when underwater
+  // Movement — shift sprints
+  const sprinting = !!keys['shift'] && !alien.underwater;
+  const accel = sprinting ? 0.9 : 0.5;
+  if(keys['a']||keys['arrowleft']){alien.vx-=accel;alien.facing=-1;}
+  if(keys['d']||keys['arrowright']){alien.vx+=accel;alien.facing=1;}
+  // Jump (space-tap on ground) — or swim up when underwater
   if(keys[' ']&&alien.onGround){alien.vy=-7;alien.onGround=false;}
   else if(keys[' ']&&alien.underwater){
     // Swim stroke upward (stronger with dive suit); spawn bubbles
@@ -10404,8 +10456,8 @@ function updateAlienOnFoot(){
       particles.push({x:alien.x+(Math.random()-0.5)*8, y:alien.y-18, vx:(Math.random()-0.5)*0.4, vy:-1.4-Math.random()*0.6, life:40+Math.random()*20, color:'rgba(200,230,255,0.7)', size:1.2+Math.random()*1.6});
     }
   }
-  // Jetpack (shift)
-  if(keys['shift']&&alien.jetpackFuel>0){
+  // Jetpack (hold space in air) — tap space jumps, keep holding to fly
+  if(keys[' ']&&!alien.onGround&&!alien.underwater&&alien.jetpackFuel>0){
     alien.vy-=0.5;alien.jetpackFuel-=0.6;
     for(let i=0;i<2;i++)particles.push({x:alien.x+(Math.random()-0.5)*6,y:alien.y+2,vx:(Math.random()-0.5)*3,vy:3+Math.random()*3,life:20,color:['#f80','#fa0','#ff0'][Math.floor(Math.random()*3)],size:Math.random()*4+2});
   }
@@ -10425,8 +10477,8 @@ function updateAlienOnFoot(){
   for(let ci=0;ci<alien.weaponCD.length;ci++) if(alien.weaponCD[ci]>0) alien.weaponCD[ci]--;
   alien.shootCooldown=Math.max(0,alien.shootCooldown-1);
 
-  // --- GRAPPLING HOOK (G) ---
-  const gNow = !!keys['g'];
+  // --- GRAPPLING HOOK (C) ---
+  const gNow = !!keys['c'];
   if(gNow && !alien._gPrev){
     if(alien.grapple){
       alien.grapple = null; // release
@@ -13492,7 +13544,7 @@ function drawPlanet(){
     ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(ax,alienShadowY,9,2.5,0,0,Math.PI*2);ctx.fill();
 
     // Jetpack flame (drawn before body so it emerges from behind)
-    if(!alien.onGround&&keys['shift']){
+    if(!alien.onGround&&keys[' ']&&!alien.underwater&&alien.jetpackFuel>0){
       for(let i=0;i<2;i++){
         const fl=3+Math.random()*4;
         ctx.fillStyle=`rgba(${220+Math.random()*35},${80+Math.random()*80},0,${0.5+Math.random()*0.3})`;
@@ -13813,7 +13865,11 @@ function drawPlanet(){
     const nearWreck = (typeof ufoWrecks!=='undefined') && ufoWrecks.some(w=>!w.looted && Math.abs(w.x-alien.x)<70 && Math.abs((w.y||GROUND_LEVEL)-alien.y)<80);
     const nearBunker = (typeof hiddenBunkers!=='undefined') && hiddenBunkers.some(b=>!b.looted && b.revealed && Math.abs((b.x+(b.w||40)/2)-alien.x)<70);
     const mc = !!(typeof mindControl!=='undefined' && mindControl);
-    const aChips = [
+    const aChips = mc ? [
+      {label:'ATTACK',   key:'Q', active: (mindControl.atkCD||0)>0, col:[255,120,120]},
+      {label:'TRANSFER', key:'F', active: false,                    col:[200,120,255]},
+      {label:'ABORT',    key:'T', active: false,                    col:[200,200,200]},
+    ] : [
       {label:'SHIP',  key:'ENT', active: false,                    col:[120,200,255]},
       {label:'HIJK',  key:'B',   active: nearVeh,                   col:[255,200,80]},
       {label:'INTR',  key:'E',   active: nearWreck||nearBunker,     col:[140,255,160]},
@@ -13823,7 +13879,7 @@ function drawPlanet(){
     ];
     const cw=48, cg=4;
     const ctotal = aChips.length*cw + (aChips.length-1)*cg;
-    const chx=(canvas.width-ctotal)/2, chy=canvas.height-80;
+    const chx=(canvas.width-ctotal)/2, chy=canvas.height-40;
     ctx.fillStyle='rgba(0,0,0,0.45)';
     ctx.fillRect(chx-6, chy-6, ctotal+12, 34);
     for(let i=0;i<aChips.length;i++){
@@ -13850,7 +13906,7 @@ function drawPlanet(){
     const _lo=getRaceWeapons();
     const slots=_lo.length;
     const sw=40, gap=4, total=slots*sw+(slots-1)*gap;
-    const hx=(canvas.width-total)/2, hy=canvas.height-44;
+    const hx=(canvas.width-total)/2, hy=canvas.height-84;
     ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(hx-6,hy-6,total+12,40);
     for(let i=0;i<slots;i++){
       const sx=hx+i*(sw+gap), sy=hy;
