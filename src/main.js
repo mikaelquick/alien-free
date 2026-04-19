@@ -289,7 +289,6 @@ const RACE_LOADOUTS = {
   cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
   cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
   southpark: ['stunner','wail','rocket','acid','swarm','chainsaw'],
-  bigfoot:   ['chainsaw','stunner','wail','swarm','gwell','plasma'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -9411,15 +9410,8 @@ function updatePlanetShared(){
     let spawnX=Math.max(100,Math.min(worldWidth-100,px+(Math.random()>0.5?1:-1)*(200+Math.random()*300)));
     // Don't spawn in ocean
     if(currentPlanet&&currentPlanet.id==='earth'&&isOverOcean(spawnX)) spawnX=Math.random()*15000+200;
-    const hm=(1+getDifficultyLevel()*0.15)*Math.min(18,Math.pow(3,genocideCount));
     generateInhabitant(spawnX);
-    const sc=currentPlanet?.id==='mars'?'#653':currentPlanet?.id==='glimora'?'#a6f':currentPlanet?.id==='ice'?'#8be':currentPlanet?.id==='lava'?'#f42':'#363';
-    military.push({type:'soldier',x:spawnX+(Math.random()>0.5?50:-50),
-      y:GROUND_LEVEL-20,vx:0,facing:1,shootTimer:0,
-      health:Math.ceil(3*hm),alive:true,color:sc,gunColor:'#555'});
-    military.push({type:'helicopter',x:spawnX,y:GROUND_LEVEL-400-Math.random()*200,vx:0,vy:0,
-      alive:true,health:Math.ceil(8*hm),shootTimer:0,rotorAngle:0});
-    showMessage(tr('msg.reinforcements'));
+    // Military reinforcements disabled — military is turned off on all planets.
   }
   // Boss intro pauses gameplay
   if(updateBossIntro())return;
@@ -9578,7 +9570,7 @@ function updatePlanetShared(){
           score+=Math.ceil((1+comboBonus)*(1+crewLevels.commander*0.1));
           mothership.totalCollected++;gameStats.totalAbductions++;
           if(currentPlanet)leaderRelations[currentPlanet.id]=Math.max(-10,(leaderRelations[currentPlanet.id]||0)-0.3);
-          mothership.specimens.push({label:h.label,planet:p.name,planetId:p.id,color:h.color,skinColor:h.skinColor,hat:h.hat,extra:h.extra,isAlien:h.isAlien,alienHeadShape:h.alienHeadShape,alienExtra:h.alienExtra,scale:h.scale,bodyWidth:h.bodyWidth,headR:h.headR,costume:h.costume,float:h.float,alienRace:h.alienRace,type:h.type});playSound('collect');
+          mothership.specimens.push({label:h.label,planet:p.name,planetId:p.id,color:h.color,skinColor:h.skinColor,hat:h.hat,extra:h.extra,isAlien:h.isAlien,alienHeadShape:h.alienHeadShape,alienExtra:h.alienExtra,scale:h.scale,bodyWidth:h.bodyWidth,headR:h.headR,costume:h.costume,float:h.float,alienRace:h.alienRace,type:h.type,isAstronaut:h.isAstronaut,isDino:h.isDino,dinoKind:h.dinoKind,biped:h.biped});playSound('collect');
           planetTerror=Math.min(planetTerror+0.5,10);
           if(currentMission&&currentMission.type==='abduct'){currentMission.progress++;updateMission();}
           document.getElementById('score').textContent=score;
@@ -13375,7 +13367,7 @@ function drawPlanet(){
   if(ship.beamActive){
     // Match the beam's emission width to the ship's underside so small ships don't
     // appear to project a beam wider than their hull.
-    const SHIP_BELLY_HALF={saucer:15,xwing:12,tie:8,falcon:15,wedge:14,rocket:8,shuttle:12,scout:7,bomber:12,organic:14,crystal:12,arrowhead:10,cargo:14,viper:10,sphere:14,needle:4,swarm:6,warbird:12,eggufo:12,manta:14,jellybell:10,dagger:8,wheelship:13,beetlepod:13};
+    const SHIP_BELLY_HALF={saucer:15,xwing:12,tie:8,falcon:15,wedge:14,rocket:8,shuttle:12,scout:7,bomber:12,organic:14,crystal:12,arrowhead:10,cargo:14,viper:10,sphere:14,needle:4,swarm:6,warbird:12,eggufo:12,manta:14,jellybell:10,dagger:8,wheelship:13,beetlepod:13,domepod:14};
     const shipHalf=SHIP_BELLY_HALF[shipPaint.ship||'saucer']??15;
     const bx=ship.x,by=ship.y+15,ty=GROUND_LEVEL,bW=BEAM_WIDTH+upgrades.beamWidth*30;
     // Clamp top half-width so the beam cannot be wider than the ship belly,
@@ -14832,6 +14824,85 @@ function drawShipBody(pc,pa,pt,type){
       ctx.beginPath(); ctx.moveTo(lx,4); ctx.lineTo(lx-2,9+s*0.5); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(lx,4); ctx.lineTo(lx+2,9-s*0.5); ctx.stroke();
     });
+  } else if(type==='domepod'){
+    // Dome Pod — saucer-style disc with a huge transparent bubble canopy on top.
+    // The current player alien is drawn inside the bubble so you can see the pilot.
+    // Lower disc body
+    ctx.fillStyle = pa;
+    ctx.beginPath(); ctx.ellipse(0, 4, 34, 8, 0, 0, Math.PI*2); ctx.fill();
+    // Disc rim highlight
+    const rimG = ctx.createLinearGradient(0, -2, 0, 10);
+    rimG.addColorStop(0, lerpColor(pc, '#ffffff', 0.15));
+    rimG.addColorStop(1, lerpColor(pa, '#000000', 0.3));
+    ctx.fillStyle = rimG;
+    ctx.beginPath(); ctx.ellipse(0, 2, 30, 5, 0, 0, Math.PI*2); ctx.fill();
+    // Underside shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(0, 7, 24, 3, 0, 0, Math.PI*2); ctx.fill();
+    // Rivet ring
+    ctx.fillStyle = lerpColor(pa, '#000', 0.3);
+    for(let i=0;i<12;i++){
+      const a = (i/12)*Math.PI*2;
+      ctx.beginPath(); ctx.arc(Math.cos(a)*28, Math.sin(a)*2+3, 0.8, 0, Math.PI*2); ctx.fill();
+    }
+    // Blinking lights around the rim
+    for(let i=0;i<5;i++){
+      const lxp = -20 + i*10;
+      const lit = (Math.floor(ship.lightPhase*2) + i) % 3 === 0;
+      ctx.fillStyle = lit ? pt : lerpColor(pt, '#000', 0.7);
+      ctx.beginPath(); ctx.arc(lxp, 6, 1.3, 0, Math.PI*2); ctx.fill();
+    }
+    // Bubble canopy — large transparent dome on top
+    ctx.save();
+    // Glass base ring
+    ctx.fillStyle = lerpColor(pa, '#000', 0.25);
+    ctx.beginPath(); ctx.ellipse(0, -2, 20, 3, 0, 0, Math.PI*2); ctx.fill();
+    // Transparent bubble (behind the pilot so they show through)
+    const bubbleGrad = ctx.createRadialGradient(-4, -10, 2, 0, -8, 22);
+    bubbleGrad.addColorStop(0, 'rgba(220,240,255,0.35)');
+    bubbleGrad.addColorStop(0.6, 'rgba(160,200,230,0.18)');
+    bubbleGrad.addColorStop(1, 'rgba(100,140,180,0.25)');
+    ctx.fillStyle = bubbleGrad;
+    ctx.beginPath(); ctx.ellipse(0, -8, 18, 16, 0, Math.PI, 0); ctx.fill();
+    ctx.restore();
+    // Draw the player alien INSIDE the bubble canopy (scaled down)
+    // Only draw pilot when this is the player ship (not in ship previews which have their own code path).
+    // We check via whether this render is for the actual ship — drawShipBody is called from both
+    // drawShip() (actual player ship) and from preview UI. We gate by shipPaint.ship === 'domepod'
+    // and a flag set from drawShip.
+    if(window._domeShipPilot){
+      ctx.save();
+      // Clip to the bubble so the pilot never overflows
+      ctx.beginPath(); ctx.ellipse(0, -8, 17, 15, 0, Math.PI, 0); ctx.clip();
+      // Pilot sits on the disc deck (y=0-ish) at a small scale
+      const pilotSkin = (typeof getAlienSkin === 'function') ? getAlienSkin() : null;
+      if(pilotSkin){
+        // Alien looks forward (ship facing handled by the outer rotation in drawShip)
+        drawAlienPreview(-1, 0, 0.55, pilotSkin, 1, ship.lightPhase*2);
+      }
+      ctx.restore();
+    }
+    // Bubble outer highlight (on top of pilot — the glossy sheen)
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(0, -8, 18, 16, 0, Math.PI+0.15, Math.PI*1.6); ctx.stroke();
+    // Bubble outline (full)
+    ctx.strokeStyle = 'rgba(180,210,240,0.6)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(0, -8, 18, 16, 0, Math.PI, 0); ctx.stroke();
+    // Top antenna with blinking light
+    ctx.strokeStyle = pa; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(0, -30); ctx.stroke();
+    const antLit = Math.sin(ship.lightPhase*4) > 0;
+    ctx.fillStyle = antLit ? pt : lerpColor(pt, '#000', 0.7);
+    ctx.beginPath(); ctx.arc(0, -31, 1.5, 0, Math.PI*2); ctx.fill();
+    if(antLit){
+      ctx.fillStyle = `rgba(${parseInt((pt||'#fff').slice(1,3)||'ff',16)},${parseInt((pt||'#fff').slice(3,5)||'ff',16)},${parseInt((pt||'#fff').slice(5,7)||'ff',16)},0.35)`;
+      ctx.beginPath(); ctx.arc(0, -31, 4, 0, Math.PI*2); ctx.fill();
+    }
+    // Underside thruster exhaust
+    ctx.fillStyle = `rgba(120,240,255,${0.5+Math.sin(ship.lightPhase*2)*0.3})`;
+    ctx.beginPath(); ctx.ellipse(0, 9, 8, 2.5, 0, 0, Math.PI*2); ctx.fill();
   } else {
     // Classic saucer (default)
     ctx.fillStyle=pa;ctx.beginPath();ctx.ellipse(0,0,35,10,0,0,Math.PI*2);ctx.fill();
@@ -14877,7 +14948,10 @@ function drawShip(){
   if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(frameNow*0.005)*0.05;}
   const pc=shipPaint.color,pa=shipPaint.accent,pt=shipPaint.trail;
   const type=shipPaint.ship||'saucer';
+  // Enable pilot-in-bubble rendering only for the actual player ship (not UI previews).
+  window._domeShipPilot = true;
   drawShipBody(pc,pa,pt,type);
+  window._domeShipPilot = false;
   if(ship.boosting){for(let i=0;i<3;i++){ctx.fillStyle=`rgba(255,${Math.random()*100+100},0,${Math.random()*0.5+0.3})`;ctx.beginPath();ctx.arc((Math.random()-0.5)*20,10+Math.random()*10,Math.random()*4+2,0,Math.PI*2);ctx.fill();}}
   ctx.restore();
   if(gameMode==='space'&&(Math.abs(ship.vx)>1||Math.abs(ship.vy)>1)){for(let i=0;i<2;i++)particles.push({x:ship.x+(Math.random()-0.5)*10,y:ship.y+12,vx:-ship.vx*0.3+(Math.random()-0.5),vy:-ship.vy*0.3+(Math.random()-0.5),life:15+Math.random()*10,color:pt,size:Math.random()*2+1});}
@@ -16371,96 +16445,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Belt line
       ctx.fillStyle=ob;ctx.fillRect(ax-6*s,ay-8.5*s,12*s,1.2*s);
       ctx.fillStyle='#f8d060';ctx.fillRect(ax-1*s,ay-8.5*s,2*s,1.2*s);
-    } else if(outfit==='bigfoot'){
-      // Wookiee-style: broad shaggy torso with long flowing vertical fur streaks and a bandolier.
-      const furA = oa, furB = ob;
-      // Wide barrel torso base
-      ctx.fillStyle = furA;
-      ctx.beginPath();
-      ctx.moveTo(ax-10*s, ay-22*s);
-      ctx.quadraticCurveTo(ax-13*s, ay-14*s, ax-10*s, ay-4*s);
-      ctx.lineTo(ax+10*s, ay-4*s);
-      ctx.quadraticCurveTo(ax+13*s, ay-14*s, ax+10*s, ay-22*s);
-      ctx.quadraticCurveTo(ax, ay-24*s, ax-10*s, ay-22*s);
-      ctx.closePath(); ctx.fill();
-      // Long flowing vertical fur streaks all over torso (Wookiee signature look)
-      ctx.strokeStyle = furB; ctx.lineWidth = 0.7*s; ctx.lineCap = 'round';
-      for(let st=0; st<18; st++){
-        const sxn = ax - 10*s + st*1.2*s;
-        const topY = ay - 21*s + (st%3)*1.3*s;
-        const botY = ay - 4*s + (st%2)*1.5*s;
-        const sway = Math.sin(st*0.7)*0.6*s;
-        ctx.beginPath();
-        ctx.moveTo(sxn, topY);
-        ctx.quadraticCurveTo(sxn+sway, (topY+botY)*0.5, sxn+sway*0.5, botY);
-        ctx.stroke();
-      }
-      // Lighter highlight streaks for depth
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 0.5*s;
-      for(let st=0; st<10; st++){
-        const sxn = ax - 9*s + st*2*s;
-        ctx.beginPath();
-        ctx.moveTo(sxn, ay-20*s);
-        ctx.lineTo(sxn+0.3*s, ay-5*s);
-        ctx.stroke();
-      }
-      // Bandolier strap — diagonal leather belt across chest with metal pouches (Chewbacca-style)
-      const strapColA = '#3a2414';
-      const strapColB = '#5a3a20';
-      ctx.save();
-      ctx.translate(ax, ay-13*s);
-      ctx.rotate(-0.35*f);
-      ctx.fillStyle = strapColA;
-      ctx.fillRect(-14*s, -1.6*s, 28*s, 3.2*s);
-      // Strap stitching highlight
-      ctx.fillStyle = strapColB;
-      ctx.fillRect(-14*s, -1.6*s, 28*s, 0.5*s);
-      ctx.fillRect(-14*s, 1.1*s, 28*s, 0.5*s);
-      // Metal ammo pouches along the strap
-      ctx.fillStyle = '#8a8890';
-      for(let pk=-4; pk<=4; pk++){
-        ctx.fillRect(pk*2.6*s - 0.8*s, -0.9*s, 1.6*s, 1.8*s);
-      }
-      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 0.3*s;
-      for(let pk=-4; pk<=4; pk++){
-        ctx.strokeRect(pk*2.6*s - 0.8*s, -0.9*s, 1.6*s, 1.8*s);
-      }
-      ctx.restore();
-      // Shoulder fur mane — longer tufts cascading outward from neck down over shoulders
-      ctx.fillStyle = furA;
-      for(let sh=-1; sh<=1; sh+=2){
-        ctx.beginPath();
-        ctx.moveTo(ax + sh*5*s, ay-22*s);
-        ctx.quadraticCurveTo(ax + sh*13*s, ay-18*s, ax + sh*12*s, ay-10*s);
-        ctx.quadraticCurveTo(ax + sh*9*s, ay-14*s, ax + sh*6*s, ay-20*s);
-        ctx.closePath(); ctx.fill();
-      }
-      // Long shaggy fur skirt hanging past the hips (covers thigh tops)
-      ctx.fillStyle = furA;
-      for(let lf=0; lf<11; lf++){
-        const lx = ax - 9*s + lf*1.8*s;
-        const hang = 3*s + (lf%3)*1.5*s;
-        ctx.beginPath();
-        ctx.moveTo(lx, ay-5*s);
-        ctx.lineTo(lx+0.6*s, ay-5*s+hang);
-        ctx.lineTo(lx+1.8*s, ay-5*s+hang*0.7);
-        ctx.lineTo(lx+1.8*s, ay-5*s);
-        ctx.closePath(); ctx.fill();
-      }
-      // Fur cuffs at wrists
-      ctx.fillStyle = furA;
-      ctx.beginPath(); ctx.arc(ax-f*11*s, ay-6*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(ax+f*11*s, ay-6*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-      // Small fur streaks on wrists
-      ctx.strokeStyle = furB; ctx.lineWidth = 0.5*s;
-      for(let wr=-1; wr<=1; wr+=2){
-        for(let ws=0; ws<4; ws++){
-          ctx.beginPath();
-          ctx.moveTo(ax + wr*f*11*s - 1*s + ws*0.7*s, ay-7*s);
-          ctx.lineTo(ax + wr*f*11*s - 1*s + ws*0.7*s, ay-4*s);
-          ctx.stroke();
-        }
-      }
     } else if(outfit==='southpark'){
       // Bulky winter coat with puffy silhouette. Body sits lower because head is huge.
       // Cartman has a noticeably wider silhouette.
@@ -16910,8 +16894,8 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_sh2(0xa0);
     ctx.beginPath();ctx.ellipse(hx2-6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(hx2+6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
-    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path), bigfoot (full shaggy mane drawn below)
-    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark' && skin.outfit!=='bigfoot'){
+    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path)
+    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark'){
       ctx.fillStyle=skin.hair;
       ctx.beginPath();
       ctx.moveTo(hx2-6*s,hy2-2*s);
@@ -17007,88 +16991,6 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Slicked-back hair highlight already rendered via skin.hair; add shine stripe
       ctx.fillStyle='rgba(255,255,255,0.15)';
       ctx.fillRect(hx2-2*s,hy2-7*s,4*s,0.8*s);
-    } else if(skin.outfit==='bigfoot'){
-      // Wookiee-style animal head: shaggy mane, long muzzle, eye mask, visible fangs.
-      const fur = skin.hair || skin.body || '#5a3a20';
-      const furDark = skin.outfitB || '#2a1810';
-      const faceCol = skin.head || '#3a2810';
-      // Long flowing mane — vertical streaks cascading down past the jaw onto shoulders
-      ctx.strokeStyle = fur; ctx.lineWidth = 1.2*s; ctx.lineCap = 'round';
-      for(let mi=0; mi<16; mi++){
-        const ang = -Math.PI*0.95 + mi*(Math.PI*1.9/15);
-        const innerR = 6.5*s;
-        const lenExtra = (mi>4 && mi<11) ? 6*s : 10*s; // sides hang longer
-        const x1 = hx2 + Math.cos(ang)*innerR;
-        const y1 = hy2+1*s + Math.sin(ang)*innerR;
-        const x2 = hx2 + Math.cos(ang)*(innerR+lenExtra);
-        const y2 = hy2+1*s + Math.sin(ang)*(innerR+lenExtra) + (ang>0 ? 2*s : 0);
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.quadraticCurveTo((x1+x2)*0.5, (y1+y2)*0.5, x2, y2);
-        ctx.stroke();
-      }
-      // Fill behind the streaks (soft mane silhouette)
-      ctx.fillStyle = fur;
-      ctx.beginPath();
-      ctx.ellipse(hx2, hy2+1*s, 10*s, 10*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Inner face — elongated muzzle shape, narrower & poking out in facing direction
-      ctx.fillStyle = furDark;
-      ctx.beginPath();
-      ctx.ellipse(hx2 + f*1.2*s, hy2+2*s, 7.5*s, 8*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Face skin — snout protrudes forward (elongated along facing axis)
-      ctx.fillStyle = faceCol;
-      ctx.beginPath();
-      ctx.ellipse(hx2 + f*1.8*s, hy2+3*s, 5.2*s, 5.8*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Lighter muzzle tip (Wookiee pale patch around nose/mouth)
-      const muzzleCol = lerpColor(faceCol, '#e8d8b8', 0.35);
-      ctx.fillStyle = muzzleCol;
-      ctx.beginPath();
-      ctx.ellipse(hx2 + f*3*s, hy2+5*s, 3.2*s, 3.4*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Dark eye mask band across the eyes
-      ctx.fillStyle = furDark;
-      ctx.beginPath();
-      ctx.ellipse(hx2 + f*0.5*s, hy2+0.5*s, 5.5*s, 1.8*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Heavy protruding brow above the eye mask
-      ctx.fillStyle = furDark;
-      ctx.beginPath();
-      ctx.moveTo(hx2-5*s, hy2-1.5*s);
-      ctx.quadraticCurveTo(hx2+f*1*s, hy2-4*s, hx2+6*s, hy2-1.5*s);
-      ctx.quadraticCurveTo(hx2+f*1*s, hy2-1.8*s, hx2-5*s, hy2-1.5*s);
-      ctx.closePath(); ctx.fill();
-      // Leathery black nose at end of muzzle
-      ctx.fillStyle = '#0f0806';
-      ctx.beginPath();
-      ctx.ellipse(hx2 + f*4*s, hy2+3.5*s, 1.3*s, 1*s, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Nose highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.beginPath();
-      ctx.arc(hx2 + f*3.7*s, hy2+3.2*s, 0.4*s, 0, Math.PI*2);
-      ctx.fill();
-      // Open animal mouth with upper lip curl
-      ctx.fillStyle = '#1a0a06';
-      ctx.beginPath();
-      ctx.moveTo(hx2 + f*1.5*s, hy2+5.8*s);
-      ctx.quadraticCurveTo(hx2 + f*3*s, hy2+7.4*s, hx2 + f*4.5*s, hy2+5.8*s);
-      ctx.quadraticCurveTo(hx2 + f*3*s, hy2+6.2*s, hx2 + f*1.5*s, hy2+5.8*s);
-      ctx.closePath(); ctx.fill();
-      // Prominent canine fangs (upper, visible)
-      ctx.fillStyle = '#f4ead2';
-      ctx.beginPath();
-      ctx.moveTo(hx2 + f*2.1*s, hy2+5.8*s);
-      ctx.lineTo(hx2 + f*2.4*s, hy2+7.2*s);
-      ctx.lineTo(hx2 + f*2.7*s, hy2+5.8*s);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(hx2 + f*3.6*s, hy2+5.8*s);
-      ctx.lineTo(hx2 + f*3.9*s, hy2+7.2*s);
-      ctx.lineTo(hx2 + f*4.2*s, hy2+5.8*s);
-      ctx.closePath(); ctx.fill();
     }
   } else if(bt==='blob'){
     // No separate head — eyes float in top of blob body
@@ -18055,11 +17957,30 @@ function drawMainMenu(){
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
     ctx.fillText(window._mmNewGame?'NEW GAME — STEP 2 OF 3: CHOOSE SHIP TYPE':'CHOOSE SHIP TYPE',cw/2,ch*0.12);
 
-    const cols=5, cardW=Math.min(180, (cw-80)/5), cardH=170, gap=12;
-    const rows=Math.ceil(SHIP_TYPES.length/cols);
-    const totalW=cols*(cardW+gap)-gap;
+    // Adaptive grid — pick cols so the grid fits in the available vertical space
+    // (between the title and the footer instructions) without squishing card text.
+    const gap=10;
+    const availW=cw-60;
+    const headerY=ch*0.16, footerY=ch-40;
+    const availH=footerY-headerY;
+    // Try column counts until we find one whose rows fit. Favour wider cards (fewer cols).
+    let cols=5, rows=Math.ceil(SHIP_TYPES.length/cols);
+    let cardW=Math.min(180, (availW-gap*(cols-1))/cols);
+    let cardH=Math.min(160, (availH-gap*(rows-1))/rows);
+    while((cardW<110 || cardH<110) && cols<8){
+      cols++;
+      rows=Math.ceil(SHIP_TYPES.length/cols);
+      cardW=Math.min(180, (availW-gap*(cols-1))/cols);
+      cardH=Math.min(160, (availH-gap*(rows-1))/rows);
+    }
+    const totalW=cols*cardW+(cols-1)*gap;
+    const totalH=rows*cardH+(rows-1)*gap;
     const startX=cw/2-totalW/2;
-    const startY=ch*0.17;
+    const startY=headerY + Math.max(0, (availH-totalH)/2);
+    // Scale preview so the ship silhouette fits the card at any size (ships are drawn
+    // roughly 40px wide in local coords, so scale ~ cardW * 0.5 / 40).
+    const previewScale = Math.max(1.2, Math.min(2.0, cardW/95));
+    const nameFont = Math.max(12, Math.min(16, Math.floor(cardW*0.10)));
     mainMenuSel=((mainMenuSel%SHIP_TYPES.length)+SHIP_TYPES.length)%SHIP_TYPES.length;
     SHIP_TYPES.forEach((st,i)=>{
       const col=i%cols, row=Math.floor(i/cols);
@@ -18068,24 +17989,34 @@ function drawMainMenu(){
       const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===st.id);
       const preview=variants[0]||SHIP_PAINTS[0];
       const isCur=(shipPaint.ship||'saucer')===st.id;
-      ctx.fillStyle=sel?'rgba(0,50,20,0.85)':'rgba(0,15,5,0.6)';
+      ctx.fillStyle=sel?'rgba(0,50,20,0.9)':'rgba(0,15,5,0.65)';
       roundRect(ctx,sx,sy,cardW,cardH,8);ctx.fill();
       if(sel){ctx.strokeStyle=`rgba(0,255,0,${0.65+Math.sin(t*4)*0.2})`;ctx.lineWidth=2.5;roundRect(ctx,sx,sy,cardW,cardH,8);ctx.stroke();}
       if(isCur){ctx.strokeStyle='rgba(255,215,0,0.7)';ctx.lineWidth=1.5;roundRect(ctx,sx+3,sy+3,cardW-6,cardH-6,6);ctx.stroke();}
-      // Ship preview
+      // Ship preview (centred in the upper ~65% of the card, leaving room for the name)
       ctx.save();
-      ctx.translate(sx+cardW/2, sy+cardH*0.48);
-      ctx.scale(1.9,1.9);
+      ctx.translate(sx+cardW/2, sy+cardH*0.42);
+      ctx.scale(previewScale, previewScale);
       drawShipBody(preview.color, preview.accent, preview.trail, st.id);
       ctx.restore();
-      // Type name
-      ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
-      ctx.font='bold 16px monospace';ctx.textAlign='center';
-      ctx.fillText(st.name.toUpperCase(),sx+cardW/2,sy+cardH-18);
-      // Variant count
-      ctx.fillStyle='rgba(0,200,0,0.4)';ctx.font='9px monospace';
-      ctx.fillText(variants.length+(variants.length===1?' VARIANT':' VARIANTS'),sx+cardW/2,sy+18);
-      if(isCur){ctx.fillStyle='#fd0';ctx.font='14px monospace';ctx.fillText('\u2605',sx+cardW-14,sy+18);}
+      // Dark label strip behind the name so it's always readable over ship colours
+      ctx.fillStyle='rgba(0,0,0,0.55)';
+      ctx.fillRect(sx+2, sy+cardH-nameFont-8, cardW-4, nameFont+6);
+      // Type name — always drawn with the computed font size so it fits
+      ctx.fillStyle=sel?'#0f0':'rgba(0,235,120,0.85)';
+      ctx.font=`bold ${nameFont}px monospace`;
+      ctx.textAlign='center';
+      // Guard against overflow: ellipsise if name is somehow longer than the card
+      let label = st.name.toUpperCase();
+      if(ctx.measureText(label).width > cardW-8){
+        while(label.length>3 && ctx.measureText(label+'…').width>cardW-8) label=label.slice(0,-1);
+        label = label+'…';
+      }
+      ctx.fillText(label, sx+cardW/2, sy+cardH-8);
+      // Variant count — top-left pill
+      ctx.fillStyle='rgba(0,200,0,0.5)';ctx.font='9px monospace';
+      ctx.fillText(variants.length+(variants.length===1?' VARIANT':' VARIANTS'),sx+cardW/2,sy+14);
+      if(isCur){ctx.fillStyle='#fd0';ctx.font='13px monospace';ctx.fillText('\u2605',sx+cardW-12,sy+14);}
     });
     ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
     ctx.fillText('WASD/Arrows to browse  |  ENTER/SPACE to view variants  |  ESC to back',cw/2,ch-20);

@@ -103,13 +103,6 @@ export const ALIEN_RACES = [
       {id:'sp_butters', name:'Butters',     body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'southpark', outfitA:'#8ac8e0', outfitB:'#e0c880', hat:'none',      pants:'#c0a040'},
       {id:'sp_chef',    name:'Chef',        body:'#6a4832', head:'#744e36', eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#1a0a06', outfit:'southpark', outfitA:'#c02020', outfitB:'#2040a0', hat:'chef',      pants:'#1a3870'},
   ]},
-  { id:'bigfoot',   name:'Bigfoot',   description:'Shaggy forest-dwelling cryptid apes', bodyType:'humanoid', skins:[
-      {id:'bf_brown',  name:'Sasquatch',     body:'#5a3a20', head:'#3a2810', eyes:'#220', glow:'#fc8', accent:'#3a2614', hair:'#5a3a20', outfit:'bigfoot', outfitA:'#5a3a20', outfitB:'#3a2614'},
-      {id:'bf_black',  name:'Midnight Ape',  body:'#2a1a14', head:'#1a1008', eyes:'#f40', glow:'#f86', accent:'#181010', hair:'#2a1a14', outfit:'bigfoot', outfitA:'#2a1a14', outfitB:'#100808'},
-      {id:'bf_yeti',   name:'Yeti',          body:'#eae4d0', head:'#d0c8a0', eyes:'#4af', glow:'#cdf', accent:'#c8c0a8', hair:'#f4f0e0', outfit:'bigfoot', outfitA:'#eae4d0', outfitB:'#b8b0a0'},
-      {id:'bf_rust',   name:'Orang Mawas',   body:'#8a3a18', head:'#4a2410', eyes:'#ff0', glow:'#fa4', accent:'#5a2410', hair:'#a04820', outfit:'bigfoot', outfitA:'#8a3a18', outfitB:'#5a2410'},
-      {id:'bf_silver', name:'Silverback',    body:'#4a4850', head:'#2a2024', eyes:'#220', glow:'#ccf', accent:'#2a282e', hair:'#b8b4c0', outfit:'bigfoot', outfitA:'#4a4850', outfitB:'#2a282e'},
-  ]},
   { id:'arachnid',  name:'Arachnid',  description:'Eight-legged stalkers from web-worlds', bodyType:'spider', skins:[
       {id:'arach_black', name:'Widow',        body:'#1a1018',  head:'#2a1828',  eyes:'#f00', glow:'#f44', accent:'#0a0408'},
       {id:'arach_wolf',  name:'Wolf Spider',  body:'#6a5030',  head:'#806040',  eyes:'#ff0', glow:'#fa4', accent:'#402818'},

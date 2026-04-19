@@ -25,6 +25,7 @@ export const SHIP_TYPES = [
   {id:'dagger',  name:'Diamond Dagger',description:'Angular rhombus with swept razor fins'},
   {id:'wheelship',name:'Spoked Wheel', description:'Rotating spoked ring with central pod'},
   {id:'beetlepod',name:'Beetle Pod',   description:'Segmented carapace shell with six stub legs'},
+  {id:'domepod',  name:'Dome Pod',     description:'Open-canopy bubble cruiser — see the pilot inside'},
 ];
 
 export const SHIP_PAINTS = [
@@ -94,4 +95,8 @@ export const SHIP_PAINTS = [
   // Beetle Pod
   {id:'beetle_emer',name:'Emerald Beetle',color:'#2a7048',accent:'#104028',trail:'#60ff90',cost:0,ship:'beetlepod'},
   {id:'beetle_amber',name:'Amber Beetle', color:'#c08028',accent:'#704010',trail:'#ffc040',cost:0,ship:'beetlepod'},
+  // Dome Pod (open bubble canopy showing the pilot)
+  {id:'dome_chrome',name:'Chrome Pod',   color:'#c8c8d0',accent:'#484850',trail:'#b0f0ff',cost:0,ship:'domepod'},
+  {id:'dome_grey',  name:'Garage Pod',   color:'#a89878',accent:'#3a3028',trail:'#ffd060',cost:0,ship:'domepod'},
+  {id:'dome_teal',  name:'Teal Pod',     color:'#70a0a8',accent:'#2a4850',trail:'#80ffe0',cost:0,ship:'domepod'},
 ];
