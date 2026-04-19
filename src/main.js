@@ -289,6 +289,7 @@ const RACE_LOADOUTS = {
   cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
   cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
   southpark: ['stunner','wail','rocket','acid','swarm','chainsaw'],
+  bigfoot:   ['chainsaw','stunner','wail','swarm','gwell','plasma'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -3208,6 +3209,8 @@ function generateCows() {
         beingBeamed:false,collected:false,planetId:p.id,hoverPhase:Math.random()*Math.PI*2,extraHeadAngle:0,
         biomeMin:snowMin,biomeMax:snowMax});
     }
+  }else if(p.id==='moon'){
+    // Airless, silent moon — no wildlife here.
   }else{
     const count=Math.floor(5+Math.random()*6);
     for(let i=0;i<count;i++) generateCow(Math.random()*(worldWidth-600)+300);
@@ -5491,9 +5494,12 @@ function updateMothership(){
     if(h.vy==null)h.vy=0;
     if(h.y==null)h.y=0; // 0 = on floor, negative = in the air (offset)
     if(h.onGround==null)h.onGround=true;
-    // Walk
-    if(keys['a']||keys['arrowleft']){h.vx-=0.5;h.facing=-1;}
-    if(keys['d']||keys['arrowright']){h.vx+=0.5;h.facing=1;}
+    // Walk (hold Shift to run — nearly doubles top speed)
+    const running = !!(keys['shift']||keys['shiftleft']||keys['shiftright']);
+    const accel = running ? 0.9 : 0.5;
+    if(keys['a']||keys['arrowleft']){h.vx-=accel;h.facing=-1;}
+    if(keys['d']||keys['arrowright']){h.vx+=accel;h.facing=1;}
+    h.running = running;
     // Jump (SPACE) like on-foot
     if(keys[' ']&&h.onGround){h.vy=-7;h.onGround=false;}
     // --- GRAPPLING HOOK (G) — hooks into the corridor ceiling ---
@@ -5539,7 +5545,7 @@ function updateMothership(){
     // Walls
     if(h.x<40){h.x=40;h.vx=0;}
     if(h.x>h.width-40){h.x=h.width-40;h.vx=0;}
-    if(Math.abs(h.vx)>0.3&&h.onGround)h.walkT+=0.22;
+    if(Math.abs(h.vx)>0.3&&h.onGround)h.walkT+=running?0.36:0.22;
     // Nearest door
     let bestD=9999,bestI=-1;
     h.doorX.forEach((dx,i)=>{const d=Math.abs(dx-h.x);if(d<bestD){bestD=d;bestI=i;}});
@@ -5713,9 +5719,10 @@ function updateMothership(){
     else{mi.screen='menu';mi.selectedItem=0;mi.zooAction=null;mi.zooDetailView=null;mi.zooInsideCell=null;}
   }
 
-  // E = select
-  if((keys['e']||keys[' '])&&!mi._eCool){
-    mi._eCool=12;keys['e']=false;keys[' ']=false;
+  // E = select (in the zoo, SPACE is reserved for jumping, so only E interacts)
+  const _mmSelectKey = (mi.screen==='zoo') ? keys['e'] : (keys['e']||keys[' ']);
+  if(_mmSelectKey&&!mi._eCool){
+    mi._eCool=12;keys['e']=false; if(mi.screen!=='zoo') keys[' ']=false;
     if(mi.screen==='menu'){
       const sel=MS_MENUS[mi.selectedItem%MS_MENUS.length];
       mi.screen=sel.id;mi.selectedItem=0;
@@ -7168,7 +7175,7 @@ function drawMothership(){
     ctx.fillText(`Score: ${score}  |  Specimens: ${mothership.specimens.length}  |  Milk: ${milkScore}`,cw/2,46);
     // Bottom hint
     ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='10px monospace';ctx.textAlign='center';
-    ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
+    ctx.fillText('A/D: Walk  |  SHIFT: Run  |  SPACE: Jump  |  C: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
 
   // ================================================================
   // BRIDGE - NPC portraits with speech
@@ -15115,7 +15122,29 @@ function renderHuman(h){
   // Extras
   if(h.extra==='briefcase'&&!h.ragdoll){ctx.fillStyle='#530';ctx.fillRect(h.armRX+2,h.armRY+at-2,6,5);}
   if(h.extra==='chain'){ctx.strokeStyle='#fc0';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(h.bodyX,h.bodyY-1,5,0.3,Math.PI-0.3);ctx.stroke();}
-  if(h.extra==='cross'){ctx.strokeStyle='#fc0';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(h.bodyX,h.bodyY-5*s);ctx.lineTo(h.bodyX,h.bodyY+2*s);ctx.moveTo(h.bodyX-3,h.bodyY-2*s);ctx.lineTo(h.bodyX+3,h.bodyY-2*s);ctx.stroke();}
+  // Priest cassock — draw a long dark robe from shoulders past the knees so priests
+  // read as priests at any scale (and match the zoo view). Triggered by the collar+cross combo.
+  if(h.hat==='collar' && h.extra==='cross' && !h.ragdoll){
+    const robeTop=h.bodyY-3*s, robeMid=h.bodyY+6*s, robeBot=(h.legLY+h.legRY)*0.5+2*s;
+    const topW=bw*0.9, botW=bw*1.6;
+    ctx.fillStyle=h.color||'#111';
+    ctx.beginPath();
+    ctx.moveTo(h.bodyX-topW, robeTop);
+    ctx.lineTo(h.bodyX+topW, robeTop);
+    ctx.lineTo(h.bodyX+bw+1, robeMid);
+    ctx.lineTo(h.bodyX+botW, robeBot);
+    ctx.lineTo(h.bodyX-botW, robeBot);
+    ctx.lineTo(h.bodyX-bw-1, robeMid);
+    ctx.closePath();
+    ctx.fill();
+    // Robe center seam
+    ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=0.6;
+    ctx.beginPath();ctx.moveTo(h.bodyX, robeTop);ctx.lineTo(h.bodyX, robeBot);ctx.stroke();
+    // Cincture (waist rope)
+    ctx.strokeStyle='rgba(180,140,80,0.8)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(h.bodyX-bw*0.9, h.bodyY+4*s);ctx.lineTo(h.bodyX+bw*0.9, h.bodyY+4*s);ctx.stroke();
+  }
+  if(h.extra==='cross'){ctx.strokeStyle='#fc0';ctx.lineWidth=1.5*s;ctx.beginPath();ctx.moveTo(h.bodyX,h.bodyY-5*s);ctx.lineTo(h.bodyX,h.bodyY+2*s);ctx.moveTo(h.bodyX-3*s,h.bodyY-2*s);ctx.lineTo(h.bodyX+3*s,h.bodyY-2*s);ctx.stroke();}
   if(h.extra==='backpack'){ctx.fillStyle='#f44';ctx.fillRect(h.bodyX-5,h.bodyY-2*s,4,8*s);}
   if(h.extra==='cane'&&!h.ragdoll){ctx.strokeStyle='#a86';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(h.armRX+4,h.armRY+at);ctx.lineTo(h.armRX+6,h.footRY);ctx.stroke();}
   // Neck
@@ -15139,7 +15168,7 @@ function renderHuman(h){
   if(h.alienExtra==='antennae'){ctx.strokeStyle=h.skinColor;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(h.headX-3,h.headY-h.headR);ctx.quadraticCurveTo(h.headX-8,h.headY-h.headR*2.5,h.headX-5,h.headY-h.headR*2);ctx.stroke();ctx.beginPath();ctx.moveTo(h.headX+3,h.headY-h.headR);ctx.quadraticCurveTo(h.headX+8,h.headY-h.headR*2.5,h.headX+5,h.headY-h.headR*2);ctx.stroke();
     ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(h.headX-5,h.headY-h.headR*2,2,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(h.headX+5,h.headY-h.headR*2,2,0,Math.PI*2);ctx.fill();}
   if(h.alienExtra==='horns'){ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(h.headX-h.headR,h.headY-2);ctx.lineTo(h.headX-h.headR-6,h.headY-h.headR*1.5);ctx.lineTo(h.headX-h.headR+4,h.headY-2);ctx.fill();ctx.beginPath();ctx.moveTo(h.headX+h.headR,h.headY-2);ctx.lineTo(h.headX+h.headR+6,h.headY-h.headR*1.5);ctx.lineTo(h.headX+h.headR-4,h.headY-2);ctx.fill();}
-  if(h.hat==='collar'){ctx.fillStyle='#fff';ctx.fillRect(h.headX-4,h.headY+h.headR-2,8,3);}
+  if(h.hat==='collar'){ctx.fillStyle='#fff';ctx.fillRect(h.headX-4*s,h.headY+h.headR-2*s,8*s,3*s);}
   if(h.hat==='cap'){ctx.fillStyle='#222';ctx.beginPath();ctx.ellipse(h.headX,h.headY-h.headR+2,h.headR+3,4,0,Math.PI,0);ctx.fill();ctx.fillRect(h.headX-h.headR-3,h.headY-h.headR+1,h.headR*2+6,3);}
   if(h.hat==='bun'){ctx.fillStyle='#ccc';ctx.beginPath();ctx.arc(h.headX,h.headY-h.headR+1,5,0,Math.PI*2);ctx.fill();}
   if(h.hat==='headband'){ctx.strokeStyle='#f00';ctx.lineWidth=2;ctx.beginPath();ctx.arc(h.headX,h.headY,h.headR+1,Math.PI+0.3,-0.3);ctx.stroke();}
@@ -16003,33 +16032,75 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.beginPath();ctx.ellipse(ax+3*s-lo*0.7,ay,3.5*s,1.6*s,0,0,Math.PI*2);ctx.fill();
     }
   } else if(bt==='spider'){
-    // 8 legs arching outward (4 per side) with staggered sway — spidery crawl
-    ctx.strokeStyle=_sb2(0x88);ctx.lineWidth=1.3*s;ctx.lineCap='round';
-    for(let lg=0;lg<4;lg++){
-      const sway=Math.sin(t2*4+lg*0.7)*1.8*s;
-      const swayR=Math.sin(t2*4+lg*0.7+Math.PI)*1.8*s;
-      const baseY=ay-(12-lg*1.2)*s;
-      const reach=(10+lg*1.5)*s;
-      const liftY=(6-lg*0.5)*s;
-      // left leg
-      ctx.beginPath();
-      ctx.moveTo(ax-2*s,baseY);
-      ctx.quadraticCurveTo(ax-reach,baseY-liftY+sway,ax-reach-2*s,ay+sway*0.4);
-      ctx.stroke();
-      // right leg
-      ctx.beginPath();
-      ctx.moveTo(ax+2*s,baseY);
-      ctx.quadraticCurveTo(ax+reach,baseY-liftY+swayR,ax+reach+2*s,ay+swayR*0.4);
-      ctx.stroke();
-    }
-    // Tiny claw tips
-    ctx.strokeStyle='#111';ctx.lineWidth=0.6*s;
-    for(let lg=0;lg<4;lg++){
-      const sway=Math.sin(t2*4+lg*0.7)*1.8*s;
-      const swayR=Math.sin(t2*4+lg*0.7+Math.PI)*1.8*s;
-      const reach=(10+lg*1.5)*s;
-      ctx.beginPath();ctx.moveTo(ax-reach-2*s,ay+sway*0.4);ctx.lineTo(ax-reach-3*s,ay+sway*0.4+1*s);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(ax+reach+2*s,ay+swayR*0.4);ctx.lineTo(ax+reach+3*s,ay+swayR*0.4+1*s);ctx.stroke();
+    // 8 jointed legs with alternating tetrapod gait — real spider movement.
+    // Each leg has 3 segments (coxa→femur, femur→patella/tibia, tibia→tarsus) with bent joints.
+    // Legs 0 & 2 on one side are in phase A; legs 1 & 3 are in phase B; opposite side swaps.
+    // The result: at any moment 4 legs plant while 4 legs swing forward, like real spiders.
+    const wp = walkPhase || t2*5;
+    // Splay angles (radians from horizontal) for the 4 legs per side — front legs reach forward, back legs reach backward.
+    const splay = [0.55, 0.15, -0.25, -0.65]; // front to back
+    const legLen = [16, 18, 17, 15]; // total leg length per pair (scaled by s)
+    for(let lg=0; lg<4; lg++){
+      for(let side=-1; side<=1; side+=2){
+        // Tetrapod gait: legs 0&2 of one side sync with legs 1&3 of the other side
+        const groupEven = (lg%2===0);
+        const phaseOffset = (groupEven === (side<0)) ? 0 : Math.PI;
+        const cyc = Math.sin(wp*0.9 + phaseOffset);
+        const lift = Math.max(0, cyc) * 3.5*s;        // leg lifts when cyc>0 (swing)
+        const stride = cyc * 2.2*s;                     // forward/back stride component
+        // Leg attachment on cephalothorax (clustered near front segment at ax+f*4*s,ay-12*s)
+        const baseX = ax + f*4*s + side*2.5*s;
+        const baseY = ay - 12*s - lg*0.6*s;
+        // Outward angle
+        const ang = splay[lg];
+        const reach = legLen[lg]*s;
+        // Knee/joint (elevated — legs bend UP like a real spider)
+        const kneeX = baseX + side*Math.cos(ang)*reach*0.45;
+        const kneeY = baseY + Math.sin(ang)*reach*0.45 - 5*s - lift;
+        // Foot tip — plants on ground when not lifted; swings forward when lifted
+        const footX = baseX + side*Math.cos(ang)*reach + stride;
+        const footY = ay + 1*s - lift*0.8;
+        // Leg segment colors — darker for depth
+        ctx.strokeStyle = _sb2(0x55);
+        ctx.lineWidth = 1.6*s;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.lineTo(kneeX, kneeY);
+        ctx.lineTo(footX, footY);
+        ctx.stroke();
+        // Thinner inner-segment highlight (outer side of the bend)
+        ctx.strokeStyle = _sb2(0x88);
+        ctx.lineWidth = 0.7*s;
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.lineTo(kneeX, kneeY);
+        ctx.stroke();
+        // Tiny bristles (setae) sticking off the leg
+        ctx.strokeStyle = '#0a0a0a';
+        ctx.lineWidth = 0.3*s;
+        for(let br=0; br<3; br++){
+          const tt = 0.25 + br*0.25;
+          const bx = kneeX + (footX-kneeX)*tt;
+          const by = kneeY + (footY-kneeY)*tt;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + side*0.8*s, by - 1*s);
+          ctx.stroke();
+        }
+        // Sharp claw tip
+        ctx.strokeStyle = '#0a0a0a';
+        ctx.lineWidth = 0.7*s;
+        ctx.beginPath();
+        ctx.moveTo(footX, footY);
+        ctx.lineTo(footX + side*0.9*s, footY + 1.2*s);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(footX, footY);
+        ctx.lineTo(footX - side*0.3*s, footY + 1.3*s);
+        ctx.stroke();
+      }
     }
   } else if(bt==='slug'){
     // Inching peristaltic locomotion: muscular wave travels tail-to-head.
@@ -16285,6 +16356,96 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Belt line
       ctx.fillStyle=ob;ctx.fillRect(ax-6*s,ay-8.5*s,12*s,1.2*s);
       ctx.fillStyle='#f8d060';ctx.fillRect(ax-1*s,ay-8.5*s,2*s,1.2*s);
+    } else if(outfit==='bigfoot'){
+      // Wookiee-style: broad shaggy torso with long flowing vertical fur streaks and a bandolier.
+      const furA = oa, furB = ob;
+      // Wide barrel torso base
+      ctx.fillStyle = furA;
+      ctx.beginPath();
+      ctx.moveTo(ax-10*s, ay-22*s);
+      ctx.quadraticCurveTo(ax-13*s, ay-14*s, ax-10*s, ay-4*s);
+      ctx.lineTo(ax+10*s, ay-4*s);
+      ctx.quadraticCurveTo(ax+13*s, ay-14*s, ax+10*s, ay-22*s);
+      ctx.quadraticCurveTo(ax, ay-24*s, ax-10*s, ay-22*s);
+      ctx.closePath(); ctx.fill();
+      // Long flowing vertical fur streaks all over torso (Wookiee signature look)
+      ctx.strokeStyle = furB; ctx.lineWidth = 0.7*s; ctx.lineCap = 'round';
+      for(let st=0; st<18; st++){
+        const sxn = ax - 10*s + st*1.2*s;
+        const topY = ay - 21*s + (st%3)*1.3*s;
+        const botY = ay - 4*s + (st%2)*1.5*s;
+        const sway = Math.sin(st*0.7)*0.6*s;
+        ctx.beginPath();
+        ctx.moveTo(sxn, topY);
+        ctx.quadraticCurveTo(sxn+sway, (topY+botY)*0.5, sxn+sway*0.5, botY);
+        ctx.stroke();
+      }
+      // Lighter highlight streaks for depth
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 0.5*s;
+      for(let st=0; st<10; st++){
+        const sxn = ax - 9*s + st*2*s;
+        ctx.beginPath();
+        ctx.moveTo(sxn, ay-20*s);
+        ctx.lineTo(sxn+0.3*s, ay-5*s);
+        ctx.stroke();
+      }
+      // Bandolier strap — diagonal leather belt across chest with metal pouches (Chewbacca-style)
+      const strapColA = '#3a2414';
+      const strapColB = '#5a3a20';
+      ctx.save();
+      ctx.translate(ax, ay-13*s);
+      ctx.rotate(-0.35*f);
+      ctx.fillStyle = strapColA;
+      ctx.fillRect(-14*s, -1.6*s, 28*s, 3.2*s);
+      // Strap stitching highlight
+      ctx.fillStyle = strapColB;
+      ctx.fillRect(-14*s, -1.6*s, 28*s, 0.5*s);
+      ctx.fillRect(-14*s, 1.1*s, 28*s, 0.5*s);
+      // Metal ammo pouches along the strap
+      ctx.fillStyle = '#8a8890';
+      for(let pk=-4; pk<=4; pk++){
+        ctx.fillRect(pk*2.6*s - 0.8*s, -0.9*s, 1.6*s, 1.8*s);
+      }
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 0.3*s;
+      for(let pk=-4; pk<=4; pk++){
+        ctx.strokeRect(pk*2.6*s - 0.8*s, -0.9*s, 1.6*s, 1.8*s);
+      }
+      ctx.restore();
+      // Shoulder fur mane — longer tufts cascading outward from neck down over shoulders
+      ctx.fillStyle = furA;
+      for(let sh=-1; sh<=1; sh+=2){
+        ctx.beginPath();
+        ctx.moveTo(ax + sh*5*s, ay-22*s);
+        ctx.quadraticCurveTo(ax + sh*13*s, ay-18*s, ax + sh*12*s, ay-10*s);
+        ctx.quadraticCurveTo(ax + sh*9*s, ay-14*s, ax + sh*6*s, ay-20*s);
+        ctx.closePath(); ctx.fill();
+      }
+      // Long shaggy fur skirt hanging past the hips (covers thigh tops)
+      ctx.fillStyle = furA;
+      for(let lf=0; lf<11; lf++){
+        const lx = ax - 9*s + lf*1.8*s;
+        const hang = 3*s + (lf%3)*1.5*s;
+        ctx.beginPath();
+        ctx.moveTo(lx, ay-5*s);
+        ctx.lineTo(lx+0.6*s, ay-5*s+hang);
+        ctx.lineTo(lx+1.8*s, ay-5*s+hang*0.7);
+        ctx.lineTo(lx+1.8*s, ay-5*s);
+        ctx.closePath(); ctx.fill();
+      }
+      // Fur cuffs at wrists
+      ctx.fillStyle = furA;
+      ctx.beginPath(); ctx.arc(ax-f*11*s, ay-6*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax+f*11*s, ay-6*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+      // Small fur streaks on wrists
+      ctx.strokeStyle = furB; ctx.lineWidth = 0.5*s;
+      for(let wr=-1; wr<=1; wr+=2){
+        for(let ws=0; ws<4; ws++){
+          ctx.beginPath();
+          ctx.moveTo(ax + wr*f*11*s - 1*s + ws*0.7*s, ay-7*s);
+          ctx.lineTo(ax + wr*f*11*s - 1*s + ws*0.7*s, ay-4*s);
+          ctx.stroke();
+        }
+      }
     } else if(outfit==='southpark'){
       // Bulky winter coat with puffy silhouette. Body sits lower because head is huge.
       // Cartman has a noticeably wider silhouette.
@@ -16394,33 +16555,71 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.beginPath();ctx.moveTo(stx,ay-7*s);ctx.lineTo(stx+0.5*s,ay-17*s);ctx.stroke();
     }
   } else if(bt==='spider'){
-    // Bulbous abdomen (behind, oversized) + smaller cephalothorax (front)
+    // Giant bulbous abdomen (behind) + smaller cephalothorax (front) — like a huge tarantula/widow.
     const abdomPulse=Math.sin(t2*2)*0.6*s;
-    // Abdomen
-    const abg=ctx.createRadialGradient(ax-f*4*s,ay-12*s,1*s,ax-f*5*s,ay-12*s,12*s);
-    abg.addColorStop(0,_sb2(0xbb));abg.addColorStop(1,_sb2(0x77));
+    // Huge abdomen
+    const abg=ctx.createRadialGradient(ax-f*5*s,ay-15*s,1*s,ax-f*6*s,ay-12*s,15*s);
+    abg.addColorStop(0,_sb2(0xaa));
+    abg.addColorStop(0.55,_sb2(0x55));
+    abg.addColorStop(1,_sb2(0x18));
     ctx.fillStyle=abg;
-    ctx.beginPath();ctx.ellipse(ax-f*5*s,ay-11*s,9*s+abdomPulse,7*s,0,0,Math.PI*2);ctx.fill();
-    // Abdomen pattern (dots/stripes)
-    ctx.fillStyle=_sa2(0x55);
-    for(let dt2=0;dt2<4;dt2++){
-      const da=dt2*0.5-0.75;
-      ctx.beginPath();ctx.arc(ax-f*5*s+Math.cos(da)*4*s,ay-11*s+Math.sin(da)*3*s,0.8*s,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(ax-f*6*s,ay-12*s,12*s+abdomPulse,9*s,0,0,Math.PI*2);ctx.fill();
+    // Hourglass-style menacing marking on top of abdomen (widow spider look)
+    ctx.fillStyle=_sa2(0x20);
+    ctx.beginPath();
+    ctx.moveTo(ax-f*9*s, ay-17*s);
+    ctx.lineTo(ax-f*3*s, ay-17*s);
+    ctx.lineTo(ax-f*6*s, ay-13*s);
+    ctx.lineTo(ax-f*3*s, ay-9*s);
+    ctx.lineTo(ax-f*9*s, ay-9*s);
+    ctx.lineTo(ax-f*6*s, ay-13*s);
+    ctx.closePath(); ctx.fill();
+    // Abdomen bristles all around (creepy fuzz)
+    ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=0.4*s;ctx.lineCap='round';
+    for(let hr=0;hr<28;hr++){
+      const ha=hr*(Math.PI*2/28);
+      const cosA=Math.cos(ha), sinA=Math.sin(ha);
+      const rx=12*s, ry=9*s;
+      const x1=ax-f*6*s+cosA*rx*0.95;
+      const y1=ay-12*s+sinA*ry*0.95;
+      const x2=ax-f*6*s+cosA*(rx+2*s);
+      const y2=ay-12*s+sinA*(ry+1.5*s);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
     }
-    // Cephalothorax (front segment, smaller)
-    const cbg=ctx.createRadialGradient(ax+f*2*s,ay-13*s,1*s,ax+f*3*s,ay-12*s,6*s);
-    cbg.addColorStop(0,_sh2(0xcc));cbg.addColorStop(1,_sh2(0x88));
-    ctx.fillStyle=cbg;
-    ctx.beginPath();ctx.ellipse(ax+f*3*s,ay-12*s,5*s,4.5*s,0,0,Math.PI*2);ctx.fill();
-    // Fine hairs on abdomen
-    ctx.strokeStyle=_sb2(0x44);ctx.lineWidth=0.4*s;
-    for(let hr=0;hr<6;hr++){
-      const ha=hr*1.05-2.5;
+    // Glossy highlight on abdomen
+    ctx.fillStyle='rgba(255,255,255,0.15)';
+    ctx.beginPath();ctx.ellipse(ax-f*8*s, ay-16*s, 3.5*s, 2*s, -0.4, 0, Math.PI*2);ctx.fill();
+    // Spinnerets at rear tip
+    ctx.fillStyle=_sb2(0x10);
+    for(let sp=-1; sp<=1; sp++){
       ctx.beginPath();
-      ctx.moveTo(ax-f*5*s+Math.cos(ha)*8*s,ay-11*s+Math.sin(ha)*6*s);
-      ctx.lineTo(ax-f*5*s+Math.cos(ha)*10*s,ay-11*s+Math.sin(ha)*7.5*s);
+      ctx.arc(ax-f*(13+sp*0.4)*s, ay-11*s + sp*0.8*s, 0.7*s, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Pedicel (narrow waist connecting the two body segments)
+    ctx.fillStyle=_sb2(0x30);
+    ctx.fillRect(ax-f*1*s, ay-13*s, f*2*s, 2*s);
+    // Cephalothorax (front segment) — smaller, more menacing, glossy chitin
+    const cbg=ctx.createRadialGradient(ax+f*3*s,ay-14*s,1*s,ax+f*4*s,ay-12*s,7*s);
+    cbg.addColorStop(0,_sh2(0xaa));
+    cbg.addColorStop(0.6,_sh2(0x55));
+    cbg.addColorStop(1,_sh2(0x22));
+    ctx.fillStyle=cbg;
+    ctx.beginPath();ctx.ellipse(ax+f*4*s,ay-12*s,6*s,5*s,0,0,Math.PI*2);ctx.fill();
+    // Cephalothorax bristles
+    ctx.strokeStyle='rgba(0,0,0,0.5)';ctx.lineWidth=0.35*s;
+    for(let ch=0;ch<14;ch++){
+      const cha=ch*(Math.PI*2/14);
+      const cx3=ax+f*4*s+Math.cos(cha)*6*s;
+      const cy3=ay-12*s+Math.sin(cha)*5*s;
+      ctx.beginPath();
+      ctx.moveTo(cx3,cy3);
+      ctx.lineTo(cx3+Math.cos(cha)*1.2*s, cy3+Math.sin(cha)*1*s);
       ctx.stroke();
     }
+    // Glossy cephalothorax highlight
+    ctx.fillStyle='rgba(255,255,255,0.2)';
+    ctx.beginPath();ctx.ellipse(ax+f*3*s, ay-14*s, 2*s, 1.2*s, -0.3, 0, Math.PI*2); ctx.fill();
   } else if(bt==='slug'){
     // Massive bloated body + smaller head-stalk mound in front
     const bulge=Math.sin(t2*1.5)*0.8*s;
@@ -16696,8 +16895,8 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_sh2(0xa0);
     ctx.beginPath();ctx.ellipse(hx2-6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(hx2+6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
-    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path)
-    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark'){
+    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path), bigfoot (full shaggy mane drawn below)
+    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark' && skin.outfit!=='bigfoot'){
       ctx.fillStyle=skin.hair;
       ctx.beginPath();
       ctx.moveTo(hx2-6*s,hy2-2*s);
@@ -16793,6 +16992,88 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Slicked-back hair highlight already rendered via skin.hair; add shine stripe
       ctx.fillStyle='rgba(255,255,255,0.15)';
       ctx.fillRect(hx2-2*s,hy2-7*s,4*s,0.8*s);
+    } else if(skin.outfit==='bigfoot'){
+      // Wookiee-style animal head: shaggy mane, long muzzle, eye mask, visible fangs.
+      const fur = skin.hair || skin.body || '#5a3a20';
+      const furDark = skin.outfitB || '#2a1810';
+      const faceCol = skin.head || '#3a2810';
+      // Long flowing mane — vertical streaks cascading down past the jaw onto shoulders
+      ctx.strokeStyle = fur; ctx.lineWidth = 1.2*s; ctx.lineCap = 'round';
+      for(let mi=0; mi<16; mi++){
+        const ang = -Math.PI*0.95 + mi*(Math.PI*1.9/15);
+        const innerR = 6.5*s;
+        const lenExtra = (mi>4 && mi<11) ? 6*s : 10*s; // sides hang longer
+        const x1 = hx2 + Math.cos(ang)*innerR;
+        const y1 = hy2+1*s + Math.sin(ang)*innerR;
+        const x2 = hx2 + Math.cos(ang)*(innerR+lenExtra);
+        const y2 = hy2+1*s + Math.sin(ang)*(innerR+lenExtra) + (ang>0 ? 2*s : 0);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo((x1+x2)*0.5, (y1+y2)*0.5, x2, y2);
+        ctx.stroke();
+      }
+      // Fill behind the streaks (soft mane silhouette)
+      ctx.fillStyle = fur;
+      ctx.beginPath();
+      ctx.ellipse(hx2, hy2+1*s, 10*s, 10*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Inner face — elongated muzzle shape, narrower & poking out in facing direction
+      ctx.fillStyle = furDark;
+      ctx.beginPath();
+      ctx.ellipse(hx2 + f*1.2*s, hy2+2*s, 7.5*s, 8*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Face skin — snout protrudes forward (elongated along facing axis)
+      ctx.fillStyle = faceCol;
+      ctx.beginPath();
+      ctx.ellipse(hx2 + f*1.8*s, hy2+3*s, 5.2*s, 5.8*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Lighter muzzle tip (Wookiee pale patch around nose/mouth)
+      const muzzleCol = lerpColor(faceCol, '#e8d8b8', 0.35);
+      ctx.fillStyle = muzzleCol;
+      ctx.beginPath();
+      ctx.ellipse(hx2 + f*3*s, hy2+5*s, 3.2*s, 3.4*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Dark eye mask band across the eyes
+      ctx.fillStyle = furDark;
+      ctx.beginPath();
+      ctx.ellipse(hx2 + f*0.5*s, hy2+0.5*s, 5.5*s, 1.8*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Heavy protruding brow above the eye mask
+      ctx.fillStyle = furDark;
+      ctx.beginPath();
+      ctx.moveTo(hx2-5*s, hy2-1.5*s);
+      ctx.quadraticCurveTo(hx2+f*1*s, hy2-4*s, hx2+6*s, hy2-1.5*s);
+      ctx.quadraticCurveTo(hx2+f*1*s, hy2-1.8*s, hx2-5*s, hy2-1.5*s);
+      ctx.closePath(); ctx.fill();
+      // Leathery black nose at end of muzzle
+      ctx.fillStyle = '#0f0806';
+      ctx.beginPath();
+      ctx.ellipse(hx2 + f*4*s, hy2+3.5*s, 1.3*s, 1*s, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Nose highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath();
+      ctx.arc(hx2 + f*3.7*s, hy2+3.2*s, 0.4*s, 0, Math.PI*2);
+      ctx.fill();
+      // Open animal mouth with upper lip curl
+      ctx.fillStyle = '#1a0a06';
+      ctx.beginPath();
+      ctx.moveTo(hx2 + f*1.5*s, hy2+5.8*s);
+      ctx.quadraticCurveTo(hx2 + f*3*s, hy2+7.4*s, hx2 + f*4.5*s, hy2+5.8*s);
+      ctx.quadraticCurveTo(hx2 + f*3*s, hy2+6.2*s, hx2 + f*1.5*s, hy2+5.8*s);
+      ctx.closePath(); ctx.fill();
+      // Prominent canine fangs (upper, visible)
+      ctx.fillStyle = '#f4ead2';
+      ctx.beginPath();
+      ctx.moveTo(hx2 + f*2.1*s, hy2+5.8*s);
+      ctx.lineTo(hx2 + f*2.4*s, hy2+7.2*s);
+      ctx.lineTo(hx2 + f*2.7*s, hy2+5.8*s);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx2 + f*3.6*s, hy2+5.8*s);
+      ctx.lineTo(hx2 + f*3.9*s, hy2+7.2*s);
+      ctx.lineTo(hx2 + f*4.2*s, hy2+5.8*s);
+      ctx.closePath(); ctx.fill();
     }
   } else if(bt==='blob'){
     // No separate head — eyes float in top of blob body
@@ -16950,35 +17231,92 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle='#1a0a0a';
     ctx.beginPath();ctx.moveTo(ax-1.5*s,ay-13*s);ctx.lineTo(ax+1.5*s,ay-13*s);ctx.lineTo(ax,ay-11*s);ctx.closePath();ctx.fill();
   } else if(bt==='spider'){
-    // Cluster of 8 small eyes on cephalothorax (4 large front row, 4 small rear)
-    // Cephalothorax position: ax+f*3*s, ay-12*s
-    const cx2=ax+f*3*s, cy2=ay-12*s;
-    // Front row (4 larger)
+    // 8 glossy eyes in classic spider arrangement: 2 large anterior-median (forward),
+    // flanked by 2 anterior-lateral, plus 4 smaller posterior eyes on top.
+    // Cephalothorax center: ax+f*4*s, ay-12*s
+    const cx2=ax+f*4*s, cy2=ay-12*s;
+    // Dark eye sockets (fills behind all eyes)
+    ctx.fillStyle='#050505';
+    ctx.beginPath();ctx.ellipse(cx2, cy2-1*s, 5*s, 2.8*s, 0, 0, Math.PI*2);ctx.fill();
+    // 2 large primary forward-staring eyes (glossy black with blood-red glow)
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(cx2-1.6*s, cy2-0.2*s, 1.7*s, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx2+1.6*s, cy2-0.2*s, 1.7*s, 0, Math.PI*2);ctx.fill();
+    // Red inner glow (menacing)
+    const rglow = `rgba(220,20,20,${0.7+Math.sin(t2*3)*0.2})`;
+    ctx.fillStyle=rglow;
+    ctx.beginPath();ctx.arc(cx2-1.6*s, cy2-0.2*s, 1.1*s, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx2+1.6*s, cy2-0.2*s, 1.1*s, 0, Math.PI*2);ctx.fill();
+    // Sharp white highlight (predator gleam)
     ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(cx2-1.3*s, cy2-0.5*s, 0.35*s, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx2+1.9*s, cy2-0.5*s, 0.35*s, 0, Math.PI*2);ctx.fill();
+    // 2 smaller anterior-lateral eyes (flanking outward)
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(cx2-3.6*s, cy2-0.1*s, 1*s, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx2+3.6*s, cy2-0.1*s, 1*s, 0, Math.PI*2);ctx.fill();
+    ctx.fillStyle=rglow;
+    ctx.beginPath();ctx.arc(cx2-3.6*s, cy2-0.1*s, 0.55*s, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx2+3.6*s, cy2-0.1*s, 0.55*s, 0, Math.PI*2);ctx.fill();
+    // 4 smaller posterior eyes up top
+    ctx.fillStyle='#000';
     for(let ey=0;ey<4;ey++){
-      const ex=cx2+(ey-1.5)*1.8*s;
-      ctx.beginPath();ctx.arc(ex,cy2-0.5*s,1.1*s,0,Math.PI*2);ctx.fill();
+      const ex=cx2+(ey-1.5)*1.5*s;
+      ctx.beginPath();ctx.arc(ex,cy2-2.8*s,0.7*s,0,Math.PI*2);ctx.fill();
     }
-    ctx.fillStyle=_eyeCol2;
+    ctx.fillStyle='rgba(180,40,40,0.8)';
     for(let ey=0;ey<4;ey++){
-      const ex=cx2+(ey-1.5)*1.8*s;
-      ctx.beginPath();ctx.arc(ex,cy2-0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+      const ex=cx2+(ey-1.5)*1.5*s;
+      ctx.beginPath();ctx.arc(ex,cy2-2.8*s,0.35*s,0,Math.PI*2);ctx.fill();
     }
-    // Back row (4 smaller)
-    ctx.fillStyle='#fff';
-    for(let ey=0;ey<4;ey++){
-      const ex=cx2+(ey-1.5)*1.4*s;
-      ctx.beginPath();ctx.arc(ex,cy2-2.5*s,0.7*s,0,Math.PI*2);ctx.fill();
-    }
-    ctx.fillStyle=_eyeCol2;
-    for(let ey=0;ey<4;ey++){
-      const ex=cx2+(ey-1.5)*1.4*s;
-      ctx.beginPath();ctx.arc(ex,cy2-2.5*s,0.4*s,0,Math.PI*2);ctx.fill();
-    }
-    // Chelicerae (fangs) below cluster
-    ctx.strokeStyle=_sh2(0x33);ctx.lineWidth=0.9*s;ctx.lineCap='round';
-    ctx.beginPath();ctx.moveTo(cx2-1.5*s,cy2+2.5*s);ctx.lineTo(cx2-1*s,cy2+4.5*s);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx2+1.5*s,cy2+2.5*s);ctx.lineTo(cx2+1*s,cy2+4.5*s);ctx.stroke();
+    // Pedipalps (small leg-like appendages either side of fangs)
+    ctx.strokeStyle=_sh2(0x22);ctx.lineWidth=0.9*s;ctx.lineCap='round';
+    const palpSway = Math.sin(t2*2)*0.5*s;
+    ctx.beginPath();
+    ctx.moveTo(cx2-4*s, cy2+1.5*s);
+    ctx.quadraticCurveTo(cx2-5.5*s, cy2+3*s, cx2-4.5*s+palpSway, cy2+5*s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx2+4*s, cy2+1.5*s);
+    ctx.quadraticCurveTo(cx2+5.5*s, cy2+3*s, cx2+4.5*s-palpSway, cy2+5*s);
+    ctx.stroke();
+    // Chelicerae — thick menacing pincer bases
+    ctx.fillStyle=_sh2(0x22);
+    ctx.beginPath();
+    ctx.moveTo(cx2-2.5*s, cy2+2*s);
+    ctx.quadraticCurveTo(cx2-2*s, cy2+5.5*s, cx2-1*s, cy2+6*s);
+    ctx.lineTo(cx2-0.3*s, cy2+5*s);
+    ctx.lineTo(cx2-0.5*s, cy2+2.5*s);
+    ctx.closePath();ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx2+2.5*s, cy2+2*s);
+    ctx.quadraticCurveTo(cx2+2*s, cy2+5.5*s, cx2+1*s, cy2+6*s);
+    ctx.lineTo(cx2+0.3*s, cy2+5*s);
+    ctx.lineTo(cx2+0.5*s, cy2+2.5*s);
+    ctx.closePath();ctx.fill();
+    // Sharp curved fang tips (ivory)
+    ctx.fillStyle='#f0e6d0';
+    ctx.beginPath();
+    ctx.moveTo(cx2-1.1*s, cy2+5.5*s);
+    ctx.quadraticCurveTo(cx2-1.6*s, cy2+7.5*s, cx2-0.6*s, cy2+8.2*s);
+    ctx.lineTo(cx2-0.3*s, cy2+6*s);
+    ctx.closePath();ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx2+1.1*s, cy2+5.5*s);
+    ctx.quadraticCurveTo(cx2+1.6*s, cy2+7.5*s, cx2+0.6*s, cy2+8.2*s);
+    ctx.lineTo(cx2+0.3*s, cy2+6*s);
+    ctx.closePath();ctx.fill();
+    // Dripping venom droplets from fang tips (animated)
+    const dripPhase=(t2*0.6)%1;
+    ctx.fillStyle='rgba(60,220,80,0.8)';
+    ctx.beginPath();
+    ctx.ellipse(cx2-0.6*s, cy2+8.5*s+dripPhase*3*s, 0.45*s, 0.9*s, 0, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx2+0.6*s, cy2+8.5*s+((dripPhase+0.4)%1)*3*s, 0.45*s, 0.9*s, 0, 0, Math.PI*2);ctx.fill();
+    // Venom glow
+    ctx.fillStyle='rgba(120,255,140,0.3)';
+    ctx.beginPath();
+    ctx.arc(cx2, cy2+9*s, 2*s, 0, Math.PI*2);ctx.fill();
   } else if(bt==='slug'){
     // Wide bulging eyes with heavy lids + huge slit mouth
     // Eyes
@@ -17636,10 +17974,7 @@ function drawMainMenu(){
       // Race name
       ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
       ctx.font='bold 16px monospace';ctx.textAlign='center';
-      ctx.fillText(race.name.toUpperCase(),sx+cardW/2,sy+cardH-32);
-      // Description
-      ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='10px monospace';
-      ctx.fillText(race.description,sx+cardW/2,sy+cardH-14);
+      ctx.fillText(race.name.toUpperCase(),sx+cardW/2,sy+cardH-18);
       // Variant count
       ctx.fillStyle='rgba(0,200,0,0.4)';ctx.font='9px monospace';
       ctx.fillText(race.skins.length+' VARIANTS',sx+cardW/2,sy+18);
@@ -17653,8 +17988,6 @@ function drawMainMenu(){
     const race=ALIEN_RACES[window._mmRaceIdx||0]||getRace(selectedRace);
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
     ctx.fillText((window._mmNewGame?'STEP 1b — ':'')+race.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
-    ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
-    ctx.fillText(race.description,cw/2,ch*0.16);
 
     const skins=race.skins;
     const cols=Math.min(skins.length,4), cardW=190, cardH=230, gap=16;
@@ -17733,10 +18066,7 @@ function drawMainMenu(){
       // Type name
       ctx.fillStyle=sel?'#0f0':'rgba(0,220,0,0.65)';
       ctx.font='bold 16px monospace';ctx.textAlign='center';
-      ctx.fillText(st.name.toUpperCase(),sx+cardW/2,sy+cardH-32);
-      // Description
-      ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='10px monospace';
-      ctx.fillText(st.description,sx+cardW/2,sy+cardH-14);
+      ctx.fillText(st.name.toUpperCase(),sx+cardW/2,sy+cardH-18);
       // Variant count
       ctx.fillStyle='rgba(0,200,0,0.4)';ctx.font='9px monospace';
       ctx.fillText(variants.length+(variants.length===1?' VARIANT':' VARIANTS'),sx+cardW/2,sy+18);
@@ -17752,8 +18082,6 @@ function drawMainMenu(){
     const variants=SHIP_PAINTS.filter(p=>(p.ship||'saucer')===type.id);
     ctx.fillStyle='rgba(0,255,0,0.55)';ctx.font='bold 18px monospace';ctx.textAlign='center';
     ctx.fillText((window._mmNewGame?'STEP 3 OF 3 — ':'')+type.name.toUpperCase()+' VARIANTS',cw/2,ch*0.12);
-    ctx.fillStyle='rgba(180,220,180,0.5)';ctx.font='11px monospace';
-    ctx.fillText(type.description,cw/2,ch*0.16);
 
     const cols=Math.min(variants.length,4), cardW=190, cardH=180, gap=16;
     const totalW=cols*(cardW+gap)-gap;

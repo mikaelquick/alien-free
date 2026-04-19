@@ -38,6 +38,7 @@ export const ALIEN_RACES = [
       {id:'dino_compy', name:'Tiny Swift',      body:'#a08040',  head:'#c0a050',  eyes:'#040', glow:'#fe8', accent:'#604818'},
   ]},
   { id:'human',     name:'Human',     description:'Infiltrators wearing human skin', bodyType:'humanoid',skins:[
+      {id:'astronaut',  name:'Astronaut',      body:'#f0d8b8',  head:'#f0d8b8',  eyes:'#148', glow:'#fff', accent:'#c0c4c8', hair:'#8b5a2b', outfit:'astronaut', outfitA:'#e8ecf0', outfitB:'#8a8f95'},
       // Casual clothed variants (skin tone drives face/arms; outfit drives torso)
       {id:'pale_casual',name:'Pale Casual',    body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#8b5a2b', outfit:'tshirt', outfitA:'#c0392b', outfitB:'#2c3e50'},
       {id:'gold_casual',name:'Sunny Casual',   body:'#e8c48a',  head:'#f0cc94',  eyes:'#460', glow:'#fd0', accent:'#c09860', hair:'#f0c040', outfit:'tshirt', outfitA:'#27ae60', outfitB:'#8e44ad'},
@@ -45,7 +46,6 @@ export const ALIEN_RACES = [
       {id:'dark_casual',name:'Dark Casual',    body:'#6a4832',  head:'#744e36',  eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#0a0606', outfit:'tshirt', outfitA:'#f39c12', outfitB:'#7f8c8d'},
       // Costumes
       {id:'president',  name:'President',      body:'#f2d4b4',  head:'#f8dcbe',  eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#5a3a20', outfit:'suit',      outfitA:'#141824', outfitB:'#c01828'},
-      {id:'astronaut',  name:'Astronaut',      body:'#f0d8b8',  head:'#f0d8b8',  eyes:'#148', glow:'#fff', accent:'#c0c4c8', hair:'#8b5a2b', outfit:'astronaut', outfitA:'#e8ecf0', outfitB:'#8a8f95'},
       {id:'ghost_wiz',  name:'Ghost Wizard',   body:'#f2d4b4',  head:'#f2d4b4',  eyes:'#000', glow:'#fff', accent:'#8a8ac0', hair:'#4a2a70', outfit:'ghost',     outfitA:'#f5f5fa', outfitB:'#4a2a70'},
       {id:'clown',      name:'Giggles',        body:'#f2d4b4',  head:'#ffe8e0',  eyes:'#22a', glow:'#fff', accent:'#c44488', hair:'#f0404a', outfit:'clown',     outfitA:'#e33', outfitB:'#fc0'},
       {id:'superhero',  name:'Super Hero',     body:'#e8c48a',  head:'#f0cc94',  eyes:'#060', glow:'#fd4', accent:'#f8d060', hair:'#221810', outfit:'hero',      outfitA:'#1e3a8a', outfitB:'#dc2626'},
@@ -102,6 +102,13 @@ export const ALIEN_RACES = [
       {id:'sp_kenny',   name:'Kenny',       body:'#f2d4b4', head:'#f8dcbe', eyes:'#224', glow:'#fa0', accent:'#d4a878', hair:'#d08040', outfit:'southpark', outfitA:'#d86a14', outfitB:'#2a2a2a', hat:'parka',     pants:'#2a2a2a'},
       {id:'sp_butters', name:'Butters',     body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'southpark', outfitA:'#8ac8e0', outfitB:'#e0c880', hat:'none',      pants:'#c0a040'},
       {id:'sp_chef',    name:'Chef',        body:'#6a4832', head:'#744e36', eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#1a0a06', outfit:'southpark', outfitA:'#c02020', outfitB:'#2040a0', hat:'chef',      pants:'#1a3870'},
+  ]},
+  { id:'bigfoot',   name:'Bigfoot',   description:'Shaggy forest-dwelling cryptid apes', bodyType:'humanoid', skins:[
+      {id:'bf_brown',  name:'Sasquatch',     body:'#5a3a20', head:'#3a2810', eyes:'#220', glow:'#fc8', accent:'#3a2614', hair:'#5a3a20', outfit:'bigfoot', outfitA:'#5a3a20', outfitB:'#3a2614'},
+      {id:'bf_black',  name:'Midnight Ape',  body:'#2a1a14', head:'#1a1008', eyes:'#f40', glow:'#f86', accent:'#181010', hair:'#2a1a14', outfit:'bigfoot', outfitA:'#2a1a14', outfitB:'#100808'},
+      {id:'bf_yeti',   name:'Yeti',          body:'#eae4d0', head:'#d0c8a0', eyes:'#4af', glow:'#cdf', accent:'#c8c0a8', hair:'#f4f0e0', outfit:'bigfoot', outfitA:'#eae4d0', outfitB:'#b8b0a0'},
+      {id:'bf_rust',   name:'Orang Mawas',   body:'#8a3a18', head:'#4a2410', eyes:'#ff0', glow:'#fa4', accent:'#5a2410', hair:'#a04820', outfit:'bigfoot', outfitA:'#8a3a18', outfitB:'#5a2410'},
+      {id:'bf_silver', name:'Silverback',    body:'#4a4850', head:'#2a2024', eyes:'#220', glow:'#ccf', accent:'#2a282e', hair:'#b8b4c0', outfit:'bigfoot', outfitA:'#4a4850', outfitB:'#2a282e'},
   ]},
   { id:'arachnid',  name:'Arachnid',  description:'Eight-legged stalkers from web-worlds', bodyType:'spider', skins:[
       {id:'arach_black', name:'Widow',        body:'#1a1018',  head:'#2a1828',  eyes:'#f00', glow:'#f44', accent:'#0a0408'},
