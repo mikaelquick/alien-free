@@ -281,7 +281,6 @@ const WEAPON_POOL = {
 const RACE_LOADOUTS = {
   grey:      ['stunner','wail','plasma','gwell','swarm','chainsaw'],
   larva:     ['acid','swarm','plasma','stunner','wail','chainsaw'],
-  reptilian: ['plasma','rocket','wail','stunner','gwell','chainsaw'],
   insectoid: ['swarm','stunner','acid','wail','plasma','chainsaw'],
   human:     ['laser','rocket','stunner','wail','gwell','chainsaw'],
   blob:      ['acid','gwell','wail','swarm','plasma','chainsaw'],
@@ -16637,6 +16636,12 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.closePath(); ctx.fill();
       ctx.fillStyle='#f0d000';
       ctx.beginPath(); ctx.arc(hx2, spHy-15*s, 2.8*s, 0, Math.PI*2); ctx.fill();
+      // Cartman chin crease — small curved line under the mouth
+      ctx.strokeStyle='rgba(40,20,10,0.55)'; ctx.lineWidth=0.7*s;
+      ctx.beginPath();
+      ctx.moveTo(hx2-2.2*s, spHy+8*s);
+      ctx.quadraticCurveTo(hx2, spHy+8.8*s, hx2+2.2*s, spHy+8*s);
+      ctx.stroke();
     } else if(hat==='parka'){
       // Kenny — orange parka hood covers most of the face
       ctx.fillStyle=skin.outfitA || '#d86a14';
@@ -17657,9 +17662,22 @@ function drawMainMenu(){
     const startX=cw/2-totalW/2;
     const startY=ch*0.22;
     mainMenuSel=((mainMenuSel%skins.length)+skins.length)%skins.length;
+    // Vertical scroll: keep the selected card in view when there are many skins.
+    const totalRows=Math.ceil(skins.length/cols);
+    const availH=ch-50-startY;
+    const rowsVisible=Math.max(1, Math.floor(availH/(cardH+gap)));
+    const selRow=Math.floor(mainMenuSel/cols);
+    if(window._mmRaceSkinScroll===undefined) window._mmRaceSkinScroll=0;
+    if(selRow < window._mmRaceSkinScroll) window._mmRaceSkinScroll=selRow;
+    if(selRow >= window._mmRaceSkinScroll + rowsVisible) window._mmRaceSkinScroll=selRow - rowsVisible + 1;
+    const maxScroll=Math.max(0, totalRows - rowsVisible);
+    window._mmRaceSkinScroll=Math.max(0, Math.min(maxScroll, window._mmRaceSkinScroll));
+    const scrollOffset=window._mmRaceSkinScroll*(cardH+gap);
     skins.forEach((sk,i)=>{
       const col=i%cols, row=Math.floor(i/cols);
-      const sx=startX+col*(cardW+gap), sy=startY+row*(cardH+gap);
+      const sx=startX+col*(cardW+gap), sy=startY+row*(cardH+gap)-scrollOffset;
+      // Cull rows scrolled out of the visible band
+      if(sy+cardH < startY-4 || sy > ch-40) return;
       const sel=i===mainMenuSel;
       const isCur=selectedSkin===sk.id;
       ctx.fillStyle=sel?'rgba(0,45,15,0.85)':'rgba(0,12,5,0.6)';
@@ -17672,6 +17690,15 @@ function drawMainMenu(){
       ctx.fillText(sk.name,sx+cardW/2,sy+cardH-14);
       if(isCur){ctx.fillStyle='#fd0';ctx.font='13px monospace';ctx.fillText('\u2605',sx+cardW-12,sy+16);}
     });
+    // Scroll indicators
+    if(window._mmRaceSkinScroll>0){
+      ctx.fillStyle='rgba(0,255,0,0.6)';ctx.font='14px monospace';ctx.textAlign='center';
+      ctx.fillText('\u25B2 more above',cw/2,startY-6);
+    }
+    if(window._mmRaceSkinScroll<maxScroll){
+      ctx.fillStyle='rgba(0,255,0,0.6)';ctx.font='14px monospace';ctx.textAlign='center';
+      ctx.fillText('\u25BC more below',cw/2,ch-36);
+    }
     ctx.fillStyle='rgba(0,200,0,0.3)';ctx.font='11px monospace';ctx.textAlign='center';
     ctx.fillText('A/D to browse  |  ENTER/SPACE to equip  |  ESC to back to races',cw/2,ch-20);
   }
@@ -19115,6 +19142,7 @@ function updateMainMenu(){
       // Pre-select current skin if it's in this race, else first variant
       const curIdx=race.skins.findIndex(s=>s.id===selectedSkin);
       mainMenuSel=curIdx>=0?curIdx:0;
+      window._mmRaceSkinScroll=0;
     }
     if(keys['escape']){
       keys['escape']=false;

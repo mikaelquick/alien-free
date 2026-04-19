@@ -13,22 +13,7 @@ export const ALIEN_RACES = [
       {id:'larva_white',name:'Maggot Prince',  body:'#e8e0c0',  head:'#f8f0d0',  eyes:'#000', glow:'#ffe', accent:'#c0b898'},
       {id:'larva_black',name:'Tar Grub',       body:'#2a1a1a',  head:'#3a2a2a',  eyes:'#f40', glow:'#f60', accent:'#1a0a0a'},
   ]},
-  { id:'reptilian', name:'Reptilian', description:'Tailed scaled warriors & ancient saurians', bodyType:'reptile',skins:[
-      {id:'red',        name:'Inferno',        body:'#c03020',  head:'#e04030',  eyes:'#ff0', glow:'#f40', accent:'#a02010'},
-      {id:'rept_swamp', name:'Swamp Lord',     body:'#468538',  head:'#58a542',  eyes:'#ff0', glow:'#8f4', accent:'#2e5e22'},
-      {id:'rept_sand',  name:'Desert Serpent', body:'#b08830',  head:'#d0a040',  eyes:'#000', glow:'#fd0', accent:'#907020'},
-      {id:'rept_emer',  name:'Emerald',        body:'#2a8860',  head:'#30a070',  eyes:'#000', glow:'#4fc', accent:'#1a6040'},
-      // Saurian (formerly dinosaur race) — ancient reptile-kin of prehistoric Earth
-      {id:'dino_rex',   name:'Tyrant King',     body:'#5a4030',  head:'#704a30',  eyes:'#ff0', glow:'#fa4', accent:'#3a2818'},
-      {id:'dino_rapt',  name:'Raptor',          body:'#408050',  head:'#50a060',  eyes:'#fa0', glow:'#8f4', accent:'#205030'},
-      {id:'dino_tric',  name:'Horned Bulwark',  body:'#5a7058',  head:'#708868',  eyes:'#000', glow:'#dfa', accent:'#384030'},
-      {id:'dino_spino', name:'Sail Stalker',    body:'#304860',  head:'#385878',  eyes:'#f40', glow:'#8cf', accent:'#182838'},
-      {id:'dino_anky',  name:'Armor Club',      body:'#6a5a30',  head:'#807040',  eyes:'#220', glow:'#fd8', accent:'#403820'},
-      {id:'dino_steg',  name:'Plate Back',      body:'#3a5838',  head:'#4a7048',  eyes:'#fc0', glow:'#cf4', accent:'#1a3018'},
-      {id:'dino_ptero', name:'Sky Rider',       body:'#a04040',  head:'#c05050',  eyes:'#ff0', glow:'#f66', accent:'#701818'},
-      {id:'dino_compy', name:'Tiny Swift',      body:'#a08040',  head:'#c0a050',  eyes:'#040', glow:'#fe8', accent:'#604818'},
-  ]},
-  { id:'insectoid', name:'Insectoid', description:'Multi-legged chitin warriors',  bodyType:'insect', skins:[
+  { id:'insectoid', name:'Insectoid', description:'Multi-legged chitin warriors & scaled saurians',  bodyType:'insect', skins:[
       {id:'purple',     name:'Void Walker',    body:'#8040c0',  head:'#a060e0',  eyes:'#ff0', glow:'#a0f', accent:'#6030a0'},
       {id:'pink',       name:'Bubblegum',      body:'#e060a0',  head:'#ff80c0',  eyes:'#f0f', glow:'#f8f', accent:'#c04080'},
       {id:'ins_mantis', name:'Mantis',         body:'#2a2030',  head:'#3a3040',  eyes:'#f0f', glow:'#a0f', accent:'#1a1020'},
@@ -37,6 +22,20 @@ export const ALIEN_RACES = [
       {id:'cry_ruby',   name:'Ruby Matron',    body:'#c02040',  head:'#e04060',  eyes:'#fff', glow:'#f68', accent:'#801020'},
       {id:'cry_sapph',  name:'Sapphire Seer',  body:'#2040a0',  head:'#3060d0',  eyes:'#ff0', glow:'#8cf', accent:'#102078'},
       {id:'cry_opal',   name:'Opal Dancer',    body:'#f0e0ff',  head:'#ffc0f0',  eyes:'#0ff', glow:'#fcf', accent:'#c0a0e0'},
+      // Former Reptilian skins — now rendered as insectoid
+      {id:'red',        name:'Inferno',        body:'#c03020',  head:'#e04030',  eyes:'#ff0', glow:'#f40', accent:'#a02010'},
+      {id:'rept_swamp', name:'Swamp Lord',     body:'#468538',  head:'#58a542',  eyes:'#ff0', glow:'#8f4', accent:'#2e5e22'},
+      {id:'rept_sand',  name:'Desert Serpent', body:'#b08830',  head:'#d0a040',  eyes:'#000', glow:'#fd0', accent:'#907020'},
+      {id:'rept_emer',  name:'Emerald',        body:'#2a8860',  head:'#30a070',  eyes:'#000', glow:'#4fc', accent:'#1a6040'},
+      // Saurian — ancient reptile-kin of prehistoric Earth
+      {id:'dino_rex',   name:'Tyrant King',     body:'#5a4030',  head:'#704a30',  eyes:'#ff0', glow:'#fa4', accent:'#3a2818'},
+      {id:'dino_rapt',  name:'Raptor',          body:'#408050',  head:'#50a060',  eyes:'#fa0', glow:'#8f4', accent:'#205030'},
+      {id:'dino_tric',  name:'Horned Bulwark',  body:'#5a7058',  head:'#708868',  eyes:'#000', glow:'#dfa', accent:'#384030'},
+      {id:'dino_spino', name:'Sail Stalker',    body:'#304860',  head:'#385878',  eyes:'#f40', glow:'#8cf', accent:'#182838'},
+      {id:'dino_anky',  name:'Armor Club',      body:'#6a5a30',  head:'#807040',  eyes:'#220', glow:'#fd8', accent:'#403820'},
+      {id:'dino_steg',  name:'Plate Back',      body:'#3a5838',  head:'#4a7048',  eyes:'#fc0', glow:'#cf4', accent:'#1a3018'},
+      {id:'dino_ptero', name:'Sky Rider',       body:'#a04040',  head:'#c05050',  eyes:'#ff0', glow:'#f66', accent:'#701818'},
+      {id:'dino_compy', name:'Tiny Swift',      body:'#a08040',  head:'#c0a050',  eyes:'#040', glow:'#fe8', accent:'#604818'},
   ]},
   { id:'human',     name:'Human',     description:'Infiltrators wearing human skin', bodyType:'humanoid',skins:[
       // Casual clothed variants (skin tone drives face/arms; outfit drives torso)
