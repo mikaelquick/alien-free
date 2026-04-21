@@ -6389,27 +6389,9 @@ function drawMothershipOnFootHUD(mi, h){
     ctx.fillText('['+c.key+']', sx+cw/2, chy+19);
   }
 
-  // Weapon slot row (mirror of on-foot row at src/main.js:14687+)
-  const _lo = getRaceWeapons();
-  const slots = _lo.length;
-  const sw=40, gap=4, total=slots*sw+(slots-1)*gap;
-  const hx=(canvas.width-total)/2, hy=canvas.height-84;
-  ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(hx-6,hy-6,total+12,40);
-  for(let i=0;i<slots;i++){
-    const sx=hx+i*(sw+gap), sy=hy;
-    const cd=(alien.weaponCD&&alien.weaponCD[i])||0, maxCD=_lo[i].cd;
-    const sel=i===alien.weapon;
-    ctx.fillStyle=sel?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.05)';
-    ctx.fillRect(sx,sy,sw,28);
-    ctx.strokeStyle=sel?_lo[i].color:'rgba(255,255,255,0.25)';
-    ctx.lineWidth=sel?2:1;ctx.strokeRect(sx+0.5,sy+0.5,sw-1,27);
-    const cdF=maxCD?cd/maxCD:0;
-    if(cdF>0){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(sx,sy+28-cdF*28,sw,cdF*28);}
-    ctx.fillStyle=sel?'#fff':'#ccc';ctx.font='bold 9px monospace';ctx.textAlign='center';
-    ctx.fillText((i+1)+'',sx+7,sy+11);
-    ctx.font='8px monospace';
-    ctx.fillText(_lo[i].label,sx+sw/2+3,sy+22);
-  }
+  // Weapon slot row hidden in the mothership — it takes up too much space and
+  // combat in the hub is rare. The FIRE/SWAP chips above still show weapon
+  // status, so the player can see that weapons are usable.
 }
 
 function drawMothership(){
@@ -7279,7 +7261,12 @@ function drawMothership(){
     // Doors (one per menu entry) — each styled specifically to its content
     h.doorX.forEach((dx,i)=>{
       const sx=dx-camX;
-      if(sx<-120||sx>cw+120)return;
+      // Cull against actual screen coords (post-zoom+translate). The old
+      // `sx > cw+120` cull hid far doors during docking because the arrival
+      // animation uses a wide fit-to-hub zoom, making the visible pre-scale
+      // range larger than cw.
+      const _scrX = _msTX + _msZoom*sx;
+      if(_scrX<-140||_scrX>cw+140)return;
       const m=MS_MENUS[i];
       const c=m.color;
       const near=h.nearDoor===i;
@@ -7560,7 +7547,10 @@ function drawMothership(){
     if(mi.hubCrew) mi.hubCrew.forEach(c=>{
       if(c.dead) return;
       const cx=c.x-camX;
-      if(cx<-60||cx>cw+60)return;
+      // Cull in screen coords so the arrival wide-zoom doesn't hide NPCs
+      // that are still on-screen (matches the door cull above).
+      const _scrX = _msTX + _msZoom*cx;
+      if(_scrX<-80||_scrX>cw+80)return;
       drawHubCrewMember(c, cx, floorY, t);
     });
     // Ambient particles (drawn after doors)
@@ -7625,6 +7615,46 @@ function drawMothership(){
     }
 
     ctx.restore();
+    // --- Arrival door-name overlay (screen space) ---
+    // The arrival animation zooms out to fit the whole hub, which shrinks the
+    // in-scene hanging signs too small to read. Draw a readable label above
+    // each door in screen coords while arriving so the player can see where
+    // "Command Bridge", "Comms Channel", etc. are before walking over.
+    if(mi.arriving && h.doorX){
+      ctx.font='bold 12px monospace';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      const ak=Math.min(1, mi.arriving.timer/mi.arriving.duration);
+      const fadeOut = Math.max(0, 1 - Math.max(0, (ak-0.75)/0.25)); // fade out last 25%
+      h.doorX.forEach((dx,i)=>{
+        const m=MS_MENUS[i]; if(!m) return;
+        const sx=dx-camX;
+        const scrX = _msTX + _msZoom*sx;
+        if(scrX<-60 || scrX>cw+60) return;
+        const c=m.color;
+        const nameW = ctx.measureText(m.name).width;
+        const bW=nameW+22, bH=20;
+        const bY = 70; // just below the top HUD band
+        ctx.globalAlpha = fadeOut;
+        ctx.fillStyle='rgba(11,22,36,0.9)';
+        ctx.fillRect(scrX-bW/2, bY, bW, bH);
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.9)`;
+        ctx.lineWidth=1.5;
+        ctx.strokeRect(scrX-bW/2+0.5, bY+0.5, bW-1, bH-1);
+        ctx.fillStyle='rgba(230,240,255,1)';
+        ctx.fillText(m.name, scrX, bY+bH/2+0.5);
+        // Tick line down toward the door so the player sees which door each
+        // label belongs to.
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.45)`;
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(scrX, bY+bH);
+        ctx.lineTo(scrX, bY+bH+10);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+      ctx.textBaseline='alphabetic';
+    }
     // Top HUD
     ctx.fillStyle='rgba(100,200,255,0.85)';ctx.font=`bold 16px monospace`;ctx.textAlign='center';
     ctx.fillText('MOTHERSHIP',cw/2,28);
