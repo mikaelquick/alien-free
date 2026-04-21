@@ -5698,7 +5698,11 @@ function updateMothership(){
           ev.shots=ev.shots.filter(s=>s.life>0);
         }
         else if(ev.type==='wormhole'){
-          const prog=ev.t/ev.life;
+          // ev.t increments while ev.life decrements, so their sum equals the
+          // original lifespan. Using it as the denominator keeps prog in [0,1]
+          // — `ev.t/ev.life` alone crosses 1 halfway through and makes ev.r
+          // go negative, which then throws IndexSizeError in the draw.
+          const prog=Math.max(0,Math.min(1, ev.t/(ev.t+ev.life)));
           ev.r = prog<0.3 ? (prog/0.3)*40 : prog>0.8 ? (1-(prog-0.8)/0.2)*40 : 40;
         }
         ev.life--;

@@ -36,6 +36,8 @@ Added 2026-04-17, heavily expanded 2026-04-20.
 
 **Weapon combat in hub** — `fireMothership()` handles Q-fire and Tab-switch while in menu OR comms-walk. Uses full on-foot loadout (`getRaceWeapons()`), per-weapon range+radial detection, palette-colored particles in `mi.fxParticles` (separate from global particles — global ones don't render in mothership). Particles drawn inside the zoom transform so they scale with scene.
 
+**On-foot HUD in hub (2026-04-21)** — `drawMothershipOnFootHUD(mi, h)` defined just before `drawMothership()` and called at the bottom of the menu-branch render (after top HUD). Mirrors the on-foot planet HUD at `src/main.js:14644+`: action chips row at `canvas.height-40` (FIRE [Q], SWAP [TAB], ENTER [E] when `h.nearDoor>=0`, DEPART [E] when `h.x<180`, EXIT [ESC]) and weapon slot row at `canvas.height-84` using `getRaceWeapons()` / `alien.weapon` / `alien.weaponCD`. The regular on-foot HUD is gated off in mothership (`!mothershipMode` / `playerMode==='ship'`), so this helper is what keeps the hub feeling like the same on-foot mode. User ask: "the weapons and buttons should be presented as when you leave the ship on other planets in the mothership".
+
 **Persistent NPC deaths** — `msDeadCrew:Set<role>` and `msDeadOps:Set<opIndex>`. Added to `saveGame`/`loadGame`. `enterMothership()` skips populating any role/op in the set. Every draw loop early-returns on `c.dead`/`op.dead`. `fireMothership()` calls `saveGame()` immediately on kill.
 
 **Door titles** — corridor door labels render below each door; `zoo` and `lab` get an additional title above the signage plate.
