@@ -264,6 +264,7 @@ let rockets = []; // rocket projectiles — {x, y, vx, vy, life}
 let bloodPools = []; // dark stains on the ground — {x, y, r, targetR, life, maxLife, color}
 let gibs = []; // flying limb chunks — {x, y, vx, vy, rot, rotV, size, life, kind, color, onGround, groundY}
 let skidMarks = []; // tire skid marks — {x, y, w, life, maxLife, alpha}
+let moonFootprints = []; // permanent boot impressions left on the Moon's surface — {x,y,facing}
 // On-foot alien weapon projectiles
 let stunWaves = []; // neural stunner cones + panic wails — {x,y,r,maxR,life,maxLife,kind:'cone'|'radial',dir,effect}
 let plasmaBolts = []; // arcing plasma globs — {x,y,vx,vy,life}
@@ -1039,6 +1040,7 @@ const planetDefs = [
     buildingColors: [['#554','#665','#443'],['#545','#656','#434'],['#455','#566','#344']],
     inhabitantCount: 40, buildingDensity: 1, hasClouds: true, isAlien: false,
     gravityScale: 1.0, // Earth reference
+    rotationPeriod: 1.0, // Earth day (~24 h)
     sadFacts: ['"They had families..."','"He just got a puppy..."',
       '"She never finished her novel..."','"He promised he\'d be home for dinner..."',
       '"The dog will wait by the door forever..."','"His kid drew him a picture today..."'],
@@ -1053,6 +1055,7 @@ const planetDefs = [
     buildingColors: [['#766','#877','#655'],['#776','#887','#665']],
     inhabitantCount: 25, buildingDensity: 0.7, hasClouds: false, isAlien: false,
     gravityScale: 0.38, // Mars ~0.38 g
+    rotationPeriod: 1.03, // Mars day ~24.6 h — nearly Earth-like
     sadFacts: ['"They spent 7 months getting here..."','"Mars was supposed to be safe..."',
       '"The colony was finally self-sustaining..."','"Their oxygen supply was just restocked..."'],
     cryPhrases: ["NOT HERE TOO","WE CAME SO FAR","THE COLONY","MY OXYGEN",
@@ -1066,6 +1069,7 @@ const planetDefs = [
     buildingColors: [['#d4a070','#c08040','#a06030'],['#d4b080','#b08040','#805030']],
     inhabitantCount: 35, buildingDensity: 1.2, hasClouds: true, isAlien: true,
     gravityScale: 2.53, // Jupiter ~2.53 g
+    rotationPeriod: 0.4, // Jupiter spins fast (~10 h) — quick day/night flicker
     alienSkin: ['#c8f','#a6d','#d8ff','#b8e'],
     alienHeadShape: 'tall', // tall oval head
     alienExtra: 'antennae',
@@ -1089,6 +1093,7 @@ const planetDefs = [
     buildingColors: [['#aac','#bbd','#88a'],['#abc','#bcd','#9ab']],
     inhabitantCount: 20, buildingDensity: 0.6, hasClouds: true, isAlien: true,
     gravityScale: 0.89, // Uranus ~0.89 g
+    rotationPeriod: 0.72, // Uranus day ~17 h
     alienSkin: ['#cef','#bdf','#adf','#def'],
     alienHeadShape: 'wide', // wide flat head
     alienExtra: 'horns',
@@ -1112,6 +1117,7 @@ const planetDefs = [
     buildingColors: [['#644','#755','#533'],['#654','#765','#543']],
     inhabitantCount: 30, buildingDensity: 0.8, hasClouds: false, isAlien: true,
     gravityScale: 0.38, // Mercury ~0.38 g
+    rotationPeriod: 6, // Mercury spins extremely slowly (~59 days); capped for gameplay
     alienSkin: ['#f84','#e63','#f96','#d52'],
     alienHeadShape: 'pointy', // pointy demon-like head
     alienExtra: 'tail',
@@ -1135,6 +1141,7 @@ const planetDefs = [
     buildingColors: [['#a98','#ba9','#987'],['#b98','#ca9','#a87']],
     inhabitantCount: 25, buildingDensity: 0.6, hasClouds: false, isAlien: true,
     gravityScale: 0.91, // Venus ~0.91 g
+    rotationPeriod: 8, // Venus rotates backwards and incredibly slowly (~243 days); capped
     alienSkin: ['#d4a050','#c09040','#e0b060','#b08030'],
     alienHeadShape: 'egyptian',
     alienExtra: 'headdress',
@@ -1162,6 +1169,7 @@ const planetDefs = [
     buildingColors: [['#d4a868','#b08838','#806020']],
     inhabitantCount: 18, buildingDensity: 0, hasClouds: true, isAlien: true,
     gravityScale: 1.07, // Saturn ~1.07 g
+    rotationPeriod: 0.45, // Saturn spins fast (~10.7 h)
     alienSkin: ['#e8d0a0','#d4b878','#c0a060','#a88848'],
     alienHeadShape: 'tall',
     alienExtra: 'antennae',
@@ -1184,6 +1192,7 @@ const planetDefs = [
     buildingColors: [['#333','#444','#222'],['#343','#454','#232']],
     inhabitantCount: 12, buildingDensity: 0.3, hasClouds: false, isAlien: true,
     gravityScale: 1.14, // Neptune ~1.14 g
+    rotationPeriod: 0.67, // Neptune day ~16 h
     alienSkin: ['#5a3a5a','#4a2a4a','#6a4a6a','#3a1a3a'],
     alienHeadShape: 'tall',
     alienExtra: 'antennae',
@@ -1208,6 +1217,7 @@ const planetDefs = [
     buildingColors: [['#ff8040','#ffa060','#e06020']],
     inhabitantCount: 15, buildingDensity: 0.5, hasClouds: false, isAlien: true, isSun: true,
     gravityScale: 28.0, // Sun ~28 g — extreme, will slam everything to the ground fast
+    rotationPeriod: 3, // Sun rotates over ~27 days; capped for gameplay
     alienSkin: ['#ffc040','#ff8020','#ffe080','#ff6010'],
     alienHeadShape: 'round',
     alienExtra: 'none',
@@ -1228,6 +1238,7 @@ const planetDefs = [
     buildingColors: [['#888','#777','#666']],
     inhabitantCount: 0, buildingDensity: 0, hasClouds: false, isAlien: false, isMoon: true,
     gravityScale: 0.17, // Moon ~0.166 g
+    rotationPeriod: 6, // Moon is tidally locked (~28 days); capped for gameplay
     orbitsEarth: true,
     sadFacts: ['"Silent. Forever silent."','"No one hears anything here..."','"Only dust and footprints remain..."'],
     cryPhrases: [],
@@ -1326,7 +1337,7 @@ const earthTypeQuotes = {
 };
 
 // --- SPACESHIP ---
-const ship = { x:400, y:GROUND_LEVEL-200, vx:0, vy:0, tilt:0, boosting:false, beamActive:false, lightPhase:0, lasso:null };
+const ship = { x:400, y:GROUND_LEVEL-200, vx:0, vy:0, tilt:0, boosting:false, beamActive:false, lightPhase:0, lasso:null, recalling:false };
 
 // --- INIT ---
 const mothershipPos={x:3500,y:-600};
@@ -8671,6 +8682,11 @@ document.addEventListener('keydown', e => {
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
   if (k==='g'&&playerMode==='ship')ship.minigunFiring=true;
   if (!keys[k]&&k==='c'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
+  // R: recall ship — when on foot, toggles autopilot that flies the ship to the player.
+  if (!keys[k]&&k==='r'&&playerMode==='onfoot'&&gameMode==='planet'&&!alien.drivingVehicle&&!mothershipMode&&!pyramidInteriorMode){
+    ship.recalling=!ship.recalling;
+    showMessage(ship.recalling?'Ship recalled — inbound':'Recall cancelled');
+  }
   // Vehicle cloak: while driving a hijacked vehicle, 'v' toggles cloak (matches ship cloak; no energy limit).
   if (!keys[k]&&k==='v'&&playerMode==='onfoot'&&alien.drivingVehicle&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){
     const v=alien.drivingVehicle;
@@ -8945,12 +8961,39 @@ function drawBloodPools(){
     const sx=p.x-camera.x, sy=p.y-camera.y;
     if(sx<-40||sx>canvas.width+40||sy<-20||sy>canvas.height+20)continue;
     const fade=Math.min(1,p.life/p.maxLife);
-    ctx.fillStyle=p.color;ctx.globalAlpha=0.35+fade*0.45;
-    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r,p.r*0.4,0,0,Math.PI*2);ctx.fill();
+    // Age 0 (fresh) → 1 (nearly dry). Pool darkens and shrinks slightly as it dries.
+    const age = 1 - fade;
+    const dryShrink = 1 - age*0.25;
+    // Blend fresh red toward a dried brown-black as age increases.
+    let col = p.color;
+    if(age > 0.3){
+      // Parse hex color if possible, otherwise fall back.
+      const m = /^#([0-9a-f]{6})$/i.exec(p.color);
+      if(m){
+        const r=parseInt(m[1].slice(0,2),16), g=parseInt(m[1].slice(2,4),16), b=parseInt(m[1].slice(4,6),16);
+        const t=Math.min(1,(age-0.3)/0.6);
+        const rr=Math.round(r*(1-t)+60*t), gg=Math.round(g*(1-t)+25*t), bb=Math.round(b*(1-t)+15*t);
+        col=`rgb(${rr},${gg},${bb})`;
+      }
+    }
+    ctx.fillStyle=col;ctx.globalAlpha=(0.35+fade*0.45)*(1-age*0.2);
+    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r*dryShrink,p.r*0.4*dryShrink,0,0,Math.PI*2);ctx.fill();
     // Darker inner
     ctx.globalAlpha=0.3*fade;
     ctx.fillStyle='#1a0000';
-    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r*0.55,p.r*0.22,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(p.x,p.y,p.r*0.55*dryShrink,p.r*0.22*dryShrink,0,0,Math.PI*2);ctx.fill();
+    // Cracked crust when very dry.
+    if(age > 0.7){
+      ctx.globalAlpha = (age-0.7)*2;
+      ctx.strokeStyle='#2a0a00';
+      ctx.lineWidth=0.6;
+      ctx.beginPath();
+      ctx.moveTo(p.x-p.r*0.5, p.y);
+      ctx.lineTo(p.x+p.r*0.5, p.y);
+      ctx.moveTo(p.x, p.y-p.r*0.15);
+      ctx.lineTo(p.x+p.r*0.3, p.y+p.r*0.15);
+      ctx.stroke();
+    }
     ctx.globalAlpha=1;
   }
 }
@@ -9192,6 +9235,13 @@ let _sndCount=0;
 function playSound(type){
   try{if(window._muted)return;initAudio();if(!audioCtx)return;
   if(_sndCount>4)return; // max concurrent sounds
+  // Airless-world attenuation: on the Moon, most ambient SFX are muffled.
+  // Explosions and structural impacts still pass (you'd feel those through your suit),
+  // but beams, gunfire, footsteps, small zaps get skipped a lot of the time.
+  if(currentPlanet && currentPlanet.id==='moon' && playerMode==='onfoot'){
+    const muffled = !(type==='explosion' || type==='missile');
+    if(muffled && Math.random() < 0.75) return;
+  }
   _sndCount++;setTimeout(()=>_sndCount--,300);
   const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
   osc.connect(gain);gain.connect(audioCtx.destination);
@@ -9480,6 +9530,7 @@ function togglePlayerMode(){
     if(d<80){
       playerMode='ship';
       alien.inCave=false;
+      ship.recalling=false;
       showMessage(tr('msg.backInCockpit'));
     }else{
       showMessage(tr('msg.getCloser'));
@@ -10062,9 +10113,32 @@ function update(){
   // --- ON-FOOT MODE ---
   if(playerMode==='onfoot'&&gameMode==='planet'){
     updateAlienOnFoot();
-    // Ship hovers in place with slight bob
-    ship.vy=Math.sin(ship.lightPhase)*0.1;ship.y+=ship.vy;
-    ship.vx*=0.95;ship.x+=ship.vx;ship.tilt*=0.95;
+    if(ship.recalling && !mothershipMode && !pyramidInteriorMode){
+      // Autopilot: steer the parked ship toward the player and hover above ground.
+      const tx=alien.x, ty=GROUND_LEVEL-160;
+      const dx=tx-ship.x, dy=ty-ship.y, d=Math.hypot(dx,dy);
+      if(d<70){
+        ship.recalling=false;
+        ship.vx*=0.3; ship.vy*=0.3;
+        showMessage('Ship has arrived');
+      }else{
+        const accel=0.45;
+        ship.vx+=(dx/d)*accel;
+        ship.vy+=(dy/d)*accel;
+        // Cap speed so it doesn't overshoot wildly.
+        const maxV=7, vmag=Math.hypot(ship.vx,ship.vy);
+        if(vmag>maxV){ship.vx=ship.vx/vmag*maxV; ship.vy=ship.vy/vmag*maxV;}
+        ship.tilt=Math.max(-0.3,Math.min(0.3,ship.vx*0.05));
+      }
+      ship.vx*=0.94; ship.vy*=0.94;
+      ship.x+=ship.vx; ship.y+=ship.vy;
+      // Don't sink below terrain while flying in.
+      if(ship.y>GROUND_LEVEL-50){ship.y=GROUND_LEVEL-50; if(ship.vy>0)ship.vy=0;}
+    }else{
+      // Ship hovers in place with slight bob
+      ship.vy=Math.sin(ship.lightPhase)*0.1;ship.y+=ship.vy;
+      ship.vx*=0.95;ship.x+=ship.vx;ship.tilt*=0.95;
+    }
     updatePlanetShared();
     return;
   }else{
@@ -10722,6 +10796,21 @@ function updatePlanetShared(){
             if(Math.abs(h.bodyX-h.homeX)>500){h.walkDir=h.bodyX>h.homeX?-1:1;}
           }
         }
+        // Overwhelmed panic → kneeling beg. If a scared unit wedges in place
+        // (stuck between buildings / other units), give them a chance to
+        // collapse and plead rather than jitter forever.
+        if(!h.begging && h.crying && h.panicLevel>3 && !h.ragdoll && !h.onFire && !h.beingBeamed && !h.stunTimer){
+          if(h._lastBegX!=null && Math.abs(h.bodyX-h._lastBegX)<0.5) h._panicStuck=(h._panicStuck||0)+1;
+          else h._panicStuck=0;
+          h._lastBegX=h.bodyX;
+          if(h._panicStuck>90 && Math.random()<0.02){ h.begging=true; h.beggingTimer=240+Math.random()*300; h._panicStuck=0; }
+        }
+        if(h.begging){
+          h.beggingTimer--;
+          h.walkSpeed=0;
+          h.walkDir=(h.bodyX<ship.x?1:-1); // face the threat; render flips on walkDir
+          if(h.beggingTimer<=0 || h.ragdoll || h.onFire || h.beingBeamed){ h.begging=false; h._panicStuck=0; }
+        }
         if(debugMode.active){ if(keys['f']){h.walkDir=1;h.walkSpeed=1.2;} else if(keys['b']){h.walkDir=-1;h.walkSpeed=1.2;} else if(keys['x']){h.walkSpeed=0;} }
         const mv=h.walkDir*h.walkSpeed;h.headX+=mv;h.bodyX+=mv;h.legLX+=mv;h.legRX+=mv;h.armLX+=mv;h.armRX+=mv;h.footLX+=mv;h.footRX+=mv;
         // Prevent walking into ocean
@@ -10748,6 +10837,21 @@ function updatePlanetShared(){
         h.footLY+=oy; h.footRY+=oy;
       }
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
+      // Begging pose override: kneel with arms outstretched toward the threat.
+      if(h.begging && !h.ragdoll && !h.onFire && !h.beingBeamed){
+        const tremor=Math.sin(h.walkTimer*0.2)*1.2*s;
+        h.bodyY=GROUND_LEVEL-18*s;
+        h.headY=GROUND_LEVEL-28*s+Math.abs(Math.sin(h.walkTimer*0.05))*0.5;
+        h.legLY=GROUND_LEVEL-4*s;  h.legRY=GROUND_LEVEL-4*s;
+        h.legLX=h.bodyX-3*s;       h.legRX=h.bodyX+3*s;
+        h.footLY=GROUND_LEVEL;     h.footRY=GROUND_LEVEL;
+        h.footLX=h.bodyX-5*s;      h.footRX=h.bodyX+5*s;
+        const reach=9*s;
+        h.armLX=h.bodyX+reach;     h.armRX=h.bodyX+reach+2*s;
+        h.armLY=GROUND_LEVEL-34*s+tremor;
+        h.armRY=GROUND_LEVEL-34*s-tremor;
+        h.headX=h.bodyX+1.5*s;
+      }
     }
   });
 
@@ -10910,7 +11014,12 @@ function updatePlanetShared(){
   if(combo.timer>0){combo.timer--;if(combo.timer===0)combo.count=0;}
 
   // --- DAY/NIGHT CYCLE ---
-  dayNightCycle=(dayNightCycle+0.00008)%1; // ~3.5 min full cycle // full cycle ~55 seconds
+  // Per-planet rotation period scales the cycle speed. Default 1.0 = ~3.5 min full cycle.
+  // Venus rotates backwards and very slowly; Jupiter spins fast; the Moon locks to Earth-like ~28x.
+  {
+    const _rp = (currentPlanet && currentPlanet.rotationPeriod) || 1.0;
+    dayNightCycle = (dayNightCycle + 0.00008/_rp + 1) % 1;
+  }
   dayNightBrightness=Math.max(0,Math.sin(dayNightCycle*Math.PI*2)*0.8); // 0=dark, positive=bright windows
 
   // --- WEATHER ---
@@ -10941,9 +11050,20 @@ function updatePlanetShared(){
         }
       }
     }
-    if(wp.id==='mars'&&Math.random()>0.85){
-      // Dust
-      weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y+Math.random()*canvas.height,vx:3+Math.random()*2,vy:Math.random()-0.5,life:60,type:'dust'});
+    if(wp.id==='mars'){
+      // Mars has periodic intensifying dust storms — storm factor ranges 0.2 (calm) to 1.5 (planet-wide).
+      if(window._marsStormPhase===undefined) window._marsStormPhase = Math.random()*Math.PI*2;
+      window._marsStormPhase += 0.0008;
+      const stormK = 0.6 + Math.sin(window._marsStormPhase)*0.8; // 0.-2 → 1.4
+      const rate = 0.15 + Math.max(0,stormK)*0.45;
+      if(Math.random() < rate){
+        const spd = 3 + stormK*4 + Math.random()*2;
+        weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y+Math.random()*canvas.height,vx:spd,vy:Math.random()-0.5,life:60,type:'dust'});
+      }
+      // Heavy dust haze particles when storm is raging
+      if(stormK > 0.9 && Math.random() < 0.5 && particles.length < 140){
+        particles.push({x:camera.x+Math.random()*canvas.width,y:camera.y+Math.random()*canvas.height,vx:4+stormK*3,vy:(Math.random()-0.5)*0.3,life:40,color:`rgba(200,120,80,${0.25+Math.random()*0.2})`,size:2+Math.random()*2});
+      }
     }
     if(wp.id==='ice'&&Math.random()>0.85){
       // Snow
@@ -10956,6 +11076,17 @@ function updatePlanetShared(){
     if(wp.id==='glimora'&&Math.random()>0.85){
       // Sparkles
       weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y+Math.random()*canvas.height,vx:(Math.random()-0.5)*0.5,vy:-0.3+Math.random()*0.6,life:60,type:'sparkle'});
+    }
+    if(wp.id==='sand' && Math.random() > 0.75){
+      // Venus: sulfuric acid rain. Yellowish, evaporates before hitting ground (life is short).
+      weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y-10,vx:1.5+Math.random()*0.8,vy:6+Math.random()*3,life:55,type:'acid'});
+    }
+    if(wp.id==='asteroid'){
+      // Neptune: supersonic horizontal winds. Streak particles fly sideways.
+      if(Math.random() > 0.55){
+        const dir = Math.sin(frameT*0.3) > 0 ? 1 : -1;
+        weather.push({x:camera.x + (dir>0 ? -20 : canvas.width+20), y:camera.y+Math.random()*canvas.height, vx:dir*(10+Math.random()*6), vy:(Math.random()-0.5)*0.4, life:90, type:'wind'});
+      }
     }
   }
   weather.forEach(w=>{w.x+=w.vx;w.y+=w.vy;w.life--;});
@@ -11404,6 +11535,17 @@ function updateAlienOnFoot(){
     else{alien.onGround=false;}
   }
 
+  // Moon footprints: leave permanent boot impressions when walking on the lunar surface.
+  if(currentPlanet && currentPlanet.id==='moon' && alien.onGround && Math.abs(alien.vx) > 0.4){
+    if(!alien._footprintNext) alien._footprintNext = 0;
+    alien._footprintNext -= Math.abs(alien.vx);
+    if(alien._footprintNext <= 0){
+      alien._footprintNext = 12;
+      moonFootprints.push({x: alien.x + (Math.random()-0.5)*4, y: GROUND_LEVEL-1, facing: alien.facing||1});
+      if(moonFootprints.length > 600) moonFootprints.shift();
+    }
+  }
+
   // Keep alien in bounds
   alien.y=Math.max(LEAVE_THRESHOLD+100,alien.y);
 
@@ -11547,8 +11689,11 @@ function updatePlanetSystems(){
   // Combo timer
   if(combo.timer>0){combo.timer--;if(combo.timer===0)combo.count=0;}
 
-  // Day/night
-  dayNightCycle=(dayNightCycle+0.00008)%1; // ~3.5 min full cycle
+  // Day/night — scaled by the current planet's rotation period.
+  {
+    const _rp = (currentPlanet && currentPlanet.rotationPeriod) || 1.0;
+    dayNightCycle = (dayNightCycle + 0.00008/_rp + 1) % 1;
+  }
   dayNightBrightness=Math.max(0,Math.sin(dayNightCycle*Math.PI*2)*0.8);
 
   // Weather
@@ -11693,6 +11838,19 @@ function updatePlanetSystems(){
           h.panicLevel=Math.min(h.panicLevel+0.3,5);h.crying=true;h.walkDir=Math.random()>0.5?1:-1;h.walkSpeed=1+terrorBonus*0.2;
           speechBubbles.push({x:h.headX,y:h.headY-20,text:["THEY'RE HERE","RUN","HIDE","IT'S OVER"][Math.floor(Math.random()*4)],life:60,vy:-0.3});
         }else{h.panicLevel=Math.max(0,h.panicLevel-0.01);if(h.panicLevel<0.5)h.crying=false;h.walkSpeed=Math.random()*0.5+0.3;if(Math.random()>0.99){h.walkDir*=-1;h.idleTimer=Math.random()*100+50;}}
+        // Overwhelmed panic → kneeling beg (same as primary update path).
+        if(!h.begging && h.crying && h.panicLevel>3 && !h.ragdoll && !h.onFire && !h.beingBeamed && !h.stunTimer){
+          if(h._lastBegX!=null && Math.abs(h.bodyX-h._lastBegX)<0.5) h._panicStuck=(h._panicStuck||0)+1;
+          else h._panicStuck=0;
+          h._lastBegX=h.bodyX;
+          if(h._panicStuck>90 && Math.random()<0.02){ h.begging=true; h.beggingTimer=240+Math.random()*300; h._panicStuck=0; }
+        }
+        if(h.begging){
+          h.beggingTimer--;
+          h.walkSpeed=0;
+          h.walkDir=(h.bodyX<ship.x?1:-1);
+          if(h.beggingTimer<=0 || h.ragdoll || h.onFire || h.beingBeamed){ h.begging=false; h._panicStuck=0; }
+        }
         if(debugMode.active){ if(keys['f']){h.walkDir=1;h.walkSpeed=1.2;} else if(keys['b']){h.walkDir=-1;h.walkSpeed=1.2;} else if(keys['x']){h.walkSpeed=0;} }
         const mv=h.walkDir*h.walkSpeed;h.headX+=mv;h.bodyX+=mv;h.legLX+=mv;h.legRX+=mv;h.armLX+=mv;h.armRX+=mv;h.footLX+=mv;h.footRX+=mv;
       }
@@ -11718,6 +11876,21 @@ function updatePlanetSystems(){
         h.footLY+=oy; h.footRY+=oy;
       }
       if(h.crying&&Math.random()>0.85)tears.push({x:h.headX+(Math.random()-0.5)*6,y:h.headY+3,vx:(Math.random()-0.5)*0.3,vy:0.8,life:30,size:1.5});
+      // Begging pose override: kneel with arms outstretched toward the threat.
+      if(h.begging && !h.ragdoll && !h.onFire && !h.beingBeamed){
+        const tremor=Math.sin(h.walkTimer*0.2)*1.2*s;
+        h.bodyY=GROUND_LEVEL-18*s;
+        h.headY=GROUND_LEVEL-28*s+Math.abs(Math.sin(h.walkTimer*0.05))*0.5;
+        h.legLY=GROUND_LEVEL-4*s;  h.legRY=GROUND_LEVEL-4*s;
+        h.legLX=h.bodyX-3*s;       h.legRX=h.bodyX+3*s;
+        h.footLY=GROUND_LEVEL;     h.footRY=GROUND_LEVEL;
+        h.footLX=h.bodyX-5*s;      h.footRX=h.bodyX+5*s;
+        const reach=9*s;
+        h.armLX=h.bodyX+reach;     h.armRX=h.bodyX+reach+2*s;
+        h.armLY=GROUND_LEVEL-34*s+tremor;
+        h.armRY=GROUND_LEVEL-34*s-tremor;
+        h.headX=h.bodyX+1.5*s;
+      }
     }
   });
 
@@ -11975,6 +12148,37 @@ function drawSpace(){
   ctx.save();
   if(z!==1){ctx.translate(canvas.width/2,canvas.height/2);ctx.scale(z,z);ctx.translate(-canvas.width/2,-canvas.height/2);}
   ctx.translate(-camera.x,-camera.y);
+  // Asteroid belt between Mars and Jupiter.
+  {
+    const sunP = planets.find(p=>p.isSun);
+    const marsP = planets.find(p=>p.id==='mars');
+    const jupP = planets.find(p=>p.id==='glimora');
+    if(sunP && marsP && jupP){
+      if(!window._asteroidBelt){
+        const sx0=sunP.spaceX, sy0=sunP.spaceY;
+        const rMars = Math.hypot(marsP.spaceX-sx0, marsP.spaceY-sy0);
+        const rJup  = Math.hypot(jupP.spaceX-sx0, jupP.spaceY-sy0);
+        const inner = rMars + (rJup-rMars)*0.35;
+        const outer = rMars + (rJup-rMars)*0.75;
+        const belt=[];
+        const N = 220;
+        for(let i=0;i<N;i++){
+          const r = inner + Math.random()*(outer-inner);
+          const a = Math.random()*Math.PI*2;
+          belt.push({r, a, speed:0.0004+Math.random()*0.0005, size:0.4+Math.random()*1.8, bright:0.4+Math.random()*0.5, tone:180+Math.random()*60});
+        }
+        window._asteroidBelt = {sx:sx0, sy:sy0, belt};
+      }
+      const ab = window._asteroidBelt;
+      for(const a of ab.belt){
+        a.a += a.speed;
+        const ax = ab.sx + Math.cos(a.a)*a.r;
+        const ay = ab.sy + Math.sin(a.a)*a.r*0.5; // flatten belt slightly
+        ctx.fillStyle=`rgba(${a.tone|0},${(a.tone-20)|0},${(a.tone-50)|0},${a.bright})`;
+        ctx.beginPath(); ctx.arc(ax,ay,a.size,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
   // Planets
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // hidden until discovered
@@ -12034,6 +12238,82 @@ function drawSpace(){
       p._bodyGrad=pg;
     }
     ctx.fillStyle=p._bodyGrad;ctx.beginPath();ctx.arc(sx,sy,p.radius,0,Math.PI*2);ctx.fill();
+    // Solar flares and CMEs around the Sun
+    if(p.isSun){
+      const tFl = frameT;
+      // Base corona flicker overlay
+      const corG=ctx.createRadialGradient(sx,sy,p.radius*0.9,sx,sy,p.radius*1.9);
+      corG.addColorStop(0,`rgba(255,220,120,${0.25+Math.sin(tFl*2)*0.08})`);
+      corG.addColorStop(0.6,'rgba(255,150,40,0.12)');
+      corG.addColorStop(1,'transparent');
+      ctx.fillStyle=corG;
+      ctx.beginPath();ctx.arc(sx,sy,p.radius*1.9,0,Math.PI*2);ctx.fill();
+      // Licking flame tongues
+      for(let i=0;i<7;i++){
+        const a = (i/7)*Math.PI*2 + tFl*0.3;
+        const len = p.radius*(0.18+Math.abs(Math.sin(tFl*1.5+i*1.3))*0.35);
+        const x1 = sx+Math.cos(a)*p.radius, y1 = sy+Math.sin(a)*p.radius;
+        const x2 = sx+Math.cos(a)*(p.radius+len), y2 = sy+Math.sin(a)*(p.radius+len);
+        ctx.strokeStyle=`rgba(255,${140+Math.sin(tFl*3+i)*40},40,${0.5+Math.sin(tFl*2+i)*0.2})`;
+        ctx.lineWidth = 4+Math.sin(tFl+i)*1.5;
+        ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      }
+      // Occasional coronal mass ejection arc
+      if(!p._cme || p._cme.life<=0){
+        if(Math.random()<0.002) p._cme={ang:Math.random()*Math.PI*2, life:120, max:120};
+      }
+      if(p._cme && p._cme.life>0){
+        const cme=p._cme; cme.life--;
+        const k = 1 - cme.life/cme.max;
+        const r1 = p.radius*1.05, r2 = p.radius*(1.1+k*0.9);
+        ctx.save();
+        ctx.translate(sx,sy); ctx.rotate(cme.ang);
+        ctx.strokeStyle=`rgba(255,180,80,${(1-k)*0.8})`;
+        ctx.lineWidth=6;
+        ctx.beginPath();
+        ctx.arc(0,0,(r1+r2)/2, -0.35, 0.35);
+        ctx.stroke();
+        ctx.strokeStyle=`rgba(255,240,200,${(1-k)*0.5})`;
+        ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.arc(0,0,(r1+r2)/2, -0.2, 0.2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    // Natural moons for certain planets
+    if(!p.isSun && !p.isWormhole && (p.id==='earth'||p.id==='mars'||p.id==='glimora')){
+      if(!p._moons){
+        if(p.id==='earth'){
+          // Earth's moon is already a planet in this game, so no extra moon here.
+          p._moons=[];
+        } else if(p.id==='mars'){
+          p._moons=[
+            {r:2.2,orbit:p.radius*1.55,speed:0.018,phase:0,col:'#b0a090'},  // Phobos
+            {r:1.6,orbit:p.radius*1.95,speed:0.010,phase:1.2,col:'#988878'} // Deimos
+          ];
+        } else if(p.id==='glimora'){
+          p._moons=[
+            {r:3.2,orbit:p.radius*1.7,speed:0.009,phase:0.0,col:'#e8d080'},  // Io
+            {r:3.0,orbit:p.radius*2.0,speed:0.007,phase:1.0,col:'#d8e8f0'},  // Europa
+            {r:3.6,orbit:p.radius*2.35,speed:0.005,phase:2.0,col:'#a89878'}, // Ganymede
+            {r:3.3,orbit:p.radius*2.7,speed:0.004,phase:3.0,col:'#706050'}   // Callisto
+          ];
+        }
+      }
+      for(const mn of p._moons){
+        mn.phase += mn.speed;
+        const mx2 = sx + Math.cos(mn.phase)*mn.orbit;
+        const my2 = sy + Math.sin(mn.phase)*mn.orbit*0.35; // squashed orbit
+        // Faint orbit line
+        ctx.strokeStyle='rgba(180,180,200,0.08)';
+        ctx.lineWidth=0.6;
+        ctx.beginPath(); ctx.ellipse(sx,sy,mn.orbit,mn.orbit*0.35,0,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle=mn.col;
+        ctx.beginPath(); ctx.arc(mx2,my2,mn.r,0,Math.PI*2); ctx.fill();
+      }
+    }
     // Saturn rings
     if(p.hasRings){
       ctx.save();
@@ -12346,6 +12626,89 @@ function drawPlanet(){
   // Night overlay when sun is not visible
   if(sunVis<0.3){
     ctx.fillStyle=`rgba(0,0,20,${(0.3-sunVis)*0.5})`;ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+  // Sun surface heat shimmer — whole-screen wobble band close to the ground.
+  if(p.isSun){
+    const t = frameT;
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<5;i++){
+      const y = canvas.height - 40 - i*55 + Math.sin(t*2 + i)*6;
+      const alpha = 0.04 + Math.sin(t*1.5+i)*0.02;
+      ctx.fillStyle=`rgba(255,200,100,${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      for(let x=0; x<=canvas.width; x+=40){
+        const wobble = Math.sin(x*0.02 + t*3 + i*0.6)*5 + Math.sin(x*0.05 + t*1.2)*3;
+        ctx.lineTo(x, y + wobble);
+      }
+      ctx.lineTo(canvas.width, y+22);
+      ctx.lineTo(0, y+22);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Auroras on Earth and Uranus (visible at night only, shimmer across upper sky)
+  if((p.id==='earth' || p.id==='ice') && sunVis < 0.4 && spaceBlend < 0.7){
+    const auroraAlpha = (0.4 - sunVis) / 0.4 * (1 - spaceBlend);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    const baseY = 90 + (p.id==='ice'?40:0);
+    const bandCount = 3;
+    for(let band=0; band<bandCount; band++){
+      const phase = frameT*0.5 + band*0.9;
+      const hueA = p.id==='earth' ? (100+band*30) : (180+band*30); // green on earth, cyan/blue on uranus
+      const hueB = p.id==='earth' ? (160+band*40) : (260+band*20);
+      const ribbonGrad = ctx.createLinearGradient(0, baseY+band*20, 0, baseY+band*20+140);
+      ribbonGrad.addColorStop(0, `hsla(${hueA},90%,55%,0)`);
+      ribbonGrad.addColorStop(0.4, `hsla(${hueA},90%,55%,${0.35*auroraAlpha})`);
+      ribbonGrad.addColorStop(0.7, `hsla(${hueB},80%,50%,${0.25*auroraAlpha})`);
+      ribbonGrad.addColorStop(1, `hsla(${hueB},80%,40%,0)`);
+      ctx.fillStyle=ribbonGrad;
+      ctx.beginPath();
+      ctx.moveTo(-20, baseY+band*20);
+      const step = 60;
+      for(let x=-20; x<=canvas.width+20; x+=step){
+        const y = baseY + band*20 + Math.sin(x*0.005 + phase)*18 + Math.sin(x*0.013 + phase*1.5 + band)*12;
+        ctx.lineTo(x, y);
+      }
+      for(let x=canvas.width+20; x>=-20; x-=step){
+        const y = baseY + band*20 + 110 + Math.sin(x*0.006 + phase + 1)*14;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Parallax distant mountain silhouettes behind the world (Earth only, in screen space, slow-scroll)
+  if(p.id==='earth' && spaceBlend < 0.7){
+    const layerAlpha = (1 - spaceBlend);
+    // Far-far haze band — slowest parallax
+    const far = -camera.x * 0.12;
+    ctx.fillStyle=`rgba(110,130,160,${0.35*layerAlpha})`;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_LEVEL-camera.y);
+    for(let x=-40; x<=canvas.width+40; x+=28){
+      const wx = x - far;
+      const h = 60 + Math.sin(wx*0.004)*22 + Math.sin(wx*0.011+1.3)*14 + Math.sin(wx*0.025+2.7)*5;
+      ctx.lineTo(x, GROUND_LEVEL-camera.y - h);
+    }
+    ctx.lineTo(canvas.width+40, GROUND_LEVEL-camera.y);
+    ctx.closePath(); ctx.fill();
+    // Near-far ridge — slightly faster parallax
+    const near = -camera.x * 0.25;
+    ctx.fillStyle=`rgba(70,90,115,${0.55*layerAlpha})`;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_LEVEL-camera.y);
+    for(let x=-40; x<=canvas.width+40; x+=22){
+      const wx = x - near;
+      const h = 40 + Math.sin(wx*0.006+0.4)*28 + Math.sin(wx*0.017+2.1)*14 + Math.sin(wx*0.033+0.8)*6;
+      ctx.lineTo(x, GROUND_LEVEL-camera.y - h);
+    }
+    ctx.lineTo(canvas.width+40, GROUND_LEVEL-camera.y);
+    ctx.closePath(); ctx.fill();
   }
 
   ctx.save();
@@ -14009,6 +14372,18 @@ function drawPlanet(){
   }else{
     ctx.fillStyle=_getBiomeGroundGrad({id:'planet_'+p.id,groundColor:p.groundColor});ctx.fillRect(camera.x-200,GROUND_LEVEL,canvas.width+400,canvas.height+Math.abs(camera.y));
     ctx.strokeStyle=p.grassColor;for(let gx=Math.floor(camera.x/30)*30;gx<camera.x+canvas.width;gx+=30){ctx.beginPath();ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx-3,GROUND_LEVEL-5);ctx.moveTo(gx,GROUND_LEVEL);ctx.lineTo(gx+3,GROUND_LEVEL-6);ctx.stroke();}
+    // Moon footprints — permanent boot impressions on the lunar regolith.
+    if(p.id==='moon' && moonFootprints.length){
+      for(const fp of moonFootprints){
+        if(fp.x < camera.x-20 || fp.x > camera.x+canvas.width+20) continue;
+        // Shadowed indentation
+        ctx.fillStyle='rgba(40,40,50,0.55)';
+        ctx.beginPath(); ctx.ellipse(fp.x, fp.y+1, 3.2, 1.4, 0, 0, Math.PI*2); ctx.fill();
+        // Bright rim on sunward side for depth
+        ctx.fillStyle='rgba(230,230,240,0.35)';
+        ctx.beginPath(); ctx.ellipse(fp.x - (fp.facing||1)*1.2, fp.y, 2.6, 1.1, 0, 0, Math.PI*2); ctx.fill();
+      }
+    }
   }
   // Blocks (single-unit buildings)
   blocks.forEach(b=>{if(b.dead)return;const sx=b.x,sy=b.y;if(sx+b.w<camera.x-50||sx>camera.x+canvas.width+50||sy+b.h<camera.y-50||sy>camera.y+canvas.height+50)return;
@@ -14147,6 +14522,19 @@ function drawPlanet(){
     }
     // Bright core
     ctx.fillStyle=`rgba(255,220,100,${fa*0.3})`;ctx.beginPath();ctx.ellipse(f.x,f.y-f.size*0.2,f.size*0.3,f.size*0.5,0,0,Math.PI*2);ctx.fill();
+    // Heat shimmer above the flame — wobbling translucent band that distorts anything behind it.
+    if(!window._perfMode && f.size > 6){
+      const shimmerH = f.size*2.2;
+      const shimmerW = f.size*1.6;
+      for(let si=0; si<3; si++){
+        const phase = ft*1.8 + si*0.7;
+        const wob = Math.sin(phase)*2 + Math.sin(phase*1.7+si)*1.2;
+        ctx.fillStyle = `rgba(255,220,160,${fa*(0.05 - si*0.012)})`;
+        ctx.beginPath();
+        ctx.ellipse(f.x + wob, f.y - f.size - shimmerH*0.25 - si*shimmerH*0.3, shimmerW*(1-si*0.2), shimmerH*0.5, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
   });
   // Missiles
   missiles.forEach(m=>{if(m.minigun){
@@ -14585,6 +14973,18 @@ function drawPlanet(){
     else if(w.type==='ember'){ctx.fillStyle=`rgba(255,${100+Math.random()*100},0,0.7)`;ctx.beginPath();ctx.arc(w.x,w.y,1+Math.random()*2,0,Math.PI*2);ctx.fill();}
     else if(w.type==='sparkle'){const hue=260+Math.random()*60;ctx.fillStyle=`hsla(${hue},100%,80%,${0.3+Math.random()*0.4})`;ctx.beginPath();ctx.arc(w.x,w.y,1+Math.random()*1.5,0,Math.PI*2);ctx.fill();}
     else if(w.type==='bubble'){ctx.strokeStyle='rgba(150,200,255,0.4)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(w.x,w.y,w.life/30+1,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(200,230,255,0.1)';ctx.fill();}
+    else if(w.type==='acid'){
+      // Venus sulfuric acid droplet — yellow-green streak with a subtle glow.
+      ctx.strokeStyle='rgba(220,240,120,0.55)';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(w.x,w.y);ctx.lineTo(w.x+w.vx*1.8,w.y+w.vy*1.8);ctx.stroke();
+      ctx.fillStyle='rgba(230,255,140,0.35)';
+      ctx.beginPath();ctx.arc(w.x+w.vx,w.y+w.vy,1.2,0,Math.PI*2);ctx.fill();
+    }
+    else if(w.type==='wind'){
+      // Neptune horizontal wind streak — long thin line.
+      ctx.strokeStyle='rgba(180,220,255,0.5)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(w.x,w.y);ctx.lineTo(w.x-w.vx*2.5,w.y);ctx.stroke();
+    }
     ctx.globalAlpha=1;
   });
 
@@ -15721,6 +16121,42 @@ function drawShipBody(pc,pa,pt,type){
 }
 
 function drawShip(){
+  // Ground shadow under ship (only on-planet). Size and opacity scale with altitude.
+  if(gameMode==='planet' && !mothershipMode && !pyramidInteriorMode){
+    const alt = Math.max(0, GROUND_LEVEL - ship.y);
+    const overWater = currentPlanet && currentPlanet.id==='earth' && typeof isOverOcean==='function' && isOverOcean(ship.x);
+    if(alt < 600){
+      const k = 1 - Math.min(1, alt/600); // 1 close, 0 high
+      const rx = 30 + 18*k;
+      const ry = 4 + 3*k;
+      ctx.fillStyle = `rgba(0,0,0,${0.15 + 0.25*k})`;
+      ctx.beginPath(); ctx.ellipse(ship.x, GROUND_LEVEL-2, rx, ry, 0, 0, Math.PI*2); ctx.fill();
+    }
+    if(overWater && alt < 400){
+      // Concentric water ripples expanding from directly beneath the ship.
+      const t = frameNow*0.004;
+      const k = 1 - Math.min(1, alt/400);
+      for(let i=0;i<3;i++){
+        const phase = (t + i*0.35) % 1;
+        const r = 15 + phase*70;
+        ctx.strokeStyle = `rgba(200,230,255,${(1-phase)*0.35*k})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(ship.x, GROUND_LEVEL-1, r, r*0.35, 0, 0, Math.PI*2); ctx.stroke();
+      }
+      // Occasional spray when very low.
+      if(alt < 120 && Math.random() < 0.3){
+        particles.push({x:ship.x+(Math.random()-0.5)*40,y:GROUND_LEVEL-4,vx:(Math.random()-0.5)*2,vy:-Math.random()*1.5-0.5,life:18,color:'rgba(210,240,255,0.7)',size:Math.random()*2+1});
+      }
+    } else if(ship.vy > 2 && ship.y > GROUND_LEVEL-120 && ship.y < GROUND_LEVEL-20 && Math.random() < 0.4){
+      // Landing dust puff when descending fast near the ground.
+      const dustCol = currentPlanet && currentPlanet.name==='Mars' ? '210,110,70'
+        : currentPlanet && (currentPlanet.name==='Venus'||currentPlanet.name==='Mercury') ? '220,180,120'
+        : currentPlanet && currentPlanet.name==='Moon' ? '200,200,200'
+        : currentPlanet && currentPlanet.name==='Uranus' ? '200,230,240'
+        : '180,160,130';
+      particles.push({x:ship.x+(Math.random()-0.5)*30,y:GROUND_LEVEL-4,vx:(Math.random()-0.5)*3,vy:-Math.random()*1.5-0.5,life:22+Math.random()*10,color:`rgba(${dustCol},0.7)`,size:Math.random()*3+2});
+    }
+  }
   // Lasso rope (drawn in world space, before the ship transform)
   if(ship.lasso && ship.lasso.target){
     const l=ship.lasso, tgt=l.target;
@@ -15779,7 +16215,18 @@ function drawShip(){
   window._domeShipPilot = false;
   if(ship.boosting){for(let i=0;i<3;i++){ctx.fillStyle=`rgba(255,${Math.random()*100+100},0,${Math.random()*0.5+0.3})`;ctx.beginPath();ctx.arc((Math.random()-0.5)*20,10+Math.random()*10,Math.random()*4+2,0,Math.PI*2);ctx.fill();}}
   ctx.restore();
-  if(gameMode==='space'&&(Math.abs(ship.vx)>1||Math.abs(ship.vy)>1)){for(let i=0;i<2;i++)particles.push({x:ship.x+(Math.random()-0.5)*10,y:ship.y+12,vx:-ship.vx*0.3+(Math.random()-0.5),vy:-ship.vy*0.3+(Math.random()-0.5),life:15+Math.random()*10,color:pt,size:Math.random()*2+1});}
+  if(gameMode==='space'&&(Math.abs(ship.vx)>1||Math.abs(ship.vy)>1)){
+    // Exhaust tint shifts with ship damage: healthy trail color → orange → red/black smoke.
+    let exCol = pt;
+    if(shipHealth < 30){ exCol = `rgba(60,60,60,${0.4+Math.random()*0.3})`; }
+    else if(shipHealth < 60){ exCol = `rgba(255,${80+Math.random()*60},40,0.85)`; }
+    else if(shipHealth < 85){ exCol = `rgba(255,${180+Math.random()*50},80,0.85)`; }
+    for(let i=0;i<2;i++)particles.push({x:ship.x+(Math.random()-0.5)*10,y:ship.y+12,vx:-ship.vx*0.3+(Math.random()-0.5),vy:-ship.vy*0.3+(Math.random()-0.5),life:15+Math.random()*10,color:exCol,size:Math.random()*2+1});
+    // Occasional smoke puff when badly damaged.
+    if(shipHealth < 40 && Math.random() < 0.15){
+      particles.push({x:ship.x+(Math.random()-0.5)*16,y:ship.y+8,vx:(Math.random()-0.5)*0.8,vy:-Math.random()*0.6,life:40+Math.random()*20,color:'rgba(40,40,40,0.55)',size:Math.random()*3+2});
+    }
+  }
 }
 
 // --- HELPERS ---

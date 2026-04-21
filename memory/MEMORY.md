@@ -27,3 +27,4 @@
 - [Project: Mind-control weapons](project_mindcontrol_weapons.md) — Mind-controlled puppets fire the alien's current weapon; Tab switches
 - [Feedback: Rocket splat](feedback_rocket_splat.md) — rockets/missiles splatt inner-radius units like a vehicle run-over (gibs + despawn), not just ragdoll
 - [Feedback: No abduct missions](feedback_no_abduct_missions.md) — abduct-type missions removed from chains, random pool, and leader demands — don't reintroduce
+- [Feedback: Begging pose](feedback_begging_pose.md) — stuck-scared units kneel silently; no speech bubble on beg state
