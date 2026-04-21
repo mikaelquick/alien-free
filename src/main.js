@@ -989,9 +989,8 @@ const earthBiomes = [
   {id:'city',      from:20000, to:23500, groundColor:['#2a3a2a','#1a2a1a','#0a1a0a'], grassColor:'#3a5a3a', grassHeight:4, treeDensity:0.08, treeCanopyColor:'#2a6a1a'},
   {id:'landmarks', from:24000, to:28000, groundColor:['#2a3a2a','#1a2a1a','#0a1a0a'], grassColor:'#3a6a3a', grassHeight:6, treeDensity:0.15, treeCanopyColor:'#2a6a1a'},
   {id:'jungle',    from:28500, to:34000, groundColor:['#1a3a1a','#0a2a0a','#052005'], grassColor:'#1a5a1a', grassHeight:14, treeDensity:0.8, treeCanopyColor:'#0a5a0a'},
-  {id:'desert',    from:34500, to:41500, groundColor:['#c0a060','#a08040','#806020'], grassColor:'#c0a060', grassHeight:0, treeDensity:0.02, treeCanopyColor:'#5a7a2a'},
-  {id:'beach',     from:42000, to:43000, groundColor:['#d0c090','#c0b080','#b0a070'], grassColor:'#c0b080', grassHeight:0, treeDensity:0.05, treeCanopyColor:'#4a8a2a'},
-  {id:'ocean',     from:43000, to:52000, groundColor:['#0a3a6a','#082a4a','#041a2a'], grassColor:'#0a3a6a', grassHeight:0, treeDensity:0, treeCanopyColor:'#0a3a6a', isOcean:true},
+  {id:'desert',    from:34500, to:42000, groundColor:['#c0a060','#a08040','#806020'], grassColor:'#c0a060', grassHeight:0, treeDensity:0.02, treeCanopyColor:'#5a7a2a'},
+  {id:'ocean',     from:42000, to:52000, groundColor:['#0a3a6a','#082a4a','#041a2a'], grassColor:'#0a3a6a', grassHeight:0, treeDensity:0, treeCanopyColor:'#0a3a6a', isOcean:true},
 ];
 // Transition zones between biomes (wide smooth ground color blend — overlap biome boundaries)
 const earthTransitions = [
@@ -1002,8 +1001,7 @@ const earthTransitions = [
   {from:22500, to:25000, biomeA:'city',      biomeB:'landmarks'},
   {from:27000, to:30000, biomeA:'landmarks', biomeB:'jungle'},
   {from:33000, to:36000, biomeA:'jungle',    biomeB:'desert'},
-  {from:40000, to:42500, biomeA:'desert',    biomeB:'beach'},
-  {from:42700, to:43300, biomeA:'beach',     biomeB:'ocean'},
+  {from:40500, to:43000, biomeA:'desert',    biomeB:'ocean'},
 ];
 function getEarthBiome(x){
   const ww=EARTH_WORLD_WIDTH;
@@ -1476,10 +1474,6 @@ function generateBuilding(x) {
       else if(lp>=1600&&lp<1660) addUnit(x, GROUND_LEVEL-195, 40, 195, 'bigBen', {health:800, color:'#c0a060'});
       else if(lp>=2300&&lp<2360) addUnit(x, GROUND_LEVEL-175, 55, 175, 'leaningTower', {health:800, color:'#e8e0d0'});
       else{const f=2+Math.floor(Math.random()*4); addUnit(x, GROUND_LEVEL-f*25, 90, f*25, 'apartment', {floors:f, windowCols:3});}
-    }else if(biome.id==='beach'){
-      // Beach: palm trees and maybe a small shack
-      if(Math.random()<0.7){const th=80+Math.random()*40; addUnit(x, GROUND_LEVEL-th, 30, th, 'palmTree', {isTree:true, health:150, treeColor:'#8a6a3a', canopyColor:'#3a8a2a'});}
-      else addUnit(x, GROUND_LEVEL-50, 60, 50, 'hut', {color:'#8a6a4a', roofColor:'#4a6a2a', accent:'#6a4a2a'});
     }else if(biome.id==='mountains'){
       // Mountains: sparse pines and boulders
       if(Math.random()<0.6){const th=60+Math.random()*50; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:200, treeColor:'#2a1a0a', canopyColor:'#1a4a1a'});}
@@ -1623,15 +1617,6 @@ function generatePrehistoricFlora() {
           const th = 50 + Math.random()*25;
           _addDecor(x, GROUND_LEVEL-th, 45, th, 'tree',
             {isTree:true, health:150, treeColor:'#4a3818', canopyColor:'#5c7828', cycad:true});
-          placed = true;
-        }
-        break;
-      }
-      case 'beach': {
-        if (r < 0.3) {
-          const th = 70 + Math.random()*35;
-          _addDecor(x, GROUND_LEVEL-th, 40, th, 'tree',
-            {isTree:true, health:170, treeColor:'#3a2a10', canopyColor:'#2a5a2a', conifer:true});
           placed = true;
         }
         break;
@@ -3653,7 +3638,7 @@ function loadPlanet(planet) {
       if(planet.id==='earth'){
         const biome=getEarthBiome(bx);
         if(biome.isOcean||isOverOcean(bx)){bx+=200;continue;} // skip ocean — no buildings in water
-        const biomeSpacing=biome.id==='city'?0.5:biome.id==='jungle'?0.7:biome.id==='desert'?1.5:biome.id==='landmarks'?1.2:biome.id==='mountains'?2.5:biome.id==='snow'?2.2:biome.id==='farmland'?1.3:biome.id==='beach'?2.0:biome.isOcean?99:0.9;
+        const biomeSpacing=biome.id==='city'?0.5:biome.id==='jungle'?0.7:biome.id==='desert'?1.5:biome.id==='landmarks'?1.2:biome.id==='mountains'?2.5:biome.id==='snow'?2.2:biome.id==='farmland'?1.3:biome.isOcean?99:0.9;
         generateBuilding(bx);bx+=(Math.random()*200+150)*biomeSpacing/density;
       }else{
         generateBuilding(bx);bx+=(Math.random()*200+150)/density;
@@ -3795,15 +3780,9 @@ function loadPlanet(planet) {
   ship.x=worldWidth/2; ship.y=LEAVE_THRESHOLD+50; ship.vx=0; ship.vy=2;
   document.getElementById('planet-name').textContent=tr('planet.'+planet.id+'.name');
   showMessage(tr('planet.'+planet.id+'.desc'));
-  // Auto-assign first mission of a planet; subsequent missions from Commander
-  const prog=planetProgress[planet.id];
+  // Missions are currently disabled — only boss encounters still auto-trigger.
   if(currentMission&&currentMission.type==='boss'&&currentMission.planetId===planet.id){
-    // Boss mission — spawn boss after landing
     setTimeout(()=>spawnBoss(planet.id),1000);
-  }else if(prog&&prog.missionIndex===0&&!currentMission){
-    setTimeout(()=>generateMission(),2000);
-  }else if(prog&&prog.missionIndex>0&&prog.missionIndex<5&&!currentMission){
-    setTimeout(()=>showMessage(tr('msg.reportToMothership')),3000);
   }
 }
 
@@ -10228,7 +10207,8 @@ function updatePlanetShared(){
     // Near a cave segment — keep depth so we don't pop to surface
     shipMaxY = caveAhead.seg.y + caveAhead.seg.h - 20;
   } else if(isOverOcean(ship.x)) {
-    shipMaxY = SEABED_Y + 200;
+    // Ship stops at the seabed — can't pass through the ocean floor
+    shipMaxY = SEABED_Y - 30;
   } else if(ship.y > GROUND_LEVEL) {
     // Ship is underground but not in ocean or cave — it's in the rock/dirt under a town
     // Check if any cave segment is nearby to allow passage through solid ground
@@ -12683,32 +12663,40 @@ function drawPlanet(){
   }
 
   // Parallax distant mountain silhouettes behind the world (Earth only, in screen space, slow-scroll)
-  if(p.id==='earth' && spaceBlend < 0.7){
+  // Skip over ocean (horizon should be flat water) and inside mountain/snow biomes where real peaks dominate.
+  {
+    const _vpX = camera.x + canvas.width/2;
+    const _biomeHere = (p.id==='earth' && typeof getEarthBiome==='function') ? getEarthBiome(_vpX) : null;
+    const _showParallax = p.id==='earth' && spaceBlend < 0.7
+      && _biomeHere && !_biomeHere.isOcean && !_biomeHere.isMountain
+      && !isOverOcean(_vpX);
+    if(_showParallax){
     const layerAlpha = (1 - spaceBlend);
-    // Far-far haze band — slowest parallax
+    // Far-far haze band — slowest parallax (very subtle)
     const far = -camera.x * 0.12;
-    ctx.fillStyle=`rgba(110,130,160,${0.35*layerAlpha})`;
+    ctx.fillStyle=`rgba(120,140,170,${0.16*layerAlpha})`;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_LEVEL-camera.y);
     for(let x=-40; x<=canvas.width+40; x+=28){
       const wx = x - far;
-      const h = 60 + Math.sin(wx*0.004)*22 + Math.sin(wx*0.011+1.3)*14 + Math.sin(wx*0.025+2.7)*5;
+      const h = 32 + Math.sin(wx*0.004)*12 + Math.sin(wx*0.011+1.3)*7 + Math.sin(wx*0.025+2.7)*3;
       ctx.lineTo(x, GROUND_LEVEL-camera.y - h);
     }
     ctx.lineTo(canvas.width+40, GROUND_LEVEL-camera.y);
     ctx.closePath(); ctx.fill();
-    // Near-far ridge — slightly faster parallax
+    // Near-far ridge — slightly faster parallax (still soft)
     const near = -camera.x * 0.25;
-    ctx.fillStyle=`rgba(70,90,115,${0.55*layerAlpha})`;
+    ctx.fillStyle=`rgba(85,105,130,${0.28*layerAlpha})`;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_LEVEL-camera.y);
     for(let x=-40; x<=canvas.width+40; x+=22){
       const wx = x - near;
-      const h = 40 + Math.sin(wx*0.006+0.4)*28 + Math.sin(wx*0.017+2.1)*14 + Math.sin(wx*0.033+0.8)*6;
+      const h = 22 + Math.sin(wx*0.006+0.4)*14 + Math.sin(wx*0.017+2.1)*7 + Math.sin(wx*0.033+0.8)*3;
       ctx.lineTo(x, GROUND_LEVEL-camera.y - h);
     }
     ctx.lineTo(canvas.width+40, GROUND_LEVEL-camera.y);
     ctx.closePath(); ctx.fill();
+    }
   }
 
   ctx.save();
