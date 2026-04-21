@@ -1,5 +1,7 @@
 import { TRANSLATIONS } from './translations.js';
-import { GRAVITY, BEAM_WIDTH, GROUND_LEVEL, LEAVE_THRESHOLD, LAND_DISTANCE, WATER_DEPTH, WATER_SURFACE, SEABED_Y, EARTH_WORLD_WIDTH } from './config/constants.js';
+import { GRAVITY as BASE_GRAVITY, BEAM_WIDTH, GROUND_LEVEL, LEAVE_THRESHOLD, LAND_DISTANCE, WATER_DEPTH, WATER_SURFACE, SEABED_Y, EARTH_WORLD_WIDTH } from './config/constants.js';
+// Mutable gravity — scaled per planet via planetDef.gravityScale (set in loadPlanet).
+let GRAVITY = BASE_GRAVITY;
 import { ALIEN_RACES, ALIEN_SKINS } from './config/aliens.js';
 import { SHIP_PAINTS, SHIP_TYPES } from './config/ships.js';
 import { CREW_BONUSES } from './config/crew.js';
@@ -827,7 +829,6 @@ const planetLeaders = [
       {text:"We've detected your ship near our atmosphere. Leave now!", type:'demand'},
     ],
     demands:[
-      {text:"If you must terrorize us... at least abduct 3 of our worst criminals. Here are their locations.", mission:{type:'abduct',target:3,desc:'Abduct 3 Earth criminals',reward:8}},
       {text:"STOP destroying our buildings! ...Or destroy 2 more so we can collect insurance.", mission:{type:'destroy',target:2,desc:'Destroy 2 insured buildings',reward:10}},
       {text:"Our scientists want to study your terror tactics. Reach terror level 4 and we will pay.", mission:{type:'terror',target:4,desc:'Terrorize Earth to level 4',reward:12}},
       {text:"Prove you can survive on foot among our people for 20 seconds. Then we negotiate.", mission:{type:'survive',target:20,desc:'Walk among Earthlings 20s',reward:15}},
@@ -841,7 +842,6 @@ const planetLeaders = [
       {text:"Our scouts report your firepower. Impressive, but not enough.", type:'taunt'},
     ],
     demands:[
-      {text:"You want Mars? Prove your strength. Abduct 4 of our warriors!", mission:{type:'abduct',target:4,desc:'Abduct 4 Martian warriors',reward:10}},
       {text:"Our fortresses mock you. Destroy 3 and maybe we'll respect you.", mission:{type:'destroy',target:3,desc:'Destroy 3 Martian forts',reward:12}},
       {text:"Walk our red sands for 20 seconds. If you survive, we talk.", mission:{type:'survive',target:20,desc:'Survive 20s on Mars',reward:15}},
       {text:"Show us true terror. Reach level 5 and the clans will bow.", mission:{type:'terror',target:5,desc:'Terrorize Mars to level 5',reward:18}},
@@ -854,7 +854,6 @@ const planetLeaders = [
       {text:"Our light-shields are charging. You will not find us easy prey.", type:'threat'},
     ],
     demands:[
-      {text:"The crystals sing of your coming. Gather 5 of our resonant beings for study.", mission:{type:'abduct',target:5,desc:'Abduct 5 crystal beings',reward:12}},
       {text:"Shatter 3 of our towers to release trapped harmonics. We will reward you.", mission:{type:'destroy',target:3,desc:'Shatter 3 crystal towers',reward:14}},
       {text:"Walk among our light for 25 seconds. Absorb our knowledge.", mission:{type:'survive',target:25,desc:'Meditate on Glimora 25s',reward:18}},
     ]},
@@ -866,7 +865,6 @@ const planetLeaders = [
       {text:"Perhaps the cold has made us... open to diplomacy. What are your terms?", type:'negotiate'},
     ],
     demands:[
-      {text:"The frozen ones are expendable. Take 5 and leave the rest.", mission:{type:'abduct',target:5,desc:'Abduct 5 Frostlings',reward:14}},
       {text:"Our ice walls block ancient tunnels. Destroy 3 structures to open them.", mission:{type:'destroy',target:3,desc:'Break 3 ice walls',reward:16}},
       {text:"Survive our blizzards for 30 seconds. Then I will respect you.", mission:{type:'survive',target:30,desc:'Brave the cold 30s',reward:20}},
     ]},
@@ -878,7 +876,6 @@ const planetLeaders = [
       {text:"You have fire in you, alien. I respect that. But I'll still destroy you.", type:'taunt'},
     ],
     demands:[
-      {text:"BRING ME 6 OF MY OWN PEOPLE! I need to... discipline them.", mission:{type:'abduct',target:6,desc:'Abduct 6 for Warlord Ignis',reward:16}},
       {text:"Destroy 4 temples! I want to rebuild them BIGGER!", mission:{type:'destroy',target:4,desc:'Raze 4 fire temples',reward:18}},
       {text:"Terror level 7! Make them FEAR! Make them BURN with fear!", mission:{type:'terror',target:7,desc:'Terrorize Infernia to 7',reward:25}},
     ]},
@@ -889,7 +886,6 @@ let currentMission = null;
 let missionComplete = false;
 let missionTimer = 0;
 const missionTypes = [
-  {type:'abduct',desc:'Abduct {n} specimens',gen:()=>({target:Math.floor(Math.random()*4)+3,progress:0})},
   {type:'destroy',desc:'Destroy {n} buildings',gen:()=>({target:Math.floor(Math.random()*3)+2,progress:0})},
   {type:'survive',desc:'Survive {n}s on foot',gen:()=>({target:Math.floor(Math.random()*15)+15,progress:0})},
   {type:'terror',desc:'Reach terror level {n}',gen:()=>({target:Math.floor(Math.random()*3)+5,progress:0})},
@@ -898,39 +894,29 @@ const missionTypes = [
 // --- PLANET MISSION CHAINS (5 per planet, sequential) ---
 const planetMissions = {
   earth: [
-    {type:'abduct', target:3, desc:'Abduct 3 Earthlings', reward:5},
     {type:'destroy', target:2, desc:'Destroy 2 buildings', reward:10},
     {type:'terror', target:3, desc:'Reach terror level 3', reward:15},
     {type:'survive', target:15, desc:'Survive 15s on foot', reward:20},
-    {type:'abduct', target:5, desc:'Abduct 5 in one visit', reward:30},
   ],
   mars: [
-    {type:'abduct', target:4, desc:'Abduct 4 colonists', reward:5},
     {type:'destroy', target:3, desc:'Destroy 3 structures', reward:10},
     {type:'terror', target:4, desc:'Reach terror level 4', reward:15},
     {type:'survive', target:20, desc:'Survive 20s on foot', reward:20},
-    {type:'abduct', target:6, desc:'Abduct 6 in one visit', reward:30},
   ],
   glimora: [
-    {type:'abduct', target:5, desc:'Abduct 5 Glimorians', reward:5},
     {type:'destroy', target:3, desc:'Destroy 3 crystal towers', reward:10},
     {type:'survive', target:20, desc:'Survive 20s among Glimorians', reward:15},
     {type:'terror', target:5, desc:'Reach terror level 5', reward:20},
-    {type:'abduct', target:7, desc:'Abduct 7 in one visit', reward:30},
   ],
   ice: [
     {type:'destroy', target:2, desc:'Destroy 2 ice structures', reward:5},
-    {type:'abduct', target:5, desc:'Abduct 5 Frostlings', reward:10},
     {type:'terror', target:5, desc:'Reach terror level 5', reward:15},
     {type:'survive', target:25, desc:'Survive 25s in the cold', reward:20},
-    {type:'abduct', target:8, desc:'Abduct 8 in one visit', reward:30},
   ],
   lava: [
     {type:'destroy', target:3, desc:'Destroy 3 fire temples', reward:5},
-    {type:'abduct', target:6, desc:'Abduct 6 Infernals', reward:10},
     {type:'survive', target:25, desc:'Survive 25s on Infernia', reward:15},
     {type:'terror', target:6, desc:'Reach terror level 6', reward:20},
-    {type:'abduct', target:10, desc:'Abduct 10 in one visit', reward:30},
   ],
 };
 
@@ -1052,6 +1038,7 @@ const planetDefs = [
     groundColor: ['#2a3a2a','#1a2a1a','#0a1a0a'], grassColor: '#3a5a3a',
     buildingColors: [['#554','#665','#443'],['#545','#656','#434'],['#455','#566','#344']],
     inhabitantCount: 40, buildingDensity: 1, hasClouds: true, isAlien: false,
+    gravityScale: 1.0, // Earth reference
     sadFacts: ['"They had families..."','"He just got a puppy..."',
       '"She never finished her novel..."','"He promised he\'d be home for dinner..."',
       '"The dog will wait by the door forever..."','"His kid drew him a picture today..."'],
@@ -1065,6 +1052,7 @@ const planetDefs = [
     groundColor: ['#6a3a2a','#5a2a1a','#4a1a0a'], grassColor: '#7a4a3a',
     buildingColors: [['#766','#877','#655'],['#776','#887','#665']],
     inhabitantCount: 25, buildingDensity: 0.7, hasClouds: false, isAlien: false,
+    gravityScale: 0.38, // Mars ~0.38 g
     sadFacts: ['"They spent 7 months getting here..."','"Mars was supposed to be safe..."',
       '"The colony was finally self-sustaining..."','"Their oxygen supply was just restocked..."'],
     cryPhrases: ["NOT HERE TOO","WE CAME SO FAR","THE COLONY","MY OXYGEN",
@@ -1077,6 +1065,7 @@ const planetDefs = [
     groundColor: ['#c8a070','#a88050','#806030'], grassColor: '#d4b080',
     buildingColors: [['#d4a070','#c08040','#a06030'],['#d4b080','#b08040','#805030']],
     inhabitantCount: 35, buildingDensity: 1.2, hasClouds: true, isAlien: true,
+    gravityScale: 2.53, // Jupiter ~2.53 g
     alienSkin: ['#c8f','#a6d','#d8ff','#b8e'],
     alienHeadShape: 'tall', // tall oval head
     alienExtra: 'antennae',
@@ -1099,6 +1088,7 @@ const planetDefs = [
     groundColor: ['#8aaacc','#6a8aaa','#4a6a8a'], grassColor: '#aaccee',
     buildingColors: [['#aac','#bbd','#88a'],['#abc','#bcd','#9ab']],
     inhabitantCount: 20, buildingDensity: 0.6, hasClouds: true, isAlien: true,
+    gravityScale: 0.89, // Uranus ~0.89 g
     alienSkin: ['#cef','#bdf','#adf','#def'],
     alienHeadShape: 'wide', // wide flat head
     alienExtra: 'horns',
@@ -1121,6 +1111,7 @@ const planetDefs = [
     groundColor: ['#4a2a1a','#3a1a0a','#5a2a0a'], grassColor: '#8a4a2a',
     buildingColors: [['#644','#755','#533'],['#654','#765','#543']],
     inhabitantCount: 30, buildingDensity: 0.8, hasClouds: false, isAlien: true,
+    gravityScale: 0.38, // Mercury ~0.38 g
     alienSkin: ['#f84','#e63','#f96','#d52'],
     alienHeadShape: 'pointy', // pointy demon-like head
     alienExtra: 'tail',
@@ -1143,6 +1134,7 @@ const planetDefs = [
     groundColor: ['#c0a050','#b09040','#a08030'], grassColor: '#d0b060',
     buildingColors: [['#a98','#ba9','#987'],['#b98','#ca9','#a87']],
     inhabitantCount: 25, buildingDensity: 0.6, hasClouds: false, isAlien: true,
+    gravityScale: 0.91, // Venus ~0.91 g
     alienSkin: ['#d4a050','#c09040','#e0b060','#b08030'],
     alienHeadShape: 'egyptian',
     alienExtra: 'headdress',
@@ -1169,6 +1161,7 @@ const planetDefs = [
     groundColor: ['#f0dcb0','#c8a870','#8a6830'], grassColor: '#e8d0a0',
     buildingColors: [['#d4a868','#b08838','#806020']],
     inhabitantCount: 18, buildingDensity: 0, hasClouds: true, isAlien: true,
+    gravityScale: 1.07, // Saturn ~1.07 g
     alienSkin: ['#e8d0a0','#d4b878','#c0a060','#a88848'],
     alienHeadShape: 'tall',
     alienExtra: 'antennae',
@@ -1190,6 +1183,7 @@ const planetDefs = [
     groundColor: ['#2040a0','#1028'+'60','#08143a'], grassColor: '#3060c0',
     buildingColors: [['#333','#444','#222'],['#343','#454','#232']],
     inhabitantCount: 12, buildingDensity: 0.3, hasClouds: false, isAlien: true,
+    gravityScale: 1.14, // Neptune ~1.14 g
     alienSkin: ['#5a3a5a','#4a2a4a','#6a4a6a','#3a1a3a'],
     alienHeadShape: 'tall',
     alienExtra: 'antennae',
@@ -1213,6 +1207,7 @@ const planetDefs = [
     groundColor: ['#ff6020','#e04010','#a02000'], grassColor: '#ff8040',
     buildingColors: [['#ff8040','#ffa060','#e06020']],
     inhabitantCount: 15, buildingDensity: 0.5, hasClouds: false, isAlien: true, isSun: true,
+    gravityScale: 28.0, // Sun ~28 g — extreme, will slam everything to the ground fast
     alienSkin: ['#ffc040','#ff8020','#ffe080','#ff6010'],
     alienHeadShape: 'round',
     alienExtra: 'none',
@@ -1232,6 +1227,7 @@ const planetDefs = [
     groundColor: ['#9a9a9a','#6a6a6a','#4a4a4a'], grassColor: '#7a7a7a',
     buildingColors: [['#888','#777','#666']],
     inhabitantCount: 0, buildingDensity: 0, hasClouds: false, isAlien: false, isMoon: true,
+    gravityScale: 0.17, // Moon ~0.166 g
     orbitsEarth: true,
     sadFacts: ['"Silent. Forever silent."','"No one hears anything here..."','"Only dust and footprints remain..."'],
     cryPhrases: [],
@@ -1244,6 +1240,7 @@ const planetDefs = [
     groundColor: ['#1a0040','#100028','#000018'], grassColor: '#2a0080',
     buildingColors: [['#6040c0','#4020a0','#301080']],
     inhabitantCount: 0, buildingDensity: 0, hasClouds: false, isAlien: true, isWormhole: true,
+    gravityScale: 1.0, // fictional
     alienLabel: 'Anomaly',
     sadFacts: ['"Time flows wrong here..."','"Spacetime frays at the edges..."','"Past and future collapse..."'],
     cryPhrases: ["WHEN AM I","TIME BLEEDS","THE LOOP","ECHO OF ECHO"],
@@ -3614,6 +3611,7 @@ function loadPlanet(planet) {
   currentPlanet = planet;
   lastVisitedPlanet = planet;
   gameMode = 'planet';
+  GRAVITY = BASE_GRAVITY * (planet.gravityScale || 1);
   // Restore saved state or generate fresh
   respawnTimer=0;
   if (planet.savedState) {
@@ -4126,7 +4124,8 @@ function generateMission(){
   if(!planet)return;
   const pid=planet.id;
   const prog=planetProgress[pid];
-  if(!prog||prog.missionIndex>=5)return;
+  const chainLen=(planetMissions[pid]||[]).length;
+  if(!prog||prog.missionIndex>=chainLen)return;
   const mDef=planetMissions[pid][prog.missionIndex];
   const mDesc=ta('mission.'+pid)[prog.missionIndex]||mDef.desc;
   currentMission={type:mDef.type,desc:mDesc,target:mDef.target,progress:0,reward:mDef.reward,chainIndex:prog.missionIndex};
@@ -4150,15 +4149,19 @@ function updateMission(){
       const prog=planetProgress[pid];
       if(prog){
         prog.missionIndex++;
-        // Check completion tier thresholds
-        if(prog.missionIndex>=5&&prog.completion!=='gold'){
+        // Completion tier thresholds — scale to the actual chain length so the
+        // thresholds still work after removing abduct missions (chains are now
+        // shorter; gold = full chain, silver = one short, bronze = first one).
+        const _chainLen=(planetMissions[pid]||[]).length;
+        const _silverAt=Math.max(1,_chainLen-1);
+        if(prog.missionIndex>=_chainLen&&prog.completion!=='gold'){
           prog.completion='gold';
           setTimeout(()=>showMessage(tr('msg.goldRank').replace('{planet}',tr('planet.'+currentPlanet.id+'.name'))),2000);
-        }else if(prog.missionIndex>=4&&prog.completion!=='gold'&&prog.completion!=='silver'){
+        }else if(prog.missionIndex>=_silverAt&&prog.completion!=='gold'&&prog.completion!=='silver'){
           prog.completion='silver';
           upgrades.beamWidth++;upgrades.speed++;upgrades.flame++;
           setTimeout(()=>showMessage(tr('msg.silverRank')),2000);
-        }else if(prog.missionIndex>=2&&prog.completion==='none'){
+        }else if(prog.missionIndex>=1&&prog.completion==='none'){
           prog.completion='bronze';
           // Unlock next planet
           const idx=planetDefs.findIndex(d=>d.id===pid);
@@ -8614,6 +8617,7 @@ function leavePlanet() {
   underwaterCaves=[]; caveCreatures=[]; underwaterObjects=[];
   currentMission=null;missionComplete=false;missionTimer=0;
   currentPlanet = null;
+  GRAVITY = BASE_GRAVITY; // reset to default in space
   document.getElementById('planet-name').textContent=tr('hud.deepSpace');
   // Start zoom-out transition
   transition={active:true,type:'leaving',timer:0,duration:90,planet:leavingPlanet,zoom:6};
@@ -9365,7 +9369,27 @@ function explodeMissile(m){
   for(let i=0;i<15;i++){const a=Math.random()*Math.PI*2,sp=Math.random()*12+4;
     particles.push({x:m.x,y:m.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:15+Math.random()*10,color:'#ff8',size:1+Math.random()*2});}
   blocks.forEach(b=>{const d=dist(m.x,m.y,b.x+b.w/2,b.y+b.h/2);if(d<R){const f=(1-d/R)*F,a=Math.atan2(b.y+b.h/2-m.y,b.x+b.w/2-m.x);b.fixed=false;b.vx+=Math.cos(a)*f;b.vy+=Math.sin(a)*f;b.health-=f*15;maybeEvictFromDamage(b);b.cracked=true;checkBuildingDestroyed(b);}});
-  humans.forEach(h=>{if(h.collected)return;const d=dist(m.x,m.y,h.bodyX,h.bodyY);if(d<R){const f=(1-d/R)*F*0.7,a=Math.atan2(h.bodyY-m.y,h.bodyX-m.x);h.ragdoll=true;h.crying=true;h.panicLevel=10;const fx=Math.cos(a)*f,fy=Math.sin(a)*f;applyForce(h,fx,fy);bleedEffect(h,fx,fy,1.8); if(d<R*0.45)spawnGibs(h,fx,fy,2.5);}});
+  // Humans caught inside the inner blast radius splatt (vehicle-run-over style);
+  // fringe humans ragdoll with fire/knockback as before.
+  {
+    const splatR=R*0.55;
+    humans.forEach(h=>{if(h.collected)return;const d=dist(m.x,m.y,h.bodyX,h.bodyY);if(d<R){
+      const f=(1-d/R)*F*0.7,a=Math.atan2(h.bodyY-m.y,h.bodyX-m.x);
+      const fx=Math.cos(a)*f,fy=Math.sin(a)*f;
+      if(d<splatR){
+        const sc=h.scale||1;
+        const power=Math.min(5, 2.5+sc*0.4);
+        spawnGibs(h, fx, fy-2, power);
+        h.collected=true;
+        planetTerror=Math.min(planetTerror+0.25,10);
+        try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+      } else {
+        h.ragdoll=true;h.crying=true;h.panicLevel=10;
+        applyForce(h,fx,fy);
+        bleedEffect(h,fx,fy,1.8);
+      }
+    }});
+  }
   // Cow explosion damage
   cows.forEach(c=>{if(c.collected)return;const d=dist(m.x,m.y,c.x,c.bodyY);if(d<R){
     c.collected=true;score+=1;document.getElementById('score').textContent=score;
@@ -9964,10 +9988,41 @@ function updateAlienWeapons(){
       for(let pi=0;pi<24;pi++){const a=Math.random()*Math.PI*2;particles.push({x:r.x,y:r.y,vx:Math.cos(a)*(3+Math.random()*5),vy:Math.sin(a)*(3+Math.random()*5),life:28,color:['#f80','#fa0','#f40','#ff0'][Math.floor(Math.random()*4)],size:Math.random()*4+2});}
       fires.push({x:r.x,y:r.y,life:180,size:14,vx:0,vy:0,stuck:false});
       triggerShake(6);
-      // Damage radius
-      humans.forEach(h=>{ if(h.collected||h.hidden)return; const d=dist(r.x,r.y,h.bodyX,h.bodyY); if(d<R){ h.ragdoll=true; const fx=(h.bodyX-r.x)/R*6, fy=-5; applyForce(h,fx,fy); h.onFire=true; h.burnTimer=300; bleedEffect(h,fx*2,fy*2,2); if(d<R*0.5)spawnGibs(h,fx*2,fy*2,3); }});
+      // Damage radius — units caught in the blast splatt like a vehicle run-over,
+      // fringe units keep the ragdoll+fire knockback.
+      const splatR = R*0.6; // within this the unit is gibbed and removed
+      humans.forEach(h=>{ if(h.collected||h.hidden)return; const d=dist(r.x,r.y,h.bodyX,h.bodyY); if(d<R){
+        const fx=(h.bodyX-r.x)/R*6, fy=-5;
+        if(d<splatR){
+          const sc=h.scale||1;
+          const power=Math.min(5, 2.5+sc*0.4);
+          spawnGibs(h, fx*2, fy*2-2, power);
+          h.collected=true;
+          planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        } else {
+          h.ragdoll=true;
+          applyForce(h,fx,fy);
+          h.onFire=true; h.burnTimer=300;
+          bleedEffect(h,fx*2,fy*2,2);
+        }
+      }});
       blocks.forEach(b=>{ if(b.dead)return; const d=dist(r.x,r.y,b.x+b.w/2,b.y+b.h/2); if(d<R){ b.health-=40; maybeEvictFromDamage(b);b.cracked=true; b.onFire=true; if(!b.fixed){b.vx+=(b.x-r.x)*0.05; b.vy-=3;} if(b.health<=0)checkBuildingDestroyed(b); }});
-      military.forEach(m=>{ if(!m.alive||m.type==='bullet'||m.type==='boulder')return; const d=dist(r.x,r.y,m.x,m.y); if(d<R){ m.health-=30; if(m.health<=0)m.alive=false; }});
+      military.forEach(m=>{ if(!m.alive||m.type==='bullet'||m.type==='boulder')return; const d=dist(r.x,r.y,m.x,m.y); if(d<R){
+        if(d<splatR){
+          // Gib the soldier — splat effect. spawnGibs expects a humans-shaped
+          // object, so fall back to a burst of blood particles + instant kill
+          // for military rather than trying to reuse spawnGibs on them.
+          for(let p=0;p<18;p++){
+            const a=Math.random()*Math.PI*2, sp=2+Math.random()*5;
+            particles.push({x:m.x,y:m.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1,life:22+Math.random()*10,color:'#a22',size:1.5+Math.random()*2});
+          }
+          m.health=0; m.alive=false;
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        } else {
+          m.health-=30; if(m.health<=0)m.alive=false;
+        }
+      }});
       r.life=0;
     }
   }
