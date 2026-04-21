@@ -4187,8 +4187,16 @@ function enterMothership(){
   // Walkable hub state — alien spawns at the docking bay (x≈100). The arrival animation
   // below freezes control while the ship lands and the player climbs out.
   mi.hub={x:100, vx:0, facing:1, walkT:0, prevDoor:-1, doorX:[], nearDoor:-1, width:1800};
+  // Populate door positions up front so they render during the arrival intro
+  // (updateMothership early-returns while arriving and never reaches its normal
+  // doorX setup block, which otherwise leaves h.doorX empty and hides every
+  // door — including the Command Bridge — during the landing cinematic).
+  {
+    const _lp=520, _rp=280, _usable=mi.hub.width-_lp-_rp;
+    mi.hub.doorX=MS_MENUS.map((m,i)=>_lp+(_usable*i)/(MS_MENUS.length-1));
+  }
   // Play a landing / hatch-opens / alien-emerges sequence before the player gets control.
-  mi.arriving={timer:0, duration:120, boardFade:1};
+  mi.arriving={timer:0, duration:150, boardFade:1};
   mi.departing=null;
   // Walkable comms room (screens showing each planet leader)
   mi.commsWalk={x:600, vx:0, facing:1, walkT:0, width:1400, screenX:[], nearScreen:-1, operators:[], bigScreenPhase:Math.random()*1000};
@@ -5435,8 +5443,8 @@ function updateMothership(){
       h.x = 100; h.vx=0; h.vy=0; h.y=0; h.walkT=0; h.facing=1;
     }
     // Alien is invisible during ship-landing + hatch-opening phases, then fades in.
-    if(k < 0.67) arr.boardFade = 1;
-    else arr.boardFade = Math.max(0, 1 - (k - 0.67)/0.33);
+    if(k < 0.75) arr.boardFade = 1;
+    else arr.boardFade = Math.max(0, 1 - (k - 0.75)/0.25);
     if(arr.timer >= arr.duration){
       mi.arriving=null;
     }
@@ -6411,25 +6419,36 @@ function drawMothership(){
   if(mi.screen==='menu'){
     const h=mi.hub;
     const camX=Math.max(0,Math.min(h.width-cw, h.x-cw/2));
+    // Dynamic zoom that stays wider while the player is near the docking bay
+    // (so the Command Bridge — the first door past the bay at world x≈520 —
+    // is visible the moment you step off the ship) and eases to the normal
+    // 2.0x once the player walks deeper into the corridor.
+    const _bayCloseness = Math.max(0, Math.min(1, (h.x - 140) / 260)); // 0 at bay, 1 past x≈400
+    const _targetPlayZoom = 1.45 + _bayCloseness*(2.0 - 1.45);
+    if(typeof h.zoomCur !== 'number') h.zoomCur = _targetPlayZoom;
+    h.zoomCur += (_targetPlayZoom - h.zoomCur)*0.08;
     // Pull the camera back during the arrival animation so the player can see
-    // the docking bay AND all the doors / hub beyond it while the ship lands.
-    let _msZoom=2.0;
-    let _arrBlend=0; // 0 = normal player-centered view, 1 = wide hub-centered overview
+    // the docking bay AND the nearest few doors while the ship lands — but
+    // never so far back that the corridor shrinks smaller than the viewport
+    // (that would expose blank canvas above the ceiling or past the walls).
+    let _msZoom = h.zoomCur;
     if(mi.arriving){
       const ak = Math.min(1, mi.arriving.timer/mi.arriving.duration);
-      // Fit-to-hub zoom shows the whole corridor (bay + all 5 doors) at the start.
-      // Cap it so we don't zoom out below the corridor height.
-      const fitZoom = Math.max(0.5, Math.min(0.9, (cw-40)/h.width));
-      _msZoom = fitZoom + ak*(2.0 - fitZoom);
-      // Fully hub-centered at start, fully player-centered at end.
-      _arrBlend = 1 - ak;
+      // easeInOut so the zoom feels cinematic instead of clonky-linear.
+      const aEase = ak<0.5 ? 2*ak*ak : 1 - Math.pow(-2*ak+2, 2)/2;
+      // Minimum fit zoom: corridor must fill the viewport both vertically
+      // (floor is pinned at `_msFloorY`, so Z≥1 keeps the ceiling off-screen)
+      // and horizontally (Z ≥ cw/h.width keeps the end walls off-screen).
+      const fitZoom = Math.max(1.0, cw/h.width + 0.02);
+      // Never zoom out beyond the play zoom target — just use play zoom if it's wider.
+      const arrStartZoom = Math.min(fitZoom, h.zoomCur);
+      _msZoom = arrStartZoom + aEase*(h.zoomCur - arrStartZoom);
     }
     const _msAX=h.x-camX, _msFloorY=ch-70;
-    // Player-centered translate (normal gameplay).
-    const _msTXPlayer = cw/2 - _msZoom*_msAX;
-    // Hub-centered translate (used during arrival to frame the whole corridor).
-    const _msTXHub = cw/2 - _msZoom*(h.width/2 - camX);
-    let _msTX = _msTXHub*_arrBlend + _msTXPlayer*(1 - _arrBlend);
+    // Player-centered translate. During arrival the player is pinned at the bay
+    // (hub.x=100), so the wall clamp below naturally pushes the camera rightward,
+    // revealing the bay + doors to the right of it — no separate hub-centered pan needed.
+    let _msTX = cw/2 - _msZoom*_msAX;
     // Clamp so the walls stay at/inside the screen edges — only when the hub
     // is wider than the viewport. When it's narrower (very zoomed-out start of
     // arrival), let the computed translate stand so we see walls + space around.
@@ -7119,17 +7138,20 @@ function drawMothership(){
           engineFx = k;
         }else if(mi.arriving){
           const k = mi.arriving.timer/mi.arriving.duration;
-          const landK = Math.min(1, k/0.4); // landed by dt=0.4
-          shipLift = -Math.pow(1 - landK, 1.5) * 70;
-          // Small settle bounce right after touchdown
-          if(k >= 0.4 && k < 0.5){
-            const b = (k - 0.4)/0.1;
-            shipLift -= Math.sin(b * Math.PI) * 4;
+          // Landing stretched out to 55% of arrival and eased with easeOutCubic
+          // so the ship settles smoothly onto the pad instead of thudding down.
+          const landK = Math.min(1, k/0.55);
+          const landEase = 1 - Math.pow(1 - landK, 3);
+          shipLift = -70 * (1 - landEase);
+          // Gentler settle bounce right after touchdown (smaller + longer)
+          if(k >= 0.55 && k < 0.7){
+            const b = (k - 0.55)/0.15;
+            shipLift -= Math.sin(b * Math.PI) * 2.2;
           }
           engineFx = 1 - landK;
-          // Hatch opens flash between dt 0.5..0.75
-          if(k > 0.5 && k < 0.75){
-            hatchFlash = Math.sin((k - 0.5)/0.25 * Math.PI);
+          // Hatch opens flash between dt 0.6..0.8
+          if(k > 0.6 && k < 0.8){
+            hatchFlash = Math.sin((k - 0.6)/0.2 * Math.PI);
           }
         }
         ctx.save();
@@ -7615,46 +7637,10 @@ function drawMothership(){
     }
 
     ctx.restore();
-    // --- Arrival door-name overlay (screen space) ---
-    // The arrival animation zooms out to fit the whole hub, which shrinks the
-    // in-scene hanging signs too small to read. Draw a readable label above
-    // each door in screen coords while arriving so the player can see where
-    // "Command Bridge", "Comms Channel", etc. are before walking over.
-    if(mi.arriving && h.doorX){
-      ctx.font='bold 12px monospace';
-      ctx.textAlign='center';
-      ctx.textBaseline='middle';
-      const ak=Math.min(1, mi.arriving.timer/mi.arriving.duration);
-      const fadeOut = Math.max(0, 1 - Math.max(0, (ak-0.75)/0.25)); // fade out last 25%
-      h.doorX.forEach((dx,i)=>{
-        const m=MS_MENUS[i]; if(!m) return;
-        const sx=dx-camX;
-        const scrX = _msTX + _msZoom*sx;
-        if(scrX<-60 || scrX>cw+60) return;
-        const c=m.color;
-        const nameW = ctx.measureText(m.name).width;
-        const bW=nameW+22, bH=20;
-        const bY = 70; // just below the top HUD band
-        ctx.globalAlpha = fadeOut;
-        ctx.fillStyle='rgba(11,22,36,0.9)';
-        ctx.fillRect(scrX-bW/2, bY, bW, bH);
-        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.9)`;
-        ctx.lineWidth=1.5;
-        ctx.strokeRect(scrX-bW/2+0.5, bY+0.5, bW-1, bH-1);
-        ctx.fillStyle='rgba(230,240,255,1)';
-        ctx.fillText(m.name, scrX, bY+bH/2+0.5);
-        // Tick line down toward the door so the player sees which door each
-        // label belongs to.
-        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},0.45)`;
-        ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.moveTo(scrX, bY+bH);
-        ctx.lineTo(scrX, bY+bH+10);
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
-      ctx.textBaseline='alphabetic';
-    }
+    // (Arrival door-name overlay removed — the in-scene hanging signs drawn
+    // inside the zoom transform are readable now that arrival fitZoom ≥ 1.0,
+    // and a screen-space duplicate was producing a double "COMMAND BRIDGE"
+    // title during the docking intro.)
     // Top HUD
     ctx.fillStyle='rgba(100,200,255,0.85)';ctx.font=`bold 16px monospace`;ctx.textAlign='center';
     ctx.fillText('MOTHERSHIP',cw/2,28);
