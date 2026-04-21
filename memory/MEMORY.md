@@ -8,6 +8,7 @@
 - [Feedback: Commit workflow](feedback_commit_workflow.md) — user commits themselves; don't run git commit unless asked
 - [Feedback: Game dev brainstorm](feedback_game_dev_brainstorm.md) — consult game-level-designer agent first for all game dev tasks
 - [Feedback: Visual polish](feedback_visual_polish.md) — use real renderers for captured units, specialised per-element visuals, no generic placeholders
+- [Feedback: Specimen visual parity](feedback_specimen_visual_parity.md) — specimen capture must copy every visual flag (isAstronaut, isDino, costume…) or zoo differs from field
 - [Feedback: Mothership NPCs](feedback_mothership_npcs.md) — no children in mothership; varied adult roles (officer/scientist/engineer/guard/medic) + bots
 - [Feedback: Power fantasy](feedback_power_fantasy.md) — player is the threat, don't hedge decisions around player safety
 - [Feedback: Exploration focus](feedback_exploration_focus.md) — game is adventure/exploration first; hidden themed interiors per planet; auto-equip gear
@@ -17,8 +18,10 @@
 - [Project: Recent Changes](project_recent_changes.md) — 2026-04-16 session: rename, biomes, ocean, Sun, ship types
 - [Project: Level system](project_level_system.md) — linear planet unlock, roguelike upgrade reset
 - [Project: Perf + resilience](project_perf_and_resilience.md) — sim radius cull, stuck detection, frame/gradient caches
-- [Project: On-foot weapons](project_onfoot_weapons.md) — 5 alien weapons (stunner, wail, plasma, g-well, swarm) + HUD
-- [Project: Mothership hub](project_mothership_hub.md) — walkable corridor + Star Map, Arena, Lab, Zoo Riot
+- [Project: On-foot weapons](project_onfoot_weapons.md) — race-specific loadout, chainsaw slot 0, V-cloak, HUD
+- [Project: Mothership hub](project_mothership_hub.md) — walkable corridor + Lab, Comms-walk, Zoo Riot, zoom, in-hub combat, NPC permadeath
+- [Feedback: Mothership combat](feedback_mothership_combat.md) — weapons usable in hub; killed NPCs stay dead for the savegame
 - [Project: Burning + jobs](project_burning_and_jobs.md) — day/night commuting, fire spread, ash piles
 - [Feedback: Prehistoric era](feedback_prehistoric_era.md) — no flags/astronauts/military/robots/rovers when window.prehistoricEra is true
 - [Project: Military disabled](project_military_disabled.md) — All-planet military off as of 2026-04-19 (AI was acting weird), rework later
+- [Project: Mind-control weapons](project_mindcontrol_weapons.md) — Mind-controlled puppets fire the alien's current weapon; Tab switches

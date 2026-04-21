@@ -1,24 +1,28 @@
 ---
 name: Alien on-foot weapon system
-description: 5-weapon loadout for the alien when playerMode='onfoot' — projectile arrays, keybinds, HUD
+description: Alien on-foot loadout — race-specific weapons, chainsaw-first slot, V-cloak, projectile arrays, HUD
 type: project
 ---
 
-Added 2026-04-17. On-foot alien has 5 selectable weapons (keys 1-5, Tab cycles, Q fires).
+Added 2026-04-17, extended through 2026-04-20. On-foot alien has a race-specific weapon loadout (Tab cycles, Q fires, 1..N select).
 
-**Weapon definitions** — `ALIEN_WEAPONS` (id, label, cd, color) at top of main.js. Alien state has `weapon` (index) and `weaponCD[5]` (per-slot cooldown frames).
+**Loadout** — `getRaceWeapons()` returns the race's array from `RACE_LOADOUTS`. Alien state has `weapon` (index) and `weaponCD[]` (per-slot cooldown frames). **Chainsaw is always slot 0 for every race** (2026-04-20 user request).
 
-1. **Stunner** (1, cd 30) — short cone `stunWave` (kind:'cone'), stuns humans + military for 120f. Cheap spam.
-2. **Wail** (2, cd 260) — radial panic burst, sets `shouldPanic` on humans, `stunTimer=60` on military.
-3. **Plasma** (3, cd 22) — arcing `plasmaBolt` with gravity, explodes on impact (`plasmaExplode()`), damages humans + buildings.
-4. **G-Well** (4, cd 540) — thrown `gravityWell` arms → pulls entities 150f → detonates. High-value crowd control.
-5. **Swarm** (5, cd 420) — spawns 4 `parasites` that seek nearest target, attach, damage over time.
+**Weapon library** — `ALIEN_WEAPONS` (id, label, cd, color). Core set:
+1. **Stunner** (cd 30) — short cone `stunWave`, stuns humans + military 120f.
+2. **Wail** (cd 260) — radial panic burst (`shouldPanic` on humans, `stunTimer=60` on military).
+3. **Plasma** (cd 22) — arcing `plasmaBolt` with gravity, explodes on impact.
+4. **G-Well** (cd 540) — thrown `gravityWell` arms → pulls entities 150f → detonates.
+5. **Swarm** (cd 420) — spawns 4 `parasites` that seek, attach, damage over time.
+6. **Laser / Rocket / Acid / Chainsaw** — race-specific additions. Chainsaw has spinning teeth only when `chainsawRev>0`, splats humans like vehicle run-over (`spawnGibs` + `vehicleSplatSfx`), uses `chainsaw-cut.wav` at very low volume.
 
-**Arrays** — `stunWaves[]`, `plasmaBolts[]`, `gravityWells[]`, `parasites[]`, `ashPiles[]`. All reset in `leavePlanet()` and on planet load.
+**Arrays** — `stunWaves[]`, `plasmaBolts[]`, `gravityWells[]`, `parasites[]`, `ashPiles[]`. Reset in `leavePlanet()` and on planet load.
 
-**Dispatch** — `alienShoot()` switches on `alien.weapon` index. `updateAlienWeapons()` ticks each array. HUD at ~line 8170 draws 5 slots with cooldown bars.
+**Dispatch** — `alienShoot()` switches on weapon id (not index). `updateAlienWeapons()` ticks each array. HUD draws N slots with cooldown bars.
 
-**Military stun** — entities with `stunTimer>0` early-return and emit blue sparks every 6f (`main.js:2660`).
+**On-foot cloak (V)** — `alienCloak = {active, energy, maxEnergy, drainRate, rechargeRate}`. V toggles when on-foot outside ship/mothership/pyramid, with energy gate. Body draws at `globalAlpha≈0.18` with subtle pulse when active. Military check uses `alienCloak.active && playerMode==='onfoot' && !alien.drivingVehicle` to skip detection.
 
-**Why:** User asked for more on-foot weapon variety; the single-weapon grab-and-go loop was too thin.
-**How to apply:** When adding more weapons, extend `ALIEN_WEAPONS`, extend `weaponCD` init, add a branch in `alienShoot()`, and a tick branch in `updateAlienWeapons()`. Always apply sim-radius culling to new projectile arrays if they can persist.
+**Mothership use** — `fireMothership()` re-implements firing for the hub corridor + comms walk using the same loadout; see project_mothership_hub.md.
+
+**Why:** User asked for on-foot weapon variety, then specific additions (chainsaw splatter, first-slot chainsaw, V-cloak).
+**How to apply:** New weapons → extend `ALIEN_WEAPONS`, add the id to the right races' `RACE_LOADOUTS` entries, add a branch in `alienShoot()`, add a tick branch in `updateAlienWeapons()`, and add the range/radial case to `fireMothership()` if it should work in the hub. Apply sim-radius culling to any new projectile arrays that can persist.

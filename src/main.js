@@ -179,6 +179,8 @@ function saveGame(){
       specimens:mothership.specimens, totalCollected:mothership.totalCollected,
       collectedCows:mothership.collectedCows||[],
       gameStats:{...gameStats},
+      msDeadCrew:[...msDeadCrew],
+      msDeadOps:[...msDeadOps],
       // Location snapshot — so Continue returns to where you saved
       location:{
         mode: gameMode,                     // 'planet' | 'space'
@@ -211,6 +213,8 @@ function loadGame(){
     mothership.totalCollected=d.totalCollected||0;
     mothership.collectedCows=d.collectedCows||[];
     if(d.gameStats) Object.assign(gameStats,d.gameStats);
+    msDeadCrew = new Set(d.msDeadCrew||[]);
+    msDeadOps  = new Set(d.msDeadOps||[]);
     _pendingSavedLocation = d.location || null;
     document.getElementById('score').textContent=score;
     return true;
@@ -279,16 +283,16 @@ const WEAPON_POOL = {
 };
 // Per-race loadout — each race has 5 unique weapons themed to its biology
 const RACE_LOADOUTS = {
-  grey:      ['stunner','wail','plasma','gwell','swarm','chainsaw'],
-  larva:     ['acid','swarm','plasma','stunner','wail','chainsaw'],
-  insectoid: ['swarm','stunner','acid','wail','plasma','chainsaw'],
-  human:     ['laser','rocket','stunner','wail','gwell','chainsaw'],
-  blob:      ['acid','gwell','wail','swarm','plasma','chainsaw'],
-  tentacle:  ['wail','gwell','swarm','stunner','acid','chainsaw'],
-  mushroom:  ['acid','wail','swarm','stunner','gwell','chainsaw'],
-  cyborg:    ['laser','rocket','stunner','plasma','gwell','chainsaw'],
-  cosmic:    ['plasma','gwell','wail','laser','swarm','chainsaw'],
-  southpark: ['stunner','wail','rocket','acid','swarm','chainsaw'],
+  grey:      ['chainsaw','stunner','wail','plasma','gwell','swarm'],
+  larva:     ['chainsaw','acid','swarm','plasma','stunner','wail'],
+  insectoid: ['chainsaw','swarm','stunner','acid','wail','plasma'],
+  human:     ['chainsaw','laser','rocket','stunner','wail','gwell'],
+  blob:      ['chainsaw','acid','gwell','wail','swarm','plasma'],
+  tentacle:  ['chainsaw','wail','gwell','swarm','stunner','acid'],
+  mushroom:  ['chainsaw','acid','wail','swarm','stunner','gwell'],
+  cyborg:    ['chainsaw','laser','rocket','stunner','plasma','gwell'],
+  cosmic:    ['chainsaw','plasma','gwell','wail','laser','swarm'],
+  southpark: ['chainsaw','stunner','wail','rocket','acid','swarm'],
 };
 function getRaceWeapons(){
   const ids = RACE_LOADOUTS[selectedRace] || RACE_LOADOUTS.grey;
@@ -316,6 +320,10 @@ let wantedLevel = 0; // 0-5 stars
 let military = []; // soldiers, vehicles, aircraft
 let shipHealth = 100;
 let shipCloak = { active:false, energy:100, maxEnergy:100, drainRate:0.5, rechargeRate:0.3 };
+let alienCloak = { active:false, energy:100, maxEnergy:100, drainRate:0.5, rechargeRate:0.3 };
+// Mothership NPC persistence — once killed, they stay dead across reloads.
+let msDeadCrew = new Set(); // crew role IDs ("officer", "scientist", …)
+let msDeadOps  = new Set(); // comms operator numeric IDs (0..N-1)
 let alarmPulse = 0;
 let cows = []; // wacky cows on planets
 let milkScore = 0; // milk collected in mothership
@@ -3904,7 +3912,7 @@ function spawnMilitary(){
 function updateMilitary(){
   const realTarget=playerMode==='onfoot'?{x:alien.x,y:alien.y}:{x:ship.x,y:ship.y};
   // When cloaked, military wander randomly instead of tracking
-  const cloaked=shipCloak.active&&playerMode==='ship';
+  const cloaked=(shipCloak.active&&playerMode==='ship')||(alienCloak.active&&playerMode==='onfoot'&&!alien.drivingVehicle);
   const target=cloaked?{x:realTarget.x+(Math.sin(frameT)*500),y:realTarget.y+200}:realTarget;
 
   military.forEach(m=>{
@@ -4172,12 +4180,41 @@ function updateMission(){
 function enterMothership(){
   mothershipMode=true;
   const mi=mothershipInterior;
-  mi.screen='menu'; // 'menu', 'bridge', 'zoo', 'upgrades', 'starmap', 'arena', 'lab'
+  mi.screen='menu'; // 'menu', 'bridge', 'zoo', 'arena', 'lab'
   mi.selectedItem=0;mi.dialogText='';mi.dialogTimer=0;
   mi.milkCD=0;mi.actionAnim=0;mi.npcTalkAnim=0;mi.npcSpeechBubble='';mi.npcSpeechTimer=0;
-  mi.ambientParticles=[];mi._eCool=0;mi._selCool=0;
-  // Walkable hub state (alien walks a corridor, doors lead to screens)
-  mi.hub={x:600, vx:0, facing:1, walkT:0, prevDoor:-1, doorX:[], nearDoor:-1, width:1800};
+  mi.ambientParticles=[];mi.fxParticles=[];mi._eCool=0;mi._selCool=0;
+  // Walkable hub state — alien spawns at the docking bay (x≈100). The arrival animation
+  // below freezes control while the ship lands and the player climbs out.
+  mi.hub={x:100, vx:0, facing:1, walkT:0, prevDoor:-1, doorX:[], nearDoor:-1, width:1800};
+  // Play a landing / hatch-opens / alien-emerges sequence before the player gets control.
+  mi.arriving={timer:0, duration:120, boardFade:1};
+  mi.departing=null;
+  // Walkable comms room (screens showing each planet leader)
+  mi.commsWalk={x:600, vx:0, facing:1, walkT:0, width:1400, screenX:[], nearScreen:-1, operators:[], bigScreenPhase:Math.random()*1000};
+  // Mission-control style operators at consoles — same race as player, different skins
+  {
+    const cwOps=mi.commsWalk.operators;
+    const playerRace=(typeof getRace==='function') ? getRace(selectedRace) : null;
+    const playerSkin2=(typeof getAlienSkin==='function') ? getAlienSkin() : null;
+    const skinPool=(playerRace && playerRace.skins ? playerRace.skins.filter(s=>s && s.id!==(playerSkin2&&playerSkin2.id)) : []);
+    const ocount=10;
+    const roomW=1400, edgePad=110, usable=roomW-edgePad*2;
+    for(let i=0;i<ocount;i++){
+      if(msDeadOps.has(i)) continue; // once killed, stays dead
+      const skin = skinPool.length ? skinPool[i%skinPool.length] : (playerRace && playerRace.skins && playerRace.skins[0]) || playerSkin2;
+      cwOps.push({
+        opId: i,
+        x: edgePad + (usable*i)/(ocount-1),
+        skin,
+        facing: (i%2===0)?1:-1,
+        scale: 0.82+Math.random()*0.08,
+        typePhase: Math.random()*Math.PI*2,
+        bobPhase: Math.random()*Math.PI*2,
+        lookPhase: Math.random()*Math.PI*2,
+      });
+    }
+  }
   // Bridge-style space view state (big windows + random outside events)
   mi.spaceEvents=[];
   mi._eventCD=120+Math.random()*180;
@@ -4192,15 +4229,9 @@ function enterMothership(){
   }
   // Fixed consoles along the back wall (blinking screens + holograms).
   // Must be initialised BEFORE the crew loop below, because crew.targetX reads from it.
+  // No back-wall terminals — none of them had any gameplay function, so they were removed.
+  // The doors (evenly distributed along h.doorX) are the only interactive stations on the wall.
   mi.hubConsoles=[];
-  {
-    const conCount=6;
-    for(let i=0;i<conCount;i++){
-      mi.hubConsoles.push({x:150+i*(1800-300)/(conCount-1), seed:i*97.3, holo: i%2===0});
-    }
-    // Remove the 2nd console from the left (per design)
-    mi.hubConsoles.splice(1, 1);
-  }
   mi.hubCrew=[];
   const crewRoster=[
     {role:'officer',   accent:'#c44', scale:1.05, label:'Officer'},
@@ -4214,6 +4245,7 @@ function enterMothership(){
   for(let i=_allSkins.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[_allSkins[i],_allSkins[j]]=[_allSkins[j],_allSkins[i]];}
   for(let i=0;i<crewRoster.length;i++){
     const r=crewRoster[i];
+    if(msDeadCrew.has(r.role)) continue; // once killed, stays dead
     const crewSkin = _allSkins.length ? _allSkins[i%_allSkins.length] : playerSkin;
     mi.hubCrew.push({
       role: r.role,
@@ -4253,8 +4285,6 @@ function enterMothership(){
       sag: 4+Math.random()*6,
     });
   }
-  // Star map state
-  mi.starmap={sel:0, surveyCD:{}};
   // Arena state
   mi.arena={active:false, mode:0, time:0, score:0, bestBronze:0, bestSilver:0, bestGold:0,
     ghosts:[], beamActive:false, beamY:0, resultTimer:0, announce:''};
@@ -4287,95 +4317,11 @@ function exitMothership(){
 
 const MS_MENUS=[
   {id:'bridge',name:'COMMAND BRIDGE',icon:'\u2302',desc:'Talk to crew, missions, ship status',color:[50,150,255]},
-  {id:'starmap',name:'STAR MAP',icon:'\u2735',desc:'Plot destinations, survey planets',color:[120,180,255]},
   {id:'comms',name:'COMMS CHANNEL',icon:'\u2637',desc:'Incoming transmissions from planets',color:[255,100,100]},
   {id:'lab',name:'SPECIMEN LAB',icon:'\u269B',desc:'Experiment on specimens for tech',color:[140,255,200]},
-  {id:'arena',name:'TRAINING ARENA',icon:'\u2694',desc:'Abduction drills for XP and skins',color:[255,150,80]},
-  {id:'zoo',name:'XENOBIOLOGY ZOO',icon:'\u25C8',desc:'Specimens, livestock, milking',color:[50,255,80]},
-  {id:'upgrades',name:'UPGRADES',icon:'\u26A1',desc:'Upgrade beam, speed, paint jobs',color:[255,200,50]},
+  {id:'zoo',name:'ZOO',icon:'\u25C8',desc:'Specimens, livestock, milking',color:[50,255,80]},
   {id:'stats',name:'SHIP LOG',icon:'\u2261',desc:'Stats, relations, crew levels',color:[150,200,150]},
 ];
-
-// --- STARMAP ---
-function updateStarmap(){
-  const mi=mothershipInterior,sm=mi.starmap;
-  const avail=planets;
-  if(keys['a']||keys['arrowleft']){if(!mi._lrCool){mi._lrCool=12;sm.sel=(sm.sel-1+avail.length)%avail.length;}}
-  else if(keys['d']||keys['arrowright']){if(!mi._lrCool){mi._lrCool=12;sm.sel=(sm.sel+1)%avail.length;}}
-  else mi._lrCool=0;
-  if(mi._lrCool>0)mi._lrCool--;
-  if(keys['escape']){keys['escape']=false;mi.screen='menu';return;}
-  if((keys['e']||keys[' '])&&!mi._eCool){
-    mi._eCool=14;keys['e']=false;keys[' ']=false;
-    const p=avail[sm.sel];
-    if(unlockedPlanets.includes(p.id)){
-      exitMothership();
-      if(gameMode==='planet')leavePlanet();
-      setTimeout(()=>{loadPlanet(p);},50);
-    }else{
-      mi.dialogText='Planet locked. Complete missions to unlock.';mi.dialogTimer=120;
-    }
-  }
-  if(!keys['e']&&!keys[' ']&&mi._eCool>0)mi._eCool--;
-}
-
-function drawStarmap(){
-  const mi=mothershipInterior,sm=mi.starmap,cw=canvas.width,ch=canvas.height,t=frameT;
-  ctx.fillStyle='rgba(120,180,255,0.3)';ctx.font='10px monospace';ctx.textAlign='left';ctx.fillText('\u25C0 ESC Back',15,25);
-  // Star field
-  for(let i=0;i<80;i++){const sx=(i*137.5+t*3)%cw,sy=(i*83.1+40)%ch;
-    ctx.fillStyle=`rgba(180,200,255,${0.2+Math.sin(t*2+i)*0.15})`;ctx.fillRect(sx,sy,1,1);}
-  // Planets arranged horizontally
-  const n=planets.length,spacing=Math.min(130,(cw-120)/n);
-  const startX=cw/2-((n-1)*spacing)/2,cy=ch*0.5;
-  // Connection line
-  ctx.strokeStyle='rgba(120,180,255,0.15)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(startX,cy);ctx.lineTo(startX+(n-1)*spacing,cy);ctx.stroke();
-  planets.forEach((p,i)=>{
-    const px=startX+i*spacing,sel=i===sm.sel,locked=!unlockedPlanets.includes(p.id);
-    const prog=planetProgress[p.id];
-    const r=22+(sel?6:0)+(sel?Math.sin(t*3)*2:0);
-    // Planet body
-    ctx.fillStyle=locked?'#334':p.color||'#8af';
-    ctx.beginPath();ctx.arc(px,cy,r,0,Math.PI*2);ctx.fill();
-    if(locked){ctx.fillStyle='rgba(0,0,0,0.4)';ctx.beginPath();ctx.arc(px,cy,r,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#aaa';ctx.font='14px monospace';ctx.textAlign='center';ctx.fillText('\u{1F512}',px,cy+5);}
-    if(sel){
-      ctx.strokeStyle=`rgba(120,180,255,${0.6+Math.sin(t*4)*0.3})`;ctx.lineWidth=2;
-      ctx.beginPath();ctx.arc(px,cy,r+8,0,Math.PI*2);ctx.stroke();
-    }
-    // Name
-    ctx.fillStyle=sel?'#cdf':'rgba(180,200,230,0.5)';ctx.font=`${sel?'bold ':''}11px monospace`;ctx.textAlign='center';
-    ctx.fillText((p.name||p.id).toUpperCase(),px,cy+r+18);
-    // Progress
-    if(prog){
-      ctx.fillStyle='rgba(150,255,180,0.6)';ctx.font='9px monospace';
-      const label=bossDefeated[p.id]?'COMPLETE':`Mission ${Math.min(prog.missionIndex,5)}/5`;
-      ctx.fillText(label,px,cy+r+32);
-    }
-  });
-  // Detail panel
-  const p=planets[sm.sel];
-  if(p){
-    const prog=planetProgress[p.id]||{};
-    const dx=cw/2-200,dy=ch-140,dw=400,dh=100;
-    ctx.fillStyle='rgba(0,12,30,0.7)';roundRect(ctx,dx,dy,dw,dh,10);ctx.fill();
-    ctx.strokeStyle='rgba(120,180,255,0.3)';roundRect(ctx,dx,dy,dw,dh,10);ctx.stroke();
-    ctx.fillStyle='#cdf';ctx.font='bold 13px monospace';ctx.textAlign='left';
-    ctx.fillText((p.name||p.id).toUpperCase(),dx+15,dy+22);
-    ctx.fillStyle='rgba(180,200,230,0.6)';ctx.font='10px monospace';
-    const lines=[
-      unlockedPlanets.includes(p.id)?'Status: UNLOCKED':'Status: LOCKED',
-      `Boss: ${bossDefeated[p.id]?'DEFEATED':'Active'}`,
-      `Completion: ${(prog.completion||'none').toUpperCase()}`,
-    ];
-    lines.forEach((l,i)=>ctx.fillText(l,dx+15,dy+44+i*14));
-    ctx.fillStyle=`rgba(120,220,255,${0.5+Math.sin(t*4)*0.3})`;ctx.font='bold 10px monospace';ctx.textAlign='right';
-    ctx.fillText(unlockedPlanets.includes(p.id)?'[SPACE] Jump':'[LOCKED]',dx+dw-15,dy+dh-10);
-  }
-  ctx.fillStyle='rgba(255,255,255,0.2)';ctx.font='9px monospace';ctx.textAlign='center';
-  ctx.fillText('A/D: Select planet  |  SPACE: Jump  |  ESC: Back',cw/2,ch-15);
-}
 
 // --- TRAINING ARENA ---
 function updateArena(){
@@ -5478,17 +5424,90 @@ function drawPyramidInterior(){
 
 function updateMothership(){
   const mi=mothershipInterior;
+  // --- Arrival animation: ship just docked, it descends onto the pad, hatch opens, player emerges ---
+  if(mi.arriving){
+    mi.arriving.timer++;
+    const arr=mi.arriving;
+    const k=arr.timer/arr.duration;
+    // Alien is pinned next to the ship for the whole arrival.
+    if(mi.hub){
+      const h=mi.hub;
+      h.x = 100; h.vx=0; h.vy=0; h.y=0; h.walkT=0; h.facing=1;
+    }
+    // Alien is invisible during ship-landing + hatch-opening phases, then fades in.
+    if(k < 0.67) arr.boardFade = 1;
+    else arr.boardFade = Math.max(0, 1 - (k - 0.67)/0.33);
+    if(arr.timer >= arr.duration){
+      mi.arriving=null;
+    }
+    return;
+  }
+  // --- Departure animation: player boarded the docked ship, hub freezes while it lifts off ---
+  if(mi.departing){
+    mi.departing.timer++;
+    const dep=mi.departing;
+    const dt=dep.timer/dep.duration;
+    // Phase 1 (0 – 0.45): walk toward the bay, then "board" (alien fades as it merges with ship).
+    // Phase 2 (0.45 – 0.80): ship warms up on the pad.
+    // Phase 3 (0.80 – 1.0):  ship rises off the pad.
+    if(mi.hub){
+      const h=mi.hub;
+      h.vx=0; h.vy=0;
+      // Drift toward the bay entry point. Once boarded (dt>=0.45) snap to the pad.
+      const targetX = 100;
+      h.x += (targetX - h.x) * 0.18;
+      h.y += (0 - h.y) * 0.2;
+      h.walkT += 0.15;
+      h.facing = 1;
+    }
+    // Boarding fade — computed here so drawMothership can read it.
+    // 0 up to dt=0.30 (walking), fading to 1 by dt=0.45 (fully boarded/inside ship).
+    dep.boardFade = Math.max(0, Math.min(1, (dt - 0.30) / 0.15));
+    if(mi.departing.timer >= mi.departing.duration){
+      mi.departing=null;
+      exitMothership();
+      // Start the ship at the bay mouth, shrunk down, and play the undocking transition
+      // which slides it out to its final "pushed off" position above the mothership.
+      ship.x = mothershipPos.x;
+      ship.y = mothershipPos.y + 18;
+      ship.vx = 0;
+      ship.vy = 0;
+      transition = {active:true, type:'undocking', timer:0, duration:80, zoom:5};
+    }
+    return;
+  }
   if(mi.dialogTimer>0)mi.dialogTimer--;
   if(mi.milkCD>0)mi.milkCD--;
   if(mi.actionAnim>0)mi.actionAnim--;
   if(mi.npcTalkAnim>0)mi.npcTalkAnim--;
   if(mi.npcSpeechTimer>0)mi.npcSpeechTimer--;
+  // Tick weapon cooldowns + chainsaw rev during walkable mothership scenes
+  if(mi.screen==='menu' || (mi.screen==='comms' && !mi.commsReading)){
+    for(let ci=0;ci<alien.weaponCD.length;ci++) if(alien.weaponCD[ci]>0) alien.weaponCD[ci]--;
+    if(chainsawRev>0) chainsawRev-=0.5;
+    // Q = fire current weapon. Tab = switch weapon.
+    if(keys['q']&&!mi._qPrev){ mi._qPrev=true; fireMothership(); }
+    if(!keys['q']) mi._qPrev=false;
+    if(keys['tab']&&!mi._tabPrev){ mi._tabPrev=true; alienSwitchWeapon(1); }
+    if(!keys['tab']) mi._tabPrev=false;
+  }
+  // Step weapon-effect particles
+  if(mi.fxParticles && mi.fxParticles.length){
+    for(let i=0;i<mi.fxParticles.length;i++){
+      const p=mi.fxParticles[i];
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life--;
+    }
+    mi.fxParticles=mi.fxParticles.filter(p=>p.life>0);
+  }
 
   // --- WALKABLE HUB (main menu) — on-foot style physics ---
   if(mi.screen==='menu'){
     const h=mi.hub;
-    const edgePad=200, usable=h.width-edgePad*2;
-    h.doorX=MS_MENUS.map((m,i)=>edgePad+(usable*i)/(MS_MENUS.length-1));
+    // Shift all doors to the right so the Command Bridge isn't crowding the docking
+    // bay. Bay ends ~x=270, so the first door at x=520 leaves a ~250px breathing gap,
+    // then doors march in even 250px steps toward the right wall.
+    const leftPad=520, rightPad=280, usable=h.width-leftPad-rightPad;
+    h.doorX=MS_MENUS.map((m,i)=>leftPad+(usable*i)/(MS_MENUS.length-1));
     // Init physics fields (guard in case entering an old save)
     if(h.vy==null)h.vy=0;
     if(h.y==null)h.y=0; // 0 = on floor, negative = in the air (offset)
@@ -5572,6 +5591,15 @@ function updateMothership(){
       if(mi.screen==='lab'){mi.lab.running=false;mi.lab.outcome='';mi.lab.outcomeT=0;}
     }
     if(!keys['e']&&mi._eCool>0)mi._eCool--;
+    // --- Board ship to leave: Enter when near the docking bay ---
+    {
+      const nearBay = Math.abs(h.x - 100) < 70; // dock bay is centred at world x=100
+      mi.nearDockBay = nearBay;
+      if(nearBay && (keys['enter']||keys['return']) && !mi.departing){
+        keys['enter']=false; keys['return']=false;
+        mi.departing = {timer:0, duration:140, boardFade:0};
+      }
+    }
     if(keys['escape']){keys['escape']=false;exitMothership();return;}
     if(Math.random()>0.93){
       mi.ambientParticles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,
@@ -5582,6 +5610,7 @@ function updateMothership(){
     // --- Crew NPCs wander between consoles ---
     if(mi.hubCrew){
       mi.hubCrew.forEach(c=>{
+        if(c.dead) return;
         c.bob += 0.08;
         if(c.task==='walk'){
           const dx=c.targetX-c.x;
@@ -5681,8 +5710,7 @@ function updateMothership(){
   }
 
   // Screen-specific updates
-  if(mi.screen==='starmap')updateStarmap();
-  else if(mi.screen==='arena')updateArena();
+  if(mi.screen==='arena')updateArena();
   else if(mi.screen==='lab')updateLab();
   if(mi.screen==='zoo'&&mi.riot&&mi.riot.active)updateZooRiot();
 
@@ -5700,7 +5728,27 @@ function updateMothership(){
   }
   if(mi.screen==='comms'){
     const avail=planetLeaders.filter(l=>unlockedPlanets.includes(l.planetId));
-    if(avail.length>0){
+    const cw2=mi.commsWalk;
+    if(!mi.commsReading && avail.length>0){
+      // Walkable comms room: A/D walks alien past the screens; E to interact with nearest.
+      if(keys['a']||keys['arrowleft']){cw2.vx-=0.5;cw2.facing=-1;}
+      if(keys['d']||keys['arrowright']){cw2.vx+=0.5;cw2.facing=1;}
+      cw2.vx*=0.82;
+      cw2.x+=cw2.vx;
+      const pad=60;
+      if(cw2.x<pad){cw2.x=pad;cw2.vx=0;}
+      if(cw2.x>cw2.width-pad){cw2.x=cw2.width-pad;cw2.vx=0;}
+      if(Math.abs(cw2.vx)>0.15)cw2.walkT+=0.15;
+      // Layout screens evenly across the room
+      const edgePad=160, usable=cw2.width-edgePad*2;
+      cw2.screenX = avail.map((_,i)=>avail.length===1 ? cw2.width/2 : edgePad + (usable*i)/(avail.length-1));
+      // Find nearest screen within reach
+      let best=-1, bestD=90;
+      cw2.screenX.forEach((sx,i)=>{const d=Math.abs(sx-cw2.x); if(d<bestD){bestD=d; best=i;}});
+      cw2.nearScreen=best;
+      mi.selectedItem = best>=0 ? best : mi.selectedItem;
+    } else if(avail.length>0){
+      // In a transmission — A/D still cycles between leaders if multiple
       if(keys['a']||keys['arrowleft']){if(!mi._lrCool){mi._lrCool=12;mi.selectedItem=Math.max(0,mi.selectedItem-1);mi.commsReading=null;}}
       else if(keys['d']||keys['arrowright']){if(!mi._lrCool){mi._lrCool=12;mi.selectedItem=(mi.selectedItem+1)%avail.length;mi.commsReading=null;}}
       else mi._lrCool=0;
@@ -5714,6 +5762,7 @@ function updateMothership(){
     if(mi.zooDetailView){mi.zooDetailView=null;}
     else if(mi.zooWalkMode){mi.zooWalkMode=false;mi.screen='menu';mi.selectedItem=0;mi.zooAction=null;}
     else if(mi.zooInsideCell){mi.zooInsideCell=null;mi.selectedItem=0;mi.zooScroll=0;}
+    else if(mi.screen==='comms'&&mi.commsReading){mi.commsReading=null;mi.commsTalkAnim=0;}
     else if(mi.screen==='menu'){exitMothership();return;}
     else{mi.screen='menu';mi.selectedItem=0;mi.zooAction=null;mi.zooDetailView=null;mi.zooInsideCell=null;}
   }
@@ -5776,8 +5825,8 @@ function updateMothership(){
           playSound('collect');
         }else if(mi.commsReading){
           mi.commsReading=null;mi.commsTalkAnim=0;
-        }else{
-          const leader=available[mi.selectedItem%available.length];
+        }else if(mi.commsWalk && mi.commsWalk.nearScreen>=0){
+          const leader=available[mi.commsWalk.nearScreen%available.length];
           // If no active mission, chance to offer a demand/mission
           if(!currentMission&&leader.demands&&leader.demands.length>0&&Math.random()<0.5){
             const demand=leader.demands[Math.floor(Math.random()*leader.demands.length)];
@@ -5829,25 +5878,6 @@ function updateMothership(){
           mi.selectedItem=0;mi.zooScroll=0;
         }
       }
-    }else if(mi.screen==='upgrades'){
-      const upgList=[{key:'beamWidth',name:'Beam Width',cost:10},{key:'speed',name:'Engine Speed',cost:10},{key:'flame',name:'Flamethrower',cost:10}];
-      const totalUpg=upgList.length;
-      if(mi.selectedItem<totalUpg){
-        const u=upgList[mi.selectedItem%totalUpg];
-        if(score>=u.cost){upgrades[u.key]++;score-=u.cost;document.getElementById('score').textContent=score;
-          mi.dialogText=`${u.name} upgraded to level ${upgrades[u.key]}!`;mi.dialogTimer=120;mi.actionAnim=20;playSound('collect');
-        }else{mi.dialogText=`Need ${u.cost} pts (have ${score})`;mi.dialogTimer=80;}
-      }else{
-        // Paint job selection
-        const paintIdx=mi.selectedItem-totalUpg;
-        const paint=SHIP_PAINTS[paintIdx%SHIP_PAINTS.length];
-        if(paint.id===shipPaint.name){mi.dialogText='Already equipped!';mi.dialogTimer=60;}
-        else if(paint.cost===0||score>=paint.cost){
-          if(paint.cost>0){score-=paint.cost;document.getElementById('score').textContent=score;}
-          shipPaint={color:paint.color,accent:paint.accent,trail:paint.trail,name:paint.id,ship:paint.ship||'saucer'};
-          mi.dialogText=`${paint.name} applied!`;mi.dialogTimer=120;playSound('collect');
-        }else{mi.dialogText=`Need ${paint.cost} pts (have ${score})`;mi.dialogTimer=80;}
-      }
     }
   }
   if(!keys['e'])mi._eCool=0;
@@ -5876,26 +5906,29 @@ function updateMothership(){
   // Update zoo walk mode
   if(mi.zooWalkMode && mi.screen==='zoo'){
     const za=mi.zooAlien;
-    // --- Zoo mind control (T) — alien can possess a zoo specimen and walk it around ---
+    // --- Zoo mind control (T) — alien can possess any zoo unit (specimen or cow) with the
+    // same abilities as on a planet: A/D walk, SPACE jump, Q attack, F transfer, T release. ---
     const tNowZ = !!keys['t'];
     if(tNowZ && !za._tPrev){
       if(mi.zooMC){
         if(mi.zooMC.target){mi.zooMC.target.mindControlled=false;}
         mi.zooMC=null; mi.dialogText='Mind link severed'; mi.dialogTimer=60;
       } else {
-        // Find nearest non-cow specimen within reach
+        // Find nearest unit within reach — any specimen or cow
         let best=null, bestD=220;
-        for(const c of mi.zooCreatures){
+        const allMC=[...(mi.zooCreatures||[]), ...(mi.milkCows||[])];
+        for(const c of allMC){
           const d=Math.abs((c.x||0)-za.x);
           if(d<bestD){bestD=d; best=c;}
         }
         if(best){
           best.mindControlled=true; best.panicLevel=0;
-          mi.zooMC={target:best};
-          mi.dialogText='Mind link established — A/D walks puppet, T to release';
-          mi.dialogTimer=90;
+          best.mcJumpY=0; best.mcJumpVY=0;
+          mi.zooMC={target:best, atkCD:0, _prevSpace:false};
+          mi.dialogText='Mind link established — A/D walk, SPACE jump, Q attack, F transfer, T release';
+          mi.dialogTimer=120;
         } else {
-          mi.dialogText='No specimen in range';
+          mi.dialogText='No unit in range';
           mi.dialogTimer=60;
         }
       }
@@ -5904,13 +5937,62 @@ function updateMothership(){
     // If mind-controlling a puppet, the puppet moves instead of (alongside) the alien
     const mcActive = !!mi.zooMC && !!mi.zooMC.target;
     if(mcActive){
-      const p=mi.zooMC.target;
+      const mc=mi.zooMC, p=mc.target;
+      if(mc.atkCD>0) mc.atkCD--;
       p.walkSpeed=0;
       if(keys['a']||keys['arrowleft']){ p.walkDir=-1; p.x-=2.2; p.walkTimer+=0.25; }
       else if(keys['d']||keys['arrowright']){ p.walkDir=1; p.x+=2.2; p.walkTimer+=0.25; }
       // Keep puppet inside the zoo
       const zMinP=30, zMaxP=(mi.zooWidth||1400)-30;
       if(p.x<zMinP)p.x=zMinP; if(p.x>zMaxP)p.x=zMaxP;
+      // Jump (SPACE — edge-triggered, only when grounded)
+      if(p.mcJumpY==null) p.mcJumpY=0;
+      if(p.mcJumpVY==null) p.mcJumpVY=0;
+      const spaceDown=!!keys[' '];
+      if(spaceDown && !mc._prevSpace && p.mcJumpY>=0){ p.mcJumpVY=-9; }
+      mc._prevSpace=spaceDown;
+      p.mcJumpVY += 0.45;
+      p.mcJumpY += p.mcJumpVY;
+      if(p.mcJumpY>=0){ p.mcJumpY=0; p.mcJumpVY=0; }
+      // Purple mind-control particles above the puppet
+      if(((frameT|0)%3===0) && mi.ambientParticles.length<120){
+        mi.ambientParticles.push({x:p.x+(Math.random()-0.5)*14,y:canvas.height-70+p.mcJumpY+(Math.random()-0.5)*6,
+          vx:(Math.random()-0.5)*0.4,vy:-0.6,life:22,color:[200+Math.random()*40,120,255],size:Math.random()*1.8+0.8});
+      }
+      // Attack (Q) — swing at nearest other unit in the zoo
+      if(keys['q'] && !mc._prevQ && mc.atkCD<=0){
+        mc.atkCD=22;
+        const allO=[...(mi.zooCreatures||[]), ...(mi.milkCows||[])];
+        let victim=null, vD=40;
+        for(const o of allO){
+          if(o===p) continue;
+          const d=Math.abs((o.x||0)-p.x);
+          if(d<vD){vD=d; victim=o;}
+        }
+        if(victim){
+          victim.happiness=Math.max(0,(victim.happiness||0)-20);
+          victim.feedAnim=0;
+          victim._hitAnim=20;
+          for(let i=0;i<8;i++){
+            mi.ambientParticles.push({x:victim.x+(Math.random()-0.5)*10,y:canvas.height-80,
+              vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:20,color:[255,80,80],size:1+Math.random()*1.5});
+          }
+          score+=1; document.getElementById('score').textContent=score;
+        }
+      }
+      mc._prevQ = !!keys['q'];
+      // Transfer (F) — alien teleports to puppet, releases link
+      if(keys['f'] && !mc._prevF){
+        za.x=p.x; za.y=canvas.height-50; za.vx=0; za.vy=-3; za.onGround=false;
+        for(let i=0;i<18;i++){
+          mi.ambientParticles.push({x:p.x+(Math.random()-0.5)*20,y:canvas.height-70+(Math.random()-0.5)*20,
+            vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5-1,life:28,color:[200,120,255],size:1+Math.random()*2});
+        }
+        p.mindControlled=false; p.mcJumpY=0; p.mcJumpVY=0;
+        mi.zooMC=null;
+        mi.dialogText='Transferred'; mi.dialogTimer=60;
+      }
+      mc._prevF = !!keys['f'];
     } else {
       if(keys['a']||keys['arrowleft']){za.vx-=0.4;za.facing=-1;}
       if(keys['d']||keys['arrowright']){za.vx+=0.4;za.facing=1;}
@@ -6266,6 +6348,66 @@ function drawLeaderPortrait(leader,px,py,size,t,talking){
   ctx.fillText(leader.planetId.toUpperCase()+' LEADER',px,py+s*0.88);
 }
 
+function drawMothershipOnFootHUD(mi, h){
+  // Mirrors the on-foot planet HUD: action chips above a weapon slot row.
+  // Uses the same visual language as src/main.js:14644+ so the mothership
+  // reads as the same on-foot mode as other planets.
+  const nearDoor = h && h.nearDoor>=0;
+  const doorId = nearDoor ? (MS_MENUS[h.nearDoor]&&MS_MENUS[h.nearDoor].id) : null;
+  const nearBay = h && h.x<180; // bay alcove — E also undocks there
+  const aChips = [
+    {label:'FIRE',  key:'Q',   active: (alien.weaponCD&&alien.weaponCD[alien.weapon]>0), col:[255,120,120]},
+    {label:'SWAP',  key:'TAB', active: false,                                              col:[255,200,80]},
+    {label:'ENTER', key:'E',   active: nearDoor,                                           col:[140,255,160]},
+    {label:'DEPART',key:'E',   active: nearBay,                                            col:[120,200,255]},
+    {label:'EXIT',  key:'ESC', active: false,                                              col:[200,200,200]},
+  ];
+  const cw=48, cg=4;
+  const ctotal = aChips.length*cw + (aChips.length-1)*cg;
+  const chx=(canvas.width-ctotal)/2, chy=canvas.height-40;
+  ctx.fillStyle='rgba(0,0,0,0.45)';
+  ctx.fillRect(chx-6, chy-6, ctotal+12, 34);
+  for(let i=0;i<aChips.length;i++){
+    const c = aChips[i];
+    const sx = chx + i*(cw+cg);
+    const [r,g,b] = c.col;
+    const pulse = c.active ? (0.35 + Math.sin(frameNow*0.012)*0.12) : 0.10;
+    ctx.fillStyle = `rgba(${r},${g},${b},${pulse})`;
+    ctx.fillRect(sx, chy, cw, 22);
+    ctx.strokeStyle = c.active ? `rgba(${r},${g},${b},0.95)` : `rgba(${r},${g},${b},0.45)`;
+    ctx.lineWidth = c.active ? 2 : 1;
+    ctx.strokeRect(sx+0.5, chy+0.5, cw-1, 21);
+    ctx.fillStyle = c.active ? '#fff' : `rgb(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)})`;
+    ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText(c.label, sx+cw/2, chy+10);
+    ctx.font='8px monospace';
+    ctx.fillStyle = c.active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.50)';
+    ctx.fillText('['+c.key+']', sx+cw/2, chy+19);
+  }
+
+  // Weapon slot row (mirror of on-foot row at src/main.js:14687+)
+  const _lo = getRaceWeapons();
+  const slots = _lo.length;
+  const sw=40, gap=4, total=slots*sw+(slots-1)*gap;
+  const hx=(canvas.width-total)/2, hy=canvas.height-84;
+  ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fillRect(hx-6,hy-6,total+12,40);
+  for(let i=0;i<slots;i++){
+    const sx=hx+i*(sw+gap), sy=hy;
+    const cd=(alien.weaponCD&&alien.weaponCD[i])||0, maxCD=_lo[i].cd;
+    const sel=i===alien.weapon;
+    ctx.fillStyle=sel?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.05)';
+    ctx.fillRect(sx,sy,sw,28);
+    ctx.strokeStyle=sel?_lo[i].color:'rgba(255,255,255,0.25)';
+    ctx.lineWidth=sel?2:1;ctx.strokeRect(sx+0.5,sy+0.5,sw-1,27);
+    const cdF=maxCD?cd/maxCD:0;
+    if(cdF>0){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(sx,sy+28-cdF*28,sw,cdF*28);}
+    ctx.fillStyle=sel?'#fff':'#ccc';ctx.font='bold 9px monospace';ctx.textAlign='center';
+    ctx.fillText((i+1)+'',sx+7,sy+11);
+    ctx.font='8px monospace';
+    ctx.fillText(_lo[i].label,sx+sw/2+3,sy+22);
+  }
+}
+
 function drawMothership(){
   const mi=mothershipInterior;
   const cw=canvas.width,ch=canvas.height,t=frameT;
@@ -6283,6 +6425,36 @@ function drawMothership(){
   if(mi.screen==='menu'){
     const h=mi.hub;
     const camX=Math.max(0,Math.min(h.width-cw, h.x-cw/2));
+    // Pull the camera back during the arrival animation so the player can see
+    // the docking bay AND all the doors / hub beyond it while the ship lands.
+    let _msZoom=2.0;
+    let _arrBlend=0; // 0 = normal player-centered view, 1 = wide hub-centered overview
+    if(mi.arriving){
+      const ak = Math.min(1, mi.arriving.timer/mi.arriving.duration);
+      // Fit-to-hub zoom shows the whole corridor (bay + all 5 doors) at the start.
+      // Cap it so we don't zoom out below the corridor height.
+      const fitZoom = Math.max(0.5, Math.min(0.9, (cw-40)/h.width));
+      _msZoom = fitZoom + ak*(2.0 - fitZoom);
+      // Fully hub-centered at start, fully player-centered at end.
+      _arrBlend = 1 - ak;
+    }
+    const _msAX=h.x-camX, _msFloorY=ch-70;
+    // Player-centered translate (normal gameplay).
+    const _msTXPlayer = cw/2 - _msZoom*_msAX;
+    // Hub-centered translate (used during arrival to frame the whole corridor).
+    const _msTXHub = cw/2 - _msZoom*(h.width/2 - camX);
+    let _msTX = _msTXHub*_arrBlend + _msTXPlayer*(1 - _arrBlend);
+    // Clamp so the walls stay at/inside the screen edges — only when the hub
+    // is wider than the viewport. When it's narrower (very zoomed-out start of
+    // arrival), let the computed translate stand so we see walls + space around.
+    const _msTXMax = _msZoom*camX;                       // left wall ≤ screen 0
+    const _msTXMin = cw - _msZoom*(h.width-camX);        // right wall ≥ screen cw
+    if(_msTXMin <= _msTXMax){
+      _msTX = Math.max(_msTXMin, Math.min(_msTX, _msTXMax));
+    }
+    ctx.save();
+    ctx.translate(_msTX, _msFloorY*(1-_msZoom));
+    ctx.scale(_msZoom,_msZoom);
     // Deep space backdrop through viewports
     const floorY=ch-70, ceilY=70;
     // Corridor floor
@@ -6514,32 +6686,9 @@ function drawMothership(){
         }
       }
     });
-    // Subtle crew/player silhouette reflections on the window glass
-    // (still inside the window clip so they only appear within the pane)
-    if(mi.hubCrew){
-      ctx.globalCompositeOperation='lighter';
-      const reflY = wBot - 18; // near bottom of window glass
-      mi.hubCrew.forEach(c=>{
-        const rx=c.x-camX;
-        if(rx<-20||rx>cw+20)return;
-        // Tiny ghost silhouette, very faint
-        ctx.fillStyle=`rgba(160,220,255,0.07)`;
-        ctx.beginPath();
-        ctx.ellipse(rx, reflY-6, 4, 9, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rx, reflY-14, 3, 0, Math.PI*2); ctx.fill();
-      });
-      // Player reflection
-      const plRX=(mi.hub?mi.hub.x:0)-camX;
-      if(plRX>-20 && plRX<cw+20){
-        ctx.fillStyle='rgba(180,240,255,0.11)';
-        ctx.beginPath();
-        ctx.ellipse(plRX, reflY-7, 5, 10, 0, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath();
-        ctx.arc(plRX, reflY-16, 3.2, 0, Math.PI*2); ctx.fill();
-      }
-      ctx.globalCompositeOperation='source-over';
-    }
+    // (Removed: crew/player silhouette "reflections" inside the window clip —
+    //  they tracked the player's X position in real time and read as a figure
+    //  outside the glass walking in lock-step with the player, which felt wrong.)
     ctx.restore();
     // Window structural pillars
     const pillarSp=380;
@@ -6576,6 +6725,44 @@ function drawMothership(){
       const sx=con.x-camX;
       if(sx<-80||sx>cw+80)return;
       const cbW=70, cbH=wallBot-wallTop-22, cbY=wallTop+20;
+      // Big hanging sign high above the terminal — visible from anywhere in the hub.
+      if(con.label){
+        ctx.font='bold 12px monospace';
+        const textW=ctx.measureText(con.label).width;
+        const signW=Math.max(cbW+20, textW+20), signH=20;
+        const signY=ceilY+26; // just below the overhead rail
+        const signX=sx-signW/2;
+        // Chains from ceiling down to sign
+        ctx.strokeStyle='rgba(40,60,80,0.9)';ctx.lineWidth=1;
+        for(const cOff of [-signW/2+6, signW/2-6]){
+          ctx.beginPath();ctx.moveTo(sx+cOff, ceilY+14);ctx.lineTo(sx+cOff, signY);ctx.stroke();
+        }
+        // Sign back panel with glow
+        const sg=ctx.createLinearGradient(0,signY,0,signY+signH);
+        sg.addColorStop(0,'#12202e');
+        sg.addColorStop(0.5,'#1c3048');
+        sg.addColorStop(1,'#0c1826');
+        ctx.fillStyle=sg;
+        ctx.fillRect(signX, signY, signW, signH);
+        // Neon border
+        ctx.strokeStyle='rgba(120,220,255,0.85)';ctx.lineWidth=1.5;
+        ctx.strokeRect(signX+0.5, signY+0.5, signW-1, signH-1);
+        // Subtle glow outside
+        ctx.shadowColor='rgba(120,200,255,0.8)';ctx.shadowBlur=6;
+        ctx.strokeRect(signX+0.5, signY+0.5, signW-1, signH-1);
+        ctx.shadowBlur=0;
+        // Label text
+        ctx.fillStyle='rgba(210,240,255,1)';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(con.label, sx, signY+signH/2+0.5);
+        ctx.textBaseline='alphabetic';
+        // Small beacon lights on each corner
+        for(const bx of [signX+3, signX+signW-3]){
+          const on=((Math.sin(t*2+con.seed)+1)*0.5)>0.5;
+          ctx.fillStyle=on?'rgba(255,180,80,0.95)':'rgba(120,80,40,0.7)';
+          ctx.beginPath();ctx.arc(bx, signY+signH-2, 1.4, 0, Math.PI*2);ctx.fill();
+        }
+      }
       // Base
       ctx.fillStyle='#1a2838';ctx.fillRect(sx-cbW/2,cbY,cbW,cbH);
       ctx.strokeStyle='rgba(100,180,255,0.4)';ctx.lineWidth=1;ctx.strokeRect(sx-cbW/2,cbY,cbW,cbH);
@@ -6786,6 +6973,305 @@ function drawMothership(){
         ctx.beginPath();ctx.arc(dx, dy+1, 2, 0, Math.PI*2); ctx.fill();
       }
     }
+    // === DOCKING BAY (left edge of the corridor) — parked player ship sits here ===
+    {
+      const bayCX = 140;                 // world x of the bay centre
+      const bayW  = 260;                 // world width of the bay alcove (bigger hangar)
+      const bayFloor = floorY;
+      const bayTop = ceilY + 10;         // alcove reaches higher into the ceiling
+      const bsx = bayCX - camX;
+      if(bsx > -bayW && bsx < cw + bayW){
+        const bayL=bsx-bayW/2, bayR=bsx+bayW/2;
+        // --- Back-wall recess (deep metal hangar interior) ---
+        const recessGrad=ctx.createLinearGradient(0, bayTop, 0, bayFloor);
+        recessGrad.addColorStop(0,'#020510');
+        recessGrad.addColorStop(0.5,'#061220');
+        recessGrad.addColorStop(1,'#0c1a2c');
+        ctx.fillStyle=recessGrad;
+        ctx.fillRect(bayL, bayTop, bayW, bayFloor-bayTop);
+        // Vertical riveted plating on the back wall
+        for(let px=bayL+10; px<bayR-4; px+=28){
+          ctx.fillStyle='rgba(140,170,200,0.06)';
+          ctx.fillRect(px, bayTop+2, 1, bayFloor-bayTop-4);
+          ctx.fillStyle='rgba(0,0,0,0.25)';
+          ctx.fillRect(px-1, bayTop+2, 1, bayFloor-bayTop-4);
+        }
+        // Rivets along the edges
+        ctx.fillStyle='rgba(160,200,230,0.35)';
+        for(let ry=bayTop+8; ry<bayFloor-6; ry+=14){
+          ctx.beginPath();ctx.arc(bayL+4,ry,1.1,0,Math.PI*2);ctx.fill();
+          ctx.beginPath();ctx.arc(bayR-4,ry,1.1,0,Math.PI*2);ctx.fill();
+        }
+        // Heavy bulkhead frame around the alcove
+        ctx.fillStyle='#1a2634';
+        ctx.fillRect(bayL-6, bayTop-6, bayW+12, 8);      // top lintel
+        ctx.fillRect(bayL-6, bayTop-6, 8, bayFloor-bayTop+8); // left jamb
+        ctx.fillRect(bayR-2, bayTop-6, 8, bayFloor-bayTop+8); // right jamb
+        ctx.strokeStyle='rgba(120,200,255,0.35)';ctx.lineWidth=1.2;
+        ctx.strokeRect(bayL, bayTop, bayW, bayFloor-bayTop);
+        // --- Metal grating floor pattern ---
+        ctx.save();
+        ctx.beginPath();ctx.rect(bayL, bayFloor-10, bayW, 10);ctx.clip();
+        ctx.fillStyle='#0a1420';ctx.fillRect(bayL, bayFloor-10, bayW, 10);
+        ctx.strokeStyle='rgba(140,200,255,0.22)';ctx.lineWidth=1;
+        for(let gx=bayL; gx<bayR; gx+=10){
+          ctx.beginPath();ctx.moveTo(gx, bayFloor-10);ctx.lineTo(gx, bayFloor);ctx.stroke();
+        }
+        ctx.strokeStyle='rgba(140,200,255,0.15)';
+        ctx.beginPath();ctx.moveTo(bayL, bayFloor-5);ctx.lineTo(bayR, bayFloor-5);ctx.stroke();
+        ctx.restore();
+        // --- Hazard stripe lip at the front of the bay ---
+        ctx.save();
+        ctx.beginPath();ctx.rect(bayL-4, bayFloor-4, bayW+8, 4);ctx.clip();
+        ctx.fillStyle='rgba(255,210,60,0.85)';
+        ctx.fillRect(bayL-4, bayFloor-4, bayW+8, 4);
+        ctx.fillStyle='rgba(20,16,6,0.9)';
+        for(let sx2=-16; sx2<bayW+20; sx2+=10){
+          ctx.beginPath();
+          ctx.moveTo(bayL+sx2, bayFloor-4);
+          ctx.lineTo(bayL+sx2+5, bayFloor-4);
+          ctx.lineTo(bayL+sx2-1, bayFloor);
+          ctx.lineTo(bayL+sx2-6, bayFloor);
+          ctx.closePath();ctx.fill();
+        }
+        ctx.restore();
+        // --- Overhead gantry crane rail + trolley above the ship ---
+        const railY = bayTop+12;
+        const railG=ctx.createLinearGradient(0, railY, 0, railY+6);
+        railG.addColorStop(0,'#2a3848');
+        railG.addColorStop(0.5,'#546a80');
+        railG.addColorStop(1,'#1a2432');
+        ctx.fillStyle=railG;
+        ctx.fillRect(bayL+16, railY, bayW-32, 5);
+        ctx.strokeStyle='rgba(0,0,0,0.6)'; ctx.lineWidth=1;
+        ctx.strokeRect(bayL+16, railY, bayW-32, 5);
+        // Trolley
+        const trolleyX = bsx + Math.sin(t*0.6)*24;
+        ctx.fillStyle='#3b5068';
+        ctx.fillRect(trolleyX-14, railY+5, 28, 6);
+        ctx.fillStyle='#6a8aa6';
+        ctx.fillRect(trolleyX-13, railY+5, 26, 1);
+        // Landing pad
+        const padY = bayFloor-10;
+        ctx.fillStyle='#121e2c';
+        ctx.fillRect(bsx-70, padY-4, 140, 8);
+        ctx.strokeStyle='rgba(120,220,255,0.5)'; ctx.lineWidth=1.5;
+        ctx.strokeRect(bsx-70, padY-4, 140, 8);
+        // Pad runway lights
+        for(let li=-60; li<=60; li+=20){
+          const lx=bsx+li;
+          const pulse=(Math.sin(t*3 + li*0.08)+1)*0.5;
+          ctx.fillStyle=`rgba(120,230,255,${0.45+pulse*0.55})`;
+          ctx.beginPath();ctx.arc(lx, padY-4, 1.6, 0, Math.PI*2);ctx.fill();
+        }
+        // Soft floor pool light
+        const poolG=ctx.createRadialGradient(bsx, padY, 4, bsx, padY, 100);
+        poolG.addColorStop(0,'rgba(170,230,255,0.45)');
+        poolG.addColorStop(1,'transparent');
+        ctx.fillStyle=poolG;
+        ctx.beginPath();ctx.ellipse(bsx, padY, 100, 12, 0, 0, Math.PI*2);ctx.fill();
+        // Landing pad glow ring
+        ctx.strokeStyle=`rgba(120,220,255,${0.6+Math.sin(t*2)*0.25})`;
+        ctx.lineWidth=2;
+        ctx.beginPath();ctx.ellipse(bsx, padY-2, 78, 9, 0, 0, Math.PI*2);ctx.stroke();
+        // --- Support clamps on the pad (left + right), large arms gripping ship ---
+        const clampY = padY-22;
+        ctx.fillStyle='#2a3a4c';
+        ctx.fillRect(bsx-56, padY-6, 10, -24);
+        ctx.fillRect(bsx+46, padY-6, 10, -24);
+        ctx.fillStyle='#3c5268';
+        ctx.fillRect(bsx-56, clampY-4, 10, 4);
+        ctx.fillRect(bsx+46, clampY-4, 10, 4);
+        // Clamp pincers
+        ctx.fillStyle='#4a6480';
+        ctx.fillRect(bsx-46, clampY-2, 10, 4);
+        ctx.fillRect(bsx+36, clampY-2, 10, 4);
+        // Tether/fuel hoses from ceiling trolley to ship (wobbly)
+        const hX1=trolleyX-10, hX2=trolleyX+10;
+        for(const hx of [hX1, hX2]){
+          ctx.strokeStyle='rgba(80,140,180,0.7)';ctx.lineWidth=2;
+          ctx.beginPath();
+          ctx.moveTo(hx, railY+11);
+          const midX = hx + Math.sin(t*0.8+hx)*3;
+          ctx.bezierCurveTo(midX, railY+30, midX, padY-40, bsx+(hx-trolleyX)*0.3, padY-24);
+          ctx.stroke();
+          // Coupling
+          ctx.fillStyle='#6a8aa6';
+          ctx.beginPath();ctx.arc(hx, railY+11, 2, 0, Math.PI*2);ctx.fill();
+        }
+        // Electric arc flicker near couplings
+        if(Math.random()<0.12){
+          const ax2=trolleyX+(Math.random()-0.5)*14, ay2=railY+14+Math.random()*6;
+          ctx.strokeStyle=`rgba(200,240,255,${0.6+Math.random()*0.4})`;
+          ctx.lineWidth=1;
+          ctx.beginPath();
+          ctx.moveTo(ax2-3, ay2);
+          ctx.lineTo(ax2, ay2+Math.random()*3);
+          ctx.lineTo(ax2+3, ay2);
+          ctx.stroke();
+        }
+        // --- Parked player ship (bigger + shadow) ---
+        const pc=(typeof shipPaint!=='undefined'&&shipPaint.color)||'#cfd6de';
+        const pa=(typeof shipPaint!=='undefined'&&shipPaint.accent)||'#89a';
+        const ptCol=(typeof shipPaint!=='undefined'&&shipPaint.trail)||'rgba(120,200,255,0.6)';
+        const stype=(typeof shipPaint!=='undefined'&&shipPaint.ship)||'saucer';
+        // Hover bob while parked
+        const bob = Math.sin(t*1.5)*1.2;
+        // Underlight glow between ship and pad
+        const underG=ctx.createRadialGradient(bsx, padY-6, 2, bsx, padY-6, 52);
+        underG.addColorStop(0,'rgba(180,230,255,0.55)');
+        underG.addColorStop(1,'transparent');
+        ctx.fillStyle=underG;
+        ctx.beginPath();ctx.ellipse(bsx, padY-6, 52, 7, 0, 0, Math.PI*2);ctx.fill();
+        // Ship drawn bigger — matches the alien's ~1.0 scale stature better
+        let shipLift = 0;
+        let engineFx = 0; // 0..1 intensity for engine glow + exhaust plume
+        let hatchFlash = 0; // 0..1 brightness of hatch-open flash
+        if(mi.departing){
+          const k = Math.min(1, mi.departing.timer/mi.departing.duration);
+          shipLift = -Math.pow(k, 1.8) * 60;
+          engineFx = k;
+        }else if(mi.arriving){
+          const k = mi.arriving.timer/mi.arriving.duration;
+          const landK = Math.min(1, k/0.4); // landed by dt=0.4
+          shipLift = -Math.pow(1 - landK, 1.5) * 70;
+          // Small settle bounce right after touchdown
+          if(k >= 0.4 && k < 0.5){
+            const b = (k - 0.4)/0.1;
+            shipLift -= Math.sin(b * Math.PI) * 4;
+          }
+          engineFx = 1 - landK;
+          // Hatch opens flash between dt 0.5..0.75
+          if(k > 0.5 && k < 0.75){
+            hatchFlash = Math.sin((k - 0.5)/0.25 * Math.PI);
+          }
+        }
+        ctx.save();
+        ctx.translate(bsx, padY-30 + bob + shipLift);
+        ctx.scale(1.35,1.35);
+        drawShipBody(pc, pa, ptCol, stype);
+        // Engine glow scales with engineFx (departure: ramps up; arrival: fades out as it lands)
+        if(engineFx > 0){
+          ctx.fillStyle=`rgba(255,180,80,${(0.6+Math.sin(t*20)*0.2) * engineFx})`;
+          ctx.beginPath();ctx.arc(0, 10, 6+engineFx*6, 0, Math.PI*2);ctx.fill();
+        }
+        ctx.restore();
+        // Exhaust plume (same trigger as engineFx)
+        if(engineFx > 0){
+          const plumeG=ctx.createLinearGradient(0, padY-6-shipLift+6, 0, padY+12);
+          plumeG.addColorStop(0,`rgba(255,200,120,${(0.6+engineFx*0.3)})`);
+          plumeG.addColorStop(1,'transparent');
+          ctx.fillStyle=plumeG;
+          ctx.globalAlpha = engineFx;
+          ctx.beginPath();
+          ctx.moveTo(bsx-18, padY-6+shipLift*0.4);
+          ctx.lineTo(bsx+18, padY-6+shipLift*0.4);
+          ctx.lineTo(bsx+28, padY+12);
+          ctx.lineTo(bsx-28, padY+12);
+          ctx.closePath();ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        // Hatch-opens flash during arrival: bright glow expanding from ship belly.
+        if(hatchFlash > 0){
+          const fx=bsx, fy=padY-20;
+          const fr=48*hatchFlash;
+          const fg=ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+          fg.addColorStop(0, `rgba(255,245,200,${0.9*hatchFlash})`);
+          fg.addColorStop(0.5, `rgba(255,210,120,${0.55*hatchFlash})`);
+          fg.addColorStop(1, 'transparent');
+          ctx.fillStyle=fg;
+          ctx.beginPath();ctx.arc(fx, fy, fr, 0, Math.PI*2);ctx.fill();
+          // Hatch bar: thin bright line underneath the ship belly
+          ctx.fillStyle=`rgba(255,240,180,${0.9*hatchFlash})`;
+          ctx.fillRect(fx-14, fy+6, 28, 2);
+          // Spark particles spilling out
+          if(Math.random() < 0.5*hatchFlash){
+            mi.ambientParticles.push({
+              x: fx+(Math.random()-0.5)*18,
+              y: fy+6,
+              vx:(Math.random()-0.5)*0.6, vy:0.3+Math.random()*0.6,
+              life:22+Math.random()*12, color:[255,230,160], size:1+Math.random()*1.2
+            });
+          }
+        }
+        // --- Side wall data panels ---
+        for(let pi=0;pi<4;pi++){
+          const py = bayTop + 24 + pi*18;
+          ctx.fillStyle='rgba(20,40,60,0.9)';
+          ctx.fillRect(bayL+10, py, 40, 12);
+          ctx.strokeStyle='rgba(120,220,200,0.35)';ctx.lineWidth=1;
+          ctx.strokeRect(bayL+10, py, 40, 12);
+          ctx.fillStyle=`rgba(120,230,200,${0.6+Math.sin(t*2+pi)*0.25})`;
+          ctx.fillRect(bayL+12, py+3, 4+Math.abs(Math.sin(t*1.5+pi))*26, 2);
+          ctx.fillStyle=`rgba(120,230,200,${0.5+Math.sin(t*3+pi)*0.2})`;
+          ctx.fillRect(bayL+12, py+7, 6+Math.abs(Math.cos(t*1.2+pi))*20, 2);
+          // Status dot
+          ctx.fillStyle=`rgba(100,255,140,${0.5+Math.sin(t*3+pi)*0.4})`;
+          ctx.beginPath();ctx.arc(bayL+46, py+6, 1.5, 0, Math.PI*2);ctx.fill();
+        }
+        // Right wall — technical diagram / pressure gauge
+        ctx.fillStyle='rgba(20,40,60,0.9)';
+        ctx.fillRect(bayR-52, bayTop+24, 42, 50);
+        ctx.strokeStyle='rgba(120,220,200,0.35)';
+        ctx.strokeRect(bayR-52, bayTop+24, 42, 50);
+        // Circle gauge
+        const gcx=bayR-31, gcy=bayTop+44;
+        ctx.strokeStyle='rgba(140,230,200,0.7)';ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.arc(gcx, gcy, 10, Math.PI*0.8, Math.PI*2.2);ctx.stroke();
+        ctx.strokeStyle='rgba(255,220,80,0.9)';ctx.lineWidth=2;
+        const needle = Math.PI*0.8 + (Math.sin(t*0.8)+1)*0.5*Math.PI*1.4;
+        ctx.beginPath();ctx.moveTo(gcx, gcy);ctx.lineTo(gcx+Math.cos(needle)*9, gcy+Math.sin(needle)*9);ctx.stroke();
+        ctx.fillStyle='rgba(120,220,200,0.55)';
+        ctx.font='6px monospace';ctx.textAlign='center';
+        ctx.fillText('FUEL',gcx,gcy+20);
+        // Corner warning lights (blink red/yellow)
+        [[bayL+8, bayTop+8],[bayR-8, bayTop+8]].forEach(([wx,wy],wi)=>{
+          const col = wi===0?[255,100,80]:[255,220,100];
+          const bl=(Math.sin(t*3+wi*1.7)+1)*0.5;
+          ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${0.45+bl*0.55})`;
+          ctx.beginPath();ctx.arc(wx, wy, 2.4, 0, Math.PI*2);ctx.fill();
+          const wg=ctx.createRadialGradient(wx,wy,0,wx,wy,10);
+          wg.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},${0.35*bl})`);
+          wg.addColorStop(1,'transparent');
+          ctx.fillStyle=wg;
+          ctx.beginPath();ctx.arc(wx,wy,10,0,Math.PI*2);ctx.fill();
+        });
+        // --- Hanging "DOCKING BAY 01" sign on chains ---
+        const signW=140, signH=22;
+        const signY=bayTop+6;
+        // Chains
+        ctx.strokeStyle='rgba(150,170,190,0.7)';ctx.lineWidth=1.5;
+        for(const cx2 of [bsx-signW/2+16, bsx+signW/2-16]){
+          for(let ci=0;ci<4;ci++){
+            ctx.beginPath();
+            ctx.arc(cx2, bayTop-6+ci*4, 1.6, 0, Math.PI*2);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle='#0a1522';
+        ctx.fillRect(bsx-signW/2, signY, signW, signH);
+        ctx.strokeStyle='rgba(120,200,255,0.8)';ctx.lineWidth=1.5;
+        ctx.strokeRect(bsx-signW/2, signY, signW, signH);
+        // Sign edges glow
+        ctx.fillStyle=`rgba(120,220,255,${0.35+Math.sin(t*2)*0.15})`;
+        ctx.fillRect(bsx-signW/2, signY, signW, 1.5);
+        ctx.fillRect(bsx-signW/2, signY+signH-1.5, signW, 1.5);
+        ctx.fillStyle='rgba(200,240,255,0.98)';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('DOCKING BAY 01', bsx, signY+15);
+        // Board-ship prompt (when nearby and not mid-animation)
+        if(mi.nearDockBay && !mi.departing && !mi.arriving){
+          const promptY = padY-70 + Math.sin(t*4)*2;
+          ctx.fillStyle='rgba(0,0,0,0.55)';
+          ctx.fillRect(bsx-52, promptY-10, 104, 16);
+          ctx.strokeStyle=`rgba(120,230,255,${0.6+Math.sin(t*4)*0.4})`;ctx.lineWidth=1;
+          ctx.strokeRect(bsx-52, promptY-10, 104, 16);
+          ctx.fillStyle=`rgba(180,240,255,${0.85+Math.sin(t*5)*0.15})`;
+          ctx.font='bold 9px monospace';ctx.textAlign='center';
+          ctx.fillText('[ENTER] BOARD SHIP', bsx, promptY+2);
+        }
+      }
+    }
     // Doors (one per menu entry) — each styled specifically to its content
     h.doorX.forEach((dx,i)=>{
       const sx=dx-camX;
@@ -6848,21 +7334,6 @@ function drawMothership(){
         // Pilot head silhouette
         ctx.fillStyle='rgba(0,0,0,0.85)';ctx.beginPath();ctx.arc(vpX,vpT+vpH-12,5,0,Math.PI*2);ctx.fill();
         ctx.fillStyle='rgba(80,150,255,0.3)';ctx.fillRect(vpX-6,vpT+vpH-7,12,2);
-      } else if(m.id==='starmap'){
-        // Galaxy swirl
-        for(let si=0;si<20;si++){
-          const a=t*0.5+si*0.4;
-          const r=2+si*0.8;
-          const gx=vpX+Math.cos(a)*r, gy=vpY+Math.sin(a)*r*0.5;
-          ctx.fillStyle=`rgba(${150+si*5},${180-si*3},255,${0.7-si*0.025})`;
-          ctx.fillRect(gx,gy,1.2,1.2);
-        }
-        // Planet orbits
-        ctx.strokeStyle='rgba(120,180,255,0.35)';ctx.lineWidth=0.5;
-        ctx.beginPath();ctx.ellipse(vpX,vpY,12,5,0,0,Math.PI*2);ctx.stroke();
-        ctx.beginPath();ctx.ellipse(vpX,vpY,20,8,0,0,Math.PI*2);ctx.stroke();
-        // Central star
-        ctx.fillStyle='#ffd';ctx.beginPath();ctx.arc(vpX,vpY,1.8,0,Math.PI*2);ctx.fill();
       } else if(m.id==='comms'){
         // Concentric radio waves pulsing out
         for(let wi=0;wi<4;wi++){
@@ -6920,20 +7391,6 @@ function drawMothership(){
         ctx.beginPath();ctx.arc(pc,vpT+vpH-16,3,0,Math.PI*2);ctx.fill();
         // Eyes glowing
         ctx.fillStyle='#f44';ctx.fillRect(pc-2,vpT+vpH-17,1,1);ctx.fillRect(pc+1,vpT+vpH-17,1,1);
-      } else if(m.id==='upgrades'){
-        // Rotating gear + wrench
-        ctx.save();ctx.translate(vpX-5,vpY);ctx.rotate(t);
-        ctx.strokeStyle='rgba(255,220,80,0.9)';ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.stroke();
-        for(let gi=0;gi<8;gi++){const ga=gi*Math.PI/4;
-          ctx.beginPath();ctx.moveTo(Math.cos(ga)*5,Math.sin(ga)*5);ctx.lineTo(Math.cos(ga)*9,Math.sin(ga)*9);ctx.stroke();}
-        ctx.fillStyle='rgba(255,220,80,0.4)';ctx.beginPath();ctx.arc(0,0,2,0,Math.PI*2);ctx.fill();
-        ctx.restore();
-        // Static wrench
-        ctx.strokeStyle='rgba(200,200,210,0.8)';ctx.lineWidth=2;
-        ctx.beginPath();ctx.moveTo(vpX+4,vpY+6);ctx.lineTo(vpX+11,vpY-2);ctx.stroke();
-        ctx.fillStyle='rgba(200,200,210,0.8)';ctx.beginPath();ctx.arc(vpX+12,vpY-3,2.5,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='rgba(0,0,0,0.6)';ctx.beginPath();ctx.arc(vpX+12,vpY-3,1.2,0,Math.PI*2);ctx.fill();
       } else if(m.id==='stats'){
         // Log bars + pie chart
         ctx.fillStyle='rgba(150,200,150,0.7)';
@@ -6978,14 +7435,51 @@ function drawMothership(){
       ctx.font='18px monospace';ctx.textAlign='center';
       ctx.fillText(m.icon,sx-3,signY-5);
 
-      // Door label with underline
-      ctx.fillStyle=near?`rgba(${c[0]},${c[1]},${c[2]},0.95)`:'rgba(180,200,230,0.45)';
-      ctx.font=`${near?'bold ':''}10px monospace`;
-      ctx.textAlign='center';
-      ctx.fillText(m.name,sx,dy+dh+16);
-      ctx.strokeStyle=near?`rgba(${c[0]},${c[1]},${c[2]},0.7)`:'rgba(180,200,230,0.2)';
-      ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(sx-dw/2+6,dy+dh+20);ctx.lineTo(sx+dw/2-6,dy+dh+20);ctx.stroke();
+      // === BIG HANGING NAME SIGN ABOVE EACH DOOR ===
+      // Visible from anywhere in the hub so the player can find each destination.
+      {
+        ctx.font='bold 12px monospace';
+        const nameW = ctx.measureText(m.name).width;
+        const bSignW = Math.max(dw+20, nameW+22);
+        const bSignH = 20;
+        const bSignY = signY - signH - bSignH - 8; // float above the icon plate
+        const bSignX = sx - bSignW/2;
+        // Chains from ceiling to sign
+        ctx.strokeStyle='rgba(40,60,80,0.9)';ctx.lineWidth=1;
+        for(const cOff of [-bSignW/2+6, bSignW/2-6]){
+          ctx.beginPath();
+          ctx.moveTo(sx+cOff, bSignY - 26);
+          ctx.lineTo(sx+cOff, bSignY);
+          ctx.stroke();
+        }
+        // Sign back panel
+        const nsg=ctx.createLinearGradient(0, bSignY, 0, bSignY+bSignH);
+        nsg.addColorStop(0, '#0b1624');
+        nsg.addColorStop(0.5, `rgba(${c[0]*0.35|0},${c[1]*0.35|0},${c[2]*0.35|0},1)`);
+        nsg.addColorStop(1, '#060d16');
+        ctx.fillStyle=nsg;
+        ctx.fillRect(bSignX, bSignY, bSignW, bSignH);
+        // Neon border
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${near?1:0.75})`;
+        ctx.lineWidth=1.5;
+        ctx.strokeRect(bSignX+0.5, bSignY+0.5, bSignW-1, bSignH-1);
+        // Soft outer glow (stronger when near)
+        ctx.shadowColor=`rgba(${c[0]},${c[1]},${c[2]},${near?0.9:0.5})`;
+        ctx.shadowBlur= near ? 10 : 5;
+        ctx.strokeRect(bSignX+0.5, bSignY+0.5, bSignW-1, bSignH-1);
+        ctx.shadowBlur=0;
+        // Name text
+        ctx.fillStyle = near ? 'rgba(255,255,255,1)' : 'rgba(220,235,250,0.95)';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(m.name, sx, bSignY + bSignH/2 + 0.5);
+        ctx.textBaseline='alphabetic';
+        // Corner beacon lights
+        for(const bx of [bSignX+3, bSignX+bSignW-3]){
+          const on=((Math.sin(t*2+i*1.3)+1)*0.5)>0.5;
+          ctx.fillStyle=on?`rgba(${c[0]},${c[1]},${c[2]},0.95)`:'rgba(40,40,40,0.6)';
+          ctx.beginPath();ctx.arc(bx, bSignY + bSignH - 2, 1.4, 0, Math.PI*2);ctx.fill();
+        }
+      }
 
       // Floor light strip below door (brighter when near)
       const stripGrad=ctx.createLinearGradient(sx,dy+dh,sx,dy+dh+8);
@@ -7033,14 +7527,26 @@ function drawMothership(){
         ctx.closePath(); ctx.fill();
       }
 
-      // Prompt
+      // Prompt — shown BELOW the door (where the old label sat) so the hanging
+      // name sign above never occludes it. Rendered as a boxed plate so it reads
+      // as a distinct call-to-action rather than overlapping text.
       if(near){
         const bob=Math.sin(t*4)*2;
-        ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.6+Math.sin(t*5)*0.3})`;
+        const promptText='[E] ENTER';
         ctx.font='bold 10px monospace';
-        ctx.textAlign='center';
-        ctx.fillText('[E] ENTER',sx,dy-38+bob);
-        // Sweep glow
+        const tW=ctx.measureText(promptText).width;
+        const pW=tW+18, pH=16;
+        const pY=dy+dh+10+bob;
+        ctx.fillStyle='rgba(0,0,0,0.55)';
+        ctx.fillRect(sx-pW/2, pY, pW, pH);
+        ctx.strokeStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.7+Math.sin(t*5)*0.3})`;
+        ctx.lineWidth=1;
+        ctx.strokeRect(sx-pW/2+0.5, pY+0.5, pW-1, pH-1);
+        ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${0.85+Math.sin(t*5)*0.15})`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(promptText, sx, pY+pH/2+0.5);
+        ctx.textBaseline='alphabetic';
+        // Door "active" glow behind the panel to reinforce which door is selected.
         const glow=ctx.createRadialGradient(sx,dy+dh/2,0,sx,dy+dh/2,dw*1.4);
         glow.addColorStop(0,`rgba(${c[0]},${c[1]},${c[2]},0.15)`);glow.addColorStop(1,'transparent');
         ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,dy+dh/2,dw*1.4,0,Math.PI*2);ctx.fill();
@@ -7048,6 +7554,7 @@ function drawMothership(){
     });
     // === CREW NPCs (drawn AFTER doors so they stand in front — like the player) ===
     if(mi.hubCrew) mi.hubCrew.forEach(c=>{
+      if(c.dead) return;
       const cx=c.x-camX;
       if(cx<-60||cx>cw+60)return;
       drawHubCrewMember(c, cx, floorY, t);
@@ -7066,80 +7573,17 @@ function drawMothership(){
       const shAlpha=Math.max(0.08,0.35+h.y*0.01);
       ctx.fillStyle=`rgba(0,0,0,${shAlpha})`;ctx.beginPath();ctx.ellipse(ax,floorY+2,14,3,0,0,Math.PI*2);ctx.fill();
     }
-    // === FLOATING HOLOGRAPHIC WAYPOINT ABOVE PLAYER ===
-    // Points to the nearest non-current door
-    if(h.doorX && h.doorX.length){
-      // Find nearest door
-      let nearestI=0, nearestD=1e9;
-      h.doorX.forEach((dx,i)=>{
-        const d=Math.abs(dx-h.x);
-        if(d<nearestD){nearestD=d; nearestI=i;}
-      });
-      const isNearDoor = h.nearDoor===nearestI;
-      // Only show waypoint if NOT already right at a door
-      if(!isNearDoor && nearestD>40){
-        const m2=MS_MENUS[nearestI];
-        const c2=m2.color;
-        const direction = h.doorX[nearestI] > h.x ? 1 : -1;
-        const hx=ax, hy=ay-80 + Math.sin(t*2)*3;
-        // Ring base (projector-style)
-        ctx.strokeStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.6)`;
-        ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.ellipse(hx, hy+14, 18, 4, 0, 0, Math.PI*2); ctx.stroke();
-        // Projector beam stem
-        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.15)`;
-        ctx.fillRect(hx-8, hy+6, 16, 10);
-        // Hologram glow
-        const hg=ctx.createRadialGradient(hx, hy, 2, hx, hy, 36);
-        hg.addColorStop(0, `rgba(${c2[0]},${c2[1]},${c2[2]},0.28)`);
-        hg.addColorStop(1,'transparent');
-        ctx.fillStyle=hg;
-        ctx.beginPath(); ctx.arc(hx, hy, 36, 0, Math.PI*2); ctx.fill();
-        // Arrow
-        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},${0.85+Math.sin(t*4)*0.15})`;
-        ctx.save();
-        ctx.translate(hx, hy);
-        ctx.scale(direction, 1);
-        ctx.beginPath();
-        ctx.moveTo(-10, -6);
-        ctx.lineTo(4, -6);
-        ctx.lineTo(4, -12);
-        ctx.lineTo(18, 0);
-        ctx.lineTo(4, 12);
-        ctx.lineTo(4, 6);
-        ctx.lineTo(-10, 6);
-        ctx.closePath();
-        ctx.fill();
-        // Inner highlight
-        ctx.fillStyle=`rgba(255,255,255,${0.35+Math.sin(t*4)*0.15})`;
-        ctx.beginPath();
-        ctx.moveTo(-8, -4);
-        ctx.lineTo(2, -4);
-        ctx.lineTo(2, -9);
-        ctx.lineTo(14, 0);
-        ctx.lineTo(2, 9);
-        ctx.lineTo(2, 4);
-        ctx.lineTo(-8, 4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-        // Door name label below arrow
-        ctx.fillStyle=`rgba(${c2[0]},${c2[1]},${c2[2]},0.8)`;
-        ctx.font='bold 8px monospace';
-        ctx.textAlign='center';
-        ctx.fillText(m2.name, hx, hy+26);
-        // Scanlines over hologram
-        ctx.fillStyle='rgba(0,0,0,0.18)';
-        for(let sl=-12; sl<18; sl+=3){
-          ctx.fillRect(hx-18, hy+sl, 36, 1);
-        }
-      }
-    }
+    // (Floating waypoint hologram removed — door names are now rendered directly
+    //  above each door so the player can spot each destination from anywhere.)
     // Shadow
+    const _boardFade =
+      (mi.departing && mi.departing.boardFade) ||
+      (mi.arriving  && mi.arriving.boardFade)  || 0;
+    ctx.globalAlpha = Math.max(0, 1 - _boardFade);
     ctx.fillStyle='rgba(0,0,0,0.35)';ctx.beginPath();ctx.ellipse(ax,ay+2,14,3,0,0,Math.PI*2);ctx.fill();
-    // Player alien sprite (matches selected race/skin)
+    // Player alien sprite (matches selected race/skin) — fades out while boarding.
     drawAlienPreview(ax, ay, 1.0, getAlienSkin(), h.facing, h.walkT);
+    ctx.globalAlpha = 1;
 
     // === GRAPPLING HOOK rope + claw ===
     if(h.grapple){
@@ -7167,14 +7611,24 @@ function drawMothership(){
       ctx.restore();
     }
 
+    // Weapon-effect particles (blood/spark from kills)
+    if(mi.fxParticles && mi.fxParticles.length){
+      mi.fxParticles.forEach(p=>{
+        const a=Math.min(1, p.life/20);
+        ctx.fillStyle=`rgba(${p.color[0]},${p.color[1]},${p.color[2]},${a})`;
+        ctx.beginPath(); ctx.arc(p.x-camX, p.y, p.size, 0, Math.PI*2); ctx.fill();
+      });
+    }
+
+    ctx.restore();
     // Top HUD
     ctx.fillStyle='rgba(100,200,255,0.85)';ctx.font=`bold 16px monospace`;ctx.textAlign='center';
     ctx.fillText('MOTHERSHIP',cw/2,28);
     ctx.fillStyle='rgba(120,180,220,0.5)';ctx.font='10px monospace';
     ctx.fillText(`Score: ${score}  |  Specimens: ${mothership.specimens.length}  |  Milk: ${milkScore}`,cw/2,46);
-    // Bottom hint
-    ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='10px monospace';ctx.textAlign='center';
-    ctx.fillText('A/D: Walk  |  SHIFT: Run  |  SPACE: Jump  |  C: Grapple  |  E: Enter door  |  ESC: Exit',cw/2,ch-15);
+    // Bottom HUD — mirrors the on-foot planet HUD (action chips + weapon slot row)
+    // so the mothership feels like the same on-foot mode as other planets.
+    drawMothershipOnFootHUD(mi, h);
 
   // ================================================================
   // BRIDGE - NPC portraits with speech
@@ -7351,7 +7805,7 @@ function drawMothership(){
   // ================================================================
   }else if(mi.screen==='zoo'){
     ctx.fillStyle='rgba(50,255,80,0.3)';ctx.font='10px monospace';ctx.textAlign='left';ctx.fillText('\u25C0 ESC Back',15,25);
-    ctx.fillStyle='rgba(50,255,80,0.6)';ctx.font='18px monospace';ctx.textAlign='center';ctx.fillText('XENOBIOLOGY ZOO',cw/2,28);
+    ctx.fillStyle='rgba(50,255,80,0.6)';ctx.font='18px monospace';ctx.textAlign='center';ctx.fillText('ZOO',cw/2,28);
     ctx.fillStyle='rgba(50,255,80,0.3)';ctx.font='10px monospace';
     ctx.fillText(`${mi.zooCreatures.length} specimens | ${mi.milkCows.length} livestock | Milk: ${milkScore}`,cw/2,45);
     if(mi.zooAction==='feed'){ctx.fillStyle='rgba(255,200,50,0.6)';ctx.font='bold 10px monospace';ctx.fillText('FEED MODE [F to toggle]',cw/2,58);}
@@ -7507,7 +7961,8 @@ function drawMothership(){
         c._zooWalkX=cx2; // store for interaction
         const sx=cx2-camX;
         if(sx<-40||sx>cw+40)return;
-        const py=floorY;
+        const mcJump=(c.mindControlled&&c.mcJumpY)?c.mcJumpY:0;
+        const py=floorY+mcJump;
         const sc=(c.scale||c.size||1);
         const lo=Math.sin((c.walkTimer||0)*3)*2;
         const bounce=c.feedAnim>0?Math.sin(c.feedAnim*0.5)*3:0;
@@ -7612,7 +8067,10 @@ function drawMothership(){
 
       // HUD
       ctx.fillStyle='rgba(200,180,120,0.7)';ctx.font='9px monospace';ctx.textAlign='center';
-      ctx.fillText('A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  T: Mind Control  |  E: Interact  |  X: List view  |  ESC: Back',cw/2,ch-5);
+      const hudStr = (mi.zooMC && mi.zooMC.target)
+        ? 'A/D: Walk puppet  |  SPACE: Jump  |  Q: Attack  |  F: Transfer  |  T: Release  |  ESC: Back'
+        : 'A/D: Walk  |  SPACE: Jump  |  C: Grapple  |  T: Mind Control  |  E: Interact  |  X: List view  |  ESC: Back';
+      ctx.fillText(hudStr,cw/2,ch-5);
     } else {
 
     // Group creatures into cells
@@ -7794,60 +8252,6 @@ function drawMothership(){
     } // end of walk mode else
 
   // ================================================================
-  // UPGRADES
-  // ================================================================
-  }else if(mi.screen==='upgrades'){
-    ctx.fillStyle='rgba(255,200,50,0.3)';ctx.font='10px monospace';ctx.textAlign='left';ctx.fillText('\u25C0 ESC Back',15,25);
-    ctx.fillStyle='rgba(255,200,50,0.6)';ctx.font='18px monospace';ctx.textAlign='center';ctx.fillText('SHIP UPGRADES',cw/2,28);
-    ctx.fillStyle='rgba(255,200,50,0.3)';ctx.font='10px monospace';ctx.fillText(`Points: ${score}`,cw/2,45);
-    const upgList=[
-      {key:'beamWidth',name:'Tractor Beam Width',desc:'Wider beam catches more specimens',cost:10,icon:'B'},
-      {key:'speed',name:'Engine Speed',desc:'Fly faster between planets',cost:10,icon:'S'},
-      {key:'flame',name:'Flamethrower Power',desc:'More destruction, more terror',cost:10,icon:'F'}
-    ];
-    const allItems2=[...upgList.map(u=>({type:'upgrade',data:u})),...SHIP_PAINTS.map(p=>({type:'paint',data:p}))];
-    const cardW=Math.min(350,cw*0.5),cardH=55;
-    const visibleH=ch-80,scrollY=Math.max(0,mi.selectedItem*70-visibleH/2);
-    // Section: Upgrades
-    ctx.fillStyle='rgba(255,200,50,0.4)';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText('UPGRADES',cw/2-cardW/2,60);
-    allItems2.forEach((item,i)=>{
-      const sel=mi.selectedItem%(allItems2.length)===i;
-      const cy2=65+i*(cardH+8)-scrollY;
-      if(cy2<50||cy2>ch-30)return;
-      if(i===upgList.length){ctx.fillStyle='rgba(200,150,255,0.4)';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText('PAINT JOBS',cw/2-cardW/2,cy2-3);}
-      const cx=cw/2-cardW/2;
-      if(item.type==='upgrade'){
-        const u=item.data,lv=upgrades[u.key],canBuy=score>=u.cost;
-        ctx.fillStyle=sel?'rgba(30,25,5,0.6)':'rgba(15,12,2,0.4)';roundRect(ctx,cx,cy2,cardW,cardH,6);ctx.fill();
-        if(sel){ctx.strokeStyle=`rgba(255,200,50,${0.3+Math.sin(t*3)*0.15})`;ctx.lineWidth=1;roundRect(ctx,cx,cy2,cardW,cardH,6);ctx.stroke();}
-        ctx.fillStyle='rgba(255,200,50,0.15)';ctx.beginPath();ctx.arc(cx+25,cy2+cardH/2,15,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='rgba(255,200,50,0.7)';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText(u.icon,cx+25,cy2+cardH/2+5);
-        ctx.fillStyle='rgba(255,200,50,0.12)';ctx.fillRect(cx+50,cy2+35,(cardW-65),6);
-        ctx.fillStyle='rgba(255,200,50,0.45)';ctx.fillRect(cx+50,cy2+35,(cardW-65)*Math.min(1,lv/5),6);
-        ctx.fillStyle=sel?'rgba(255,220,100,0.9)':'rgba(255,200,50,0.5)';ctx.font='11px monospace';ctx.textAlign='left';
-        ctx.fillText(`${u.name} (Lv ${lv})`,cx+50,cy2+20);
-        if(sel){ctx.fillStyle=canBuy?`rgba(255,200,50,${0.5+Math.sin(t*4)*0.3})`:'rgba(100,80,30,0.3)';ctx.font='10px monospace';ctx.textAlign='right';
-          ctx.fillText(canBuy?`[SPACE] (${u.cost}pts)`:`Need ${u.cost}`,cx+cardW-8,cy2+20);}
-      }else{
-        const p=item.data,owned=shipPaint.name===p.id,canBuy=p.cost===0||score>=p.cost;
-        ctx.fillStyle=sel?'rgba(20,15,30,0.6)':'rgba(10,8,15,0.4)';roundRect(ctx,cx,cy2,cardW,cardH,6);ctx.fill();
-        if(sel){ctx.strokeStyle=`rgba(200,150,255,${0.3+Math.sin(t*3)*0.15})`;ctx.lineWidth=1;roundRect(ctx,cx,cy2,cardW,cardH,6);ctx.stroke();}
-        // Mini ship preview
-        ctx.fillStyle=p.accent;ctx.beginPath();ctx.ellipse(cx+25,cy2+cardH/2,18,5,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=p.color;ctx.beginPath();ctx.ellipse(cx+25,cy2+cardH/2-4,8,6,0,Math.PI,0);ctx.fill();
-        ctx.fillStyle=p.trail;ctx.beginPath();ctx.arc(cx+15,cy2+cardH/2+1,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(cx+35,cy2+cardH/2+1,1.5,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=sel?'rgba(200,180,255,0.9)':'rgba(180,150,220,0.5)';ctx.font='11px monospace';ctx.textAlign='left';
-        ctx.fillText(p.name,cx+50,cy2+20);
-        ctx.fillStyle='rgba(150,130,200,0.35)';ctx.font='9px monospace';
-        ctx.fillText(owned?'EQUIPPED':p.cost===0?'FREE':`${p.cost} pts`,cx+50,cy2+38);
-        if(sel&&!owned){ctx.fillStyle=canBuy?`rgba(200,150,255,${0.5+Math.sin(t*4)*0.3})`:'rgba(80,60,100,0.3)';ctx.font='10px monospace';ctx.textAlign='right';
-          ctx.fillText(canBuy?'[SPACE] EQUIP':'Not enough',cx+cardW-8,cy2+20);}
-        if(owned){ctx.fillStyle='rgba(0,255,100,0.5)';ctx.font='8px monospace';ctx.textAlign='right';ctx.fillText('ACTIVE',cx+cardW-8,cy2+20);}
-      }
-    });
-    ctx.fillStyle='rgba(255,255,255,0.2)';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText('W/S: Select  |  SPACE: Buy/Equip  |  ESC: Back',cw/2,ch-10);
-
-  // ================================================================
   // COMMS - Planet leader transmissions
   // ================================================================
   }else if(mi.screen==='comms'){
@@ -7857,97 +8261,233 @@ function drawMothership(){
     const available=planetLeaders.filter(l=>unlockedPlanets.includes(l.planetId));
     if(available.length===0){
       ctx.fillStyle='rgba(255,100,100,0.3)';ctx.font='14px monospace';ctx.textAlign='center';ctx.fillText('No transmissions available.',cw/2,ch/2);
-    }else{
-      const selLeader=available[mi.selectedItem%available.length];
-      const talking=mi.commsTalkAnim>0?mi.commsTalkAnim:0;
-
-      // Portrait in center (same size as bridge NPCs)
-      const portSize=Math.min(cw*0.28,ch*0.4);
-      const portCX=cw/2,portCY=ch*0.32;
-      // Portrait frame with static/interference effect
-      ctx.fillStyle='rgba(20,5,5,0.5)';
-      roundRect(ctx,portCX-portSize*0.5,portCY-portSize*0.55,portSize,portSize*1.1,12);ctx.fill();
-      ctx.strokeStyle=`rgba(255,80,80,${0.15+Math.sin(t*2)*0.05})`;ctx.lineWidth=1;
-      roundRect(ctx,portCX-portSize*0.5,portCY-portSize*0.55,portSize,portSize*1.1,12);ctx.stroke();
-      // Static scan lines
-      for(let sy=portCY-portSize*0.5;sy<portCY+portSize*0.5;sy+=4){
-        ctx.strokeStyle=`rgba(255,100,100,${0.02+Math.sin(t*7+sy*0.3)*0.015})`;ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(portCX-portSize*0.45,sy);ctx.lineTo(portCX+portSize*0.45,sy);ctx.stroke();
+    }else if(!mi.commsReading){
+      // === WALKABLE COMMS ROOM — mission-control style ===
+      const cwk=mi.commsWalk;
+      const roomW=cwk.width;
+      const floorY=ch-60, ceilY=70;
+      // Camera pan so alien stays centered
+      const visW=cw;
+      const camX=Math.max(0,Math.min(Math.max(0,roomW-visW), cwk.x-visW/2));
+      const _csZoom=2.0;
+      const _csAX=cwk.x-camX;
+      let _csTX = cw/2 - _csZoom*_csAX;
+      const _csTXMax = _csZoom*camX;
+      const _csTXMin = cw - _csZoom*(roomW-camX);
+      _csTX = Math.max(_csTXMin, Math.min(_csTX, _csTXMax));
+      ctx.save();
+      ctx.translate(_csTX, floorY*(1-_csZoom));
+      ctx.scale(_csZoom,_csZoom);
+      // Back wall — dim red/steel tone
+      const wallGrad=ctx.createLinearGradient(0,ceilY,0,floorY);
+      wallGrad.addColorStop(0,'#1a0a0c');wallGrad.addColorStop(0.6,'#140708');wallGrad.addColorStop(1,'#0a0406');
+      ctx.fillStyle=wallGrad;ctx.fillRect(0,ceilY,cw,floorY-ceilY);
+      // Floor
+      const floorGrad=ctx.createLinearGradient(0,floorY,0,ch);
+      floorGrad.addColorStop(0,'#1a1416');floorGrad.addColorStop(1,'#060304');
+      ctx.fillStyle=floorGrad;ctx.fillRect(0,floorY,cw,ch-floorY);
+      // Floor tiles
+      ctx.strokeStyle='rgba(0,0,0,0.5)';ctx.lineWidth=1;
+      for(let fx=Math.floor(camX/60)*60;fx<camX+cw+60;fx+=60){
+        const sxL=fx-camX;
+        ctx.beginPath();ctx.moveTo(sxL,floorY);ctx.lineTo(sxL,ch);ctx.stroke();
       }
-      // Draw leader portrait
-      drawLeaderPortrait(selLeader,portCX,portCY-portSize*0.05,portSize*0.65,t,talking);
-
-      // Speech bubble below portrait
-      if(mi.commsReading){
-        const txt=mi.commsReading.msg.text;ctx.font='11px monospace';
-        const maxBW=Math.min(400,cw*0.5);
-        const words=txt.split(' ');let lines2=[],ln='';
-        words.forEach(w=>{const test=ln?ln+' '+w:w;if(ctx.measureText(test).width>maxBW-24){lines2.push(ln);ln=w;}else ln=test;});
-        if(ln)lines2.push(ln);
-        const bh=lines2.length*16+14,bw=maxBW,bx=cw/2-bw/2,by=portCY+portSize*0.52;
-        const ba=Math.min(1,(180-mi.commsTalkAnim+30)/30);ctx.globalAlpha=Math.min(1,ba);
-        ctx.fillStyle='rgba(20,5,0,0.92)';roundRect(ctx,bx,by,bw,bh,8);ctx.fill();
-        ctx.strokeStyle='rgba(255,100,80,0.35)';ctx.lineWidth=1;roundRect(ctx,bx,by,bw,bh,8);ctx.stroke();
-        ctx.fillStyle='rgba(20,5,0,0.92)';ctx.beginPath();ctx.moveTo(cw/2-6,by);ctx.lineTo(cw/2,by-8);ctx.lineTo(cw/2+6,by);ctx.closePath();ctx.fill();
-        ctx.fillStyle='rgba(255,200,180,0.85)';ctx.font='11px monospace';ctx.textAlign='center';
-        lines2.forEach((l,li)=>ctx.fillText(l,cw/2,by+14+li*16));
-        // Mission accept prompt
-        if(mi.commsReading&&mi.commsReading.pendingMission){
-          const m=mi.commsReading.pendingMission;
-          const ay=by+bh+8;
-          ctx.fillStyle='rgba(0,20,0,0.9)';roundRect(ctx,cw/2-160,ay,320,36,6);ctx.fill();
-          ctx.strokeStyle=`rgba(0,255,100,${0.4+Math.sin(t*4)*0.2})`;ctx.lineWidth=1;roundRect(ctx,cw/2-160,ay,320,36,6);ctx.stroke();
-          ctx.fillStyle='#0f0';ctx.font='bold 11px monospace';ctx.textAlign='center';
-          ctx.fillText(`[SPACE] Accept: ${m.desc} (+${m.reward}pts)`,cw/2,ay+22);
-        }
-        ctx.globalAlpha=1;
+      // Ceiling pipes / light strips
+      for(let lx=0;lx<roomW;lx+=200){
+        const sxL=lx-camX;
+        ctx.fillStyle=`rgba(255,100,100,${0.25+Math.sin(t*2+lx)*0.1})`;
+        ctx.fillRect(sxL-30,ceilY+4,60,2);
       }
-
-      // Leader selector cards at bottom
-      const selY=ch-110;
-      const cardW=Math.min(120,cw/5),cardH=70,cardGap=12;
-      const totalW=available.length*(cardW+cardGap)-cardGap;
-      const startX=cw/2-totalW/2;
-
-      ctx.fillStyle=`rgba(255,100,100,${0.3+Math.sin(t*3)*0.15})`;ctx.font='18px monospace';ctx.textAlign='center';
-      ctx.fillText('\u25C0',startX-20,selY+cardH/2+6);
-      ctx.fillText('\u25B6',startX+totalW+20,selY+cardH/2+6);
-
-      available.forEach((leader,i)=>{
-        const sel2=mi.selectedItem%available.length===i;
-        const cx=startX+i*(cardW+cardGap);
-        ctx.fillStyle=sel2?'rgba(30,10,10,0.7)':'rgba(12,5,5,0.5)';
-        roundRect(ctx,cx,selY,cardW,cardH,8);ctx.fill();
-        if(sel2){
-          ctx.strokeStyle=`rgba(255,120,100,${0.5+Math.sin(t*3)*0.2})`;ctx.lineWidth=2;
-          roundRect(ctx,cx,selY,cardW,cardH,8);ctx.stroke();
-        }else{
-          ctx.strokeStyle='rgba(255,80,60,0.1)';ctx.lineWidth=1;
-          roundRect(ctx,cx,selY,cardW,cardH,8);ctx.stroke();
+      // --- BIG CENTRAL MISSION DISPLAY — mounted high on the wall ---
+      {
+        const bigW=320, bigH=90;
+        const bigX=(roomW/2)-bigW/2 - camX, bigY=ceilY+16;
+        if(bigX+bigW>-20 && bigX<cw+20){
+          ctx.fillStyle='#0a0404';ctx.fillRect(bigX-6,bigY-6,bigW+12,bigH+12);
+          ctx.strokeStyle='rgba(255,120,100,0.35)';ctx.lineWidth=1;ctx.strokeRect(bigX-6,bigY-6,bigW+12,bigH+12);
+          ctx.fillStyle='rgba(10,2,2,0.95)';ctx.fillRect(bigX,bigY,bigW,bigH);
+          // Faux telemetry: rolling bars + stars
+          for(let bi=0;bi<6;bi++){
+            const by=bigY+12+bi*12;
+            const bw=40+(((bi*17+Math.floor(t*8))%60));
+            ctx.fillStyle=`rgba(255,${120+bi*15},${80+bi*10},0.6)`;
+            ctx.fillRect(bigX+8,by,bw,4);
+          }
+          // Planet icon rolls across the central "launch" track
+          const trackY=bigY+bigH-14;
+          ctx.fillStyle='rgba(255,180,160,0.3)';ctx.fillRect(bigX+8,trackY,bigW-16,1);
+          const px=(Math.sin(t*0.5)*0.5+0.5)*(bigW-40)+bigX+20;
+          ctx.fillStyle='#8cf';ctx.beginPath();ctx.arc(px,trackY-4,4,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='rgba(255,220,200,0.85)';ctx.font='bold 10px monospace';ctx.textAlign='center';
+          ctx.fillText('MISSION CONTROL',bigX+bigW/2,bigY-2);
+          // Scan lines
+          for(let ssy=bigY;ssy<bigY+bigH;ssy+=3){
+            ctx.strokeStyle=`rgba(255,100,100,${0.02+Math.sin(t*6+ssy*0.3)*0.015})`;ctx.lineWidth=1;
+            ctx.beginPath();ctx.moveTo(bigX,ssy);ctx.lineTo(bigX+bigW,ssy);ctx.stroke();
+          }
         }
-        // Mini head
-        const mx=cx+cardW/2,my=selY+22;
-        ctx.fillStyle=leader.color;ctx.beginPath();ctx.ellipse(mx,my,10,12,0,0,Math.PI*2);ctx.fill();
-        // Eyes
-        ctx.fillStyle='#111';
-        ctx.beginPath();ctx.ellipse(mx-3,my-1,2,1.5,0,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.ellipse(mx+3,my-1,2,1.5,0,0,Math.PI*2);ctx.fill();
-        // Name
-        ctx.fillStyle=sel2?'rgba(255,200,180,0.9)':'rgba(200,120,100,0.35)';
-        ctx.font=`${sel2?'bold ':''}8px monospace`;ctx.textAlign='center';
-        ctx.fillText(leader.name.split(' ').pop(),mx,selY+cardH-18);
-        // Planet
-        ctx.fillStyle=sel2?'rgba(255,150,130,0.5)':'rgba(150,80,60,0.2)';ctx.font='7px monospace';
-        ctx.fillText(leader.planetId.toUpperCase(),mx,selY+cardH-8);
-        // Blinking transmission indicator
-        if(sel2){const blink=Math.sin(t*5)>0?0.6:0.2;ctx.fillStyle=`rgba(255,50,50,${blink})`;ctx.beginPath();ctx.arc(cx+cardW-8,selY+8,3,0,Math.PI*2);ctx.fill();}
+      }
+      // Desk geometry for layout (drawn AFTER operators so it hides their legs)
+      const deskY=floorY-28, deskH=28;
+      // --- SCREENS — mounted like TVs on the wall, a bit above the console row ---
+      const scrW=120, scrH=80;
+      cwk.screenX.forEach((sxAbs,i)=>{
+        const leader=available[i];
+        const sx=sxAbs-camX;
+        if(sx<-120||sx>cw+120)return;
+        const scrX=sx-scrW/2, scrY=deskY-scrH-46;
+        const near=(cwk.nearScreen===i);
+        // Wall-mount bracket
+        ctx.fillStyle='#1a1214';ctx.fillRect(scrX-6,scrY-6,scrW+12,scrH+12);
+        ctx.strokeStyle=near?`rgba(255,120,100,${0.6+Math.sin(t*4)*0.25})`:'rgba(180,80,60,0.25)';
+        ctx.lineWidth=near?2:1;
+        ctx.strokeRect(scrX-6,scrY-6,scrW+12,scrH+12);
+        // Screen background
+        ctx.fillStyle='rgba(18,4,4,0.95)';ctx.fillRect(scrX,scrY,scrW,scrH);
+        // Static scan lines
+        for(let ssy=scrY;ssy<scrY+scrH;ssy+=3){
+          ctx.strokeStyle=`rgba(255,100,100,${0.02+Math.sin(t*6+ssy*0.3)*0.015})`;ctx.lineWidth=1;
+          ctx.beginPath();ctx.moveTo(scrX,ssy);ctx.lineTo(scrX+scrW,ssy);ctx.stroke();
+        }
+        // Draw a small leader portrait on the screen
+        drawLeaderPortrait(leader, scrX+scrW/2, scrY+scrH*0.55, scrH*0.75, t, near?mi.commsTalkAnim:0);
+        // Screen glass reflection
+        ctx.fillStyle='rgba(255,180,180,0.05)';ctx.fillRect(scrX,scrY,scrW,scrH*0.25);
+        // Planet name above the screen
+        const pDef=planets.find(p=>p.id===leader.planetId);
+        const planetName=((pDef&&pDef.name)||leader.planetId).toUpperCase();
+        ctx.fillStyle=near?`rgba(255,200,180,${0.95})`:'rgba(200,140,120,0.55)';
+        ctx.font=`${near?'bold ':''}12px monospace`;ctx.textAlign='center';
+        ctx.fillText(planetName,sx,scrY-12);
+        // Leader name tag on screen
+        ctx.fillStyle='rgba(255,200,180,0.8)';ctx.font='8px monospace';
+        ctx.fillText(leader.name,sx,scrY+scrH-6);
+        // Active transmission indicator
+        const blink=Math.sin(t*5+i)>0?0.6:0.2;
+        ctx.fillStyle=`rgba(255,50,50,${blink})`;
+        ctx.beginPath();ctx.arc(scrX+scrW-8,scrY+8,3,0,Math.PI*2);ctx.fill();
+        // Interact prompt when near
+        if(near){
+          ctx.fillStyle=`rgba(255,220,180,${0.6+Math.sin(t*4)*0.3})`;ctx.font='bold 10px monospace';
+          ctx.fillText('[E] Open channel',sx,scrY+scrH+22);
+        }
       });
+      // --- NPC OPERATORS — same race as player, different skins ---
+      // Drawn BEFORE the desk so the desk visually clips them at the waist (seated effect).
+      (cwk.operators||[]).forEach(op=>{
+        if(op.dead)return;
+        const ox=op.x-camX;
+        if(ox<-40||ox>cw+40)return;
+        if(!op.skin)return;
+        const bob=Math.sin(t*2+op.bobPhase)*0.6;
+        // Feet planted just below the desk surface so the desk hides the legs.
+        const feetY=deskY+16+bob;
+        // Subtle typing sway by feeding a slow walkPhase
+        const sway=Math.sin(t*9+op.typePhase)*0.3;
+        drawAlienPreview(ox, feetY, op.scale, op.skin, op.facing, sway);
+      });
+      // --- Desk runner along the back (covers operator legs) ---
+      const deskGrad=ctx.createLinearGradient(0,deskY,0,deskY+deskH);
+      deskGrad.addColorStop(0,'#2a1a1c');deskGrad.addColorStop(1,'#0c0608');
+      ctx.fillStyle=deskGrad;ctx.fillRect(0,deskY,cw,deskH);
+      ctx.strokeStyle='rgba(255,100,100,0.15)';ctx.beginPath();ctx.moveTo(0,deskY);ctx.lineTo(cw,deskY);ctx.stroke();
+      // --- Console terminals on the desk in front of each operator ---
+      (cwk.operators||[]).forEach(op=>{
+        if(op.dead)return;
+        const ox=op.x-camX;
+        if(ox<-40||ox>cw+40)return;
+        const cnX=ox-14, cnY=deskY+4, cnW=28, cnH=16;
+        ctx.fillStyle='#0a0406';ctx.fillRect(cnX,cnY,cnW,cnH);
+        const litR=120+Math.floor(Math.sin(t*3+op.typePhase)*40);
+        ctx.fillStyle=`rgba(${litR},80,80,0.55)`;ctx.fillRect(cnX+2,cnY+2,cnW-4,cnH-8);
+        for(let r=0;r<2;r++){
+          const rw=6+((Math.floor(t*6+op.typePhase*3+r*7))%14);
+          ctx.fillStyle='rgba(255,220,200,0.55)';ctx.fillRect(cnX+3,cnY+3+r*3,rw,1);
+        }
+        ctx.fillStyle='#1a0e10';ctx.fillRect(cnX+2,cnY+cnH-4,cnW-4,3);
+        if(Math.sin(t*12+op.typePhase)>0.92){
+          ctx.fillStyle='rgba(255,220,160,0.7)';
+          ctx.fillRect(cnX+4+Math.random()*(cnW-8),cnY+cnH-6, 1, 1);
+        }
+      });
+      // Alien walking in the room
+      const ax=cwk.x-camX, ay=floorY;
+      ctx.fillStyle='rgba(0,0,0,0.45)';
+      ctx.beginPath();ctx.ellipse(ax,floorY+2,10,2.5,0,0,Math.PI*2);ctx.fill();
+      drawAlienPreview(ax, ay, 1.0, getAlienSkin(), cwk.facing, cwk.walkT);
+      // Weapon-effect particles (blood/spark from kills)
+      if(mi.fxParticles && mi.fxParticles.length){
+        mi.fxParticles.forEach(p=>{
+          const a=Math.min(1, p.life/20);
+          ctx.fillStyle=`rgba(${p.color[0]},${p.color[1]},${p.color[2]},${a})`;
+          ctx.beginPath(); ctx.arc(p.x-camX, p.y, p.size, 0, Math.PI*2); ctx.fill();
+        });
+      }
+      ctx.restore();
+      // Hint
+      ctx.fillStyle='rgba(255,255,255,0.25)';ctx.font='9px monospace';ctx.textAlign='center';
+      ctx.fillText('A/D: Walk  |  E: Open channel  |  ESC: Back',cw/2,ch-10);
+      if(currentMission){ctx.fillStyle='rgba(255,200,0,0.4)';ctx.font='8px monospace';ctx.fillText('Active mission: '+currentMission.desc,cw/2,ch-24);}
+    }else{
+      // === BIG SCREEN / TRANSMISSION VIEW ===
+      const selLeader=mi.commsReading.leader;
+      const talking=mi.commsTalkAnim>0?mi.commsTalkAnim:0;
+      // Dim room behind
+      ctx.fillStyle='rgba(8,2,4,0.85)';ctx.fillRect(0,40,cw,ch-40);
+      // Big screen frame
+      const bsW=Math.min(cw*0.7,700), bsH=Math.min(ch*0.55,360);
+      const bsX=cw/2-bsW/2, bsY=ch*0.12;
+      ctx.fillStyle='#1a1214';ctx.fillRect(bsX-10,bsY-10,bsW+20,bsH+20);
+      ctx.strokeStyle=`rgba(255,120,100,${0.5+Math.sin(t*3)*0.2})`;ctx.lineWidth=2;
+      ctx.strokeRect(bsX-10,bsY-10,bsW+20,bsH+20);
+      ctx.fillStyle='rgba(18,4,4,0.98)';ctx.fillRect(bsX,bsY,bsW,bsH);
+      // Static scan lines
+      for(let ssy=bsY;ssy<bsY+bsH;ssy+=4){
+        ctx.strokeStyle=`rgba(255,100,100,${0.03+Math.sin(t*6+ssy*0.2)*0.02})`;ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(bsX,ssy);ctx.lineTo(bsX+bsW,ssy);ctx.stroke();
+      }
+      // Planet name above the big screen
+      const pDefBig=planets.find(p=>p.id===selLeader.planetId);
+      const planetName=((pDefBig&&pDefBig.name)||selLeader.planetId).toUpperCase();
+      ctx.fillStyle='rgba(255,220,180,0.95)';ctx.font='bold 16px monospace';ctx.textAlign='center';
+      ctx.fillText(planetName,cw/2,bsY-18);
+      // Leader portrait
+      drawLeaderPortrait(selLeader, cw/2, bsY+bsH*0.55, bsH*0.8, t, talking);
+      // Recording dot
+      const blink=Math.sin(t*5)>0?0.8:0.25;
+      ctx.fillStyle=`rgba(255,50,50,${blink})`;ctx.beginPath();ctx.arc(bsX+bsW-18,bsY+18,5,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,150,150,0.7)';ctx.font='8px monospace';ctx.textAlign='left';
+      ctx.fillText('LIVE',bsX+bsW-10,bsY+21);
+      // Name plate
+      ctx.fillStyle='rgba(20,5,5,0.85)';ctx.fillRect(bsX+12,bsY+bsH-28,140,22);
+      ctx.fillStyle='rgba(255,200,180,0.9)';ctx.font='bold 11px monospace';ctx.textAlign='left';
+      ctx.fillText(selLeader.name,bsX+20,bsY+bsH-13);
 
-      ctx.fillStyle='rgba(255,255,255,0.2)';ctx.font='9px monospace';ctx.textAlign='center';
-      const commsHint=mi.commsReading?(mi.commsReading.pendingMission?'SPACE: Accept mission   |   ESC: Decline':'SPACE: Close   |   A/D: Switch'):'\u25C0 A/D \u25B6 Select contact   |   SPACE: Open channel';
-      ctx.fillText(commsHint,cw/2,ch-22);
-      // Show active mission warning if one exists
-      if(currentMission){ctx.fillStyle='rgba(255,200,0,0.4)';ctx.font='8px monospace';ctx.fillText('Active mission: '+currentMission.desc,cw/2,ch-10);}
+      // Speech bubble below big screen
+      const txt=mi.commsReading.msg.text;ctx.font='11px monospace';
+      const maxBW=Math.min(500,cw*0.6);
+      const words=txt.split(' ');let lines2=[],ln='';
+      words.forEach(w=>{const test=ln?ln+' '+w:w;if(ctx.measureText(test).width>maxBW-24){lines2.push(ln);ln=w;}else ln=test;});
+      if(ln)lines2.push(ln);
+      const bh=lines2.length*16+14,bw=maxBW,bx=cw/2-bw/2,by=bsY+bsH+24;
+      const ba=Math.min(1,(180-mi.commsTalkAnim+30)/30);ctx.globalAlpha=Math.min(1,ba);
+      ctx.fillStyle='rgba(20,5,0,0.92)';roundRect(ctx,bx,by,bw,bh,8);ctx.fill();
+      ctx.strokeStyle='rgba(255,100,80,0.35)';ctx.lineWidth=1;roundRect(ctx,bx,by,bw,bh,8);ctx.stroke();
+      ctx.fillStyle='rgba(255,200,180,0.88)';ctx.font='11px monospace';ctx.textAlign='center';
+      lines2.forEach((l,li)=>ctx.fillText(l,cw/2,by+14+li*16));
+      if(mi.commsReading.pendingMission){
+        const m=mi.commsReading.pendingMission;
+        const ay2=by+bh+8;
+        ctx.fillStyle='rgba(0,20,0,0.9)';roundRect(ctx,cw/2-180,ay2,360,36,6);ctx.fill();
+        ctx.strokeStyle=`rgba(0,255,100,${0.4+Math.sin(t*4)*0.2})`;ctx.lineWidth=1;roundRect(ctx,cw/2-180,ay2,360,36,6);ctx.stroke();
+        ctx.fillStyle='#0f0';ctx.font='bold 11px monospace';ctx.textAlign='center';
+        ctx.fillText(`[E] Accept: ${m.desc} (+${m.reward}pts)`,cw/2,ay2+22);
+      }
+      ctx.globalAlpha=1;
+
+      ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='9px monospace';ctx.textAlign='center';
+      const commsHint=mi.commsReading.pendingMission?'E: Accept mission   |   ESC: Decline':'E: Reply / close   |   ESC: Back';
+      ctx.fillText(commsHint,cw/2,ch-12);
     }
 
   // ================================================================
@@ -7997,8 +8537,6 @@ function drawMothership(){
     });
 
     ctx.fillStyle='rgba(255,255,255,0.2)';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText('ESC: Back',cw/2,ch-10);
-  }else if(mi.screen==='starmap'){
-    drawStarmap();
   }else if(mi.screen==='arena'){
     drawArena();
   }else if(mi.screen==='lab'){
@@ -8019,6 +8557,7 @@ function drawMothership(){
   // === VIGNETTE ===
   const vig=ctx.createRadialGradient(cw/2,ch/2,ch*0.3,cw/2,ch/2,ch*0.85);
   vig.addColorStop(0,'transparent');vig.addColorStop(1,'rgba(0,0,0,0.25)');ctx.fillStyle=vig;ctx.fillRect(0,0,cw,ch);
+
 }
 
 
@@ -8104,6 +8643,7 @@ document.addEventListener('keydown', e => {
   if (!keys[k]&&k==='e'&&playerMode==='onfoot'&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode){ interactScavenge(); }
   if (!keys[k]&&k==='n'&&gameMode==='planet'&&playerMode==='ship') nukeplanet();
   if (!keys[k]&&k==='v'&&gameMode==='planet'&&playerMode==='ship'&&shipCloak.energy>10){shipCloak.active=!shipCloak.active;showMessage(shipCloak.active?'Cloak engaged':'Cloak disengaged');}
+  if (!keys[k]&&k==='v'&&gameMode==='planet'&&playerMode==='onfoot'&&!alien.drivingVehicle&&!mothershipMode&&!pyramidInteriorMode&&alienCloak.energy>10){alienCloak.active=!alienCloak.active;showMessage(alienCloak.active?'Cloak engaged':'Cloak disengaged');}
   if (!keys[k]&&k==='q'&&missileCooldown<=0&&playerMode==='ship') fireMissile();
   if (k==='g'&&playerMode==='ship')ship.minigunFiring=true;
   if (!keys[k]&&k==='c'&&playerMode==='ship'&&gameMode==='planet'&&!mothershipMode) toggleLasso();
@@ -8129,9 +8669,10 @@ document.addEventListener('keydown', e => {
   if(!keys[k]&&mindControl&&playerMode==='onfoot'&&gameMode==='planet'){
     if(k==='q'){mindControlAttack(); keys[k]=true; e.preventDefault(); return;}
     if(k==='f'){mindControlTransfer(); keys[k]=true; e.preventDefault(); return;}
+    if(k==='tab'||e.key==='Tab'){alienSwitchWeapon(1); keys[k]=true; e.preventDefault(); return;}
   }
   if(!keys[k]&&k==='m'){window._muted=!window._muted;
-    [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,lassoSfx,nukeSfx,underwaterSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
+    [spaceAmbience,flameSfx,beamSfx,alienVoiceSfx,missileSfx,lassoSfx,nukeSfx,underwaterSfx,chainsawCutSfx,mothershipMusic,prehistoricMusic,vehicleSplatSfx,...Object.values(planetMusic)].forEach(a=>{a.muted=!!window._muted;});
     showMessage(window._muted?'Audio muted':'Audio unmuted');return;}
   keys[k]=true;
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -8493,30 +9034,28 @@ function toggleMindControl(){
   if(!best){showMessage('No target in range'); return;}
   best.mindControlled=true; best.panicLevel=0; best.crying=false; best.stunTimer=0;
   mindControl = {target:best, duration:600, atkCD:0};
-  showMessage('Mind link established — A/D walk, Q attack, F transfer, T abort');
+  showMessage('Mind link established — A/D walk, Q fire weapon, Tab switch, F transfer, T abort');
 }
 
-// Puppet swings at the nearest other human.
+// Puppet fires the alien's currently-equipped weapon from the puppet's body,
+// so mind-controlled humans share the same weapon loadout the alien has on-foot.
 function mindControlAttack(){
   if(!mindControl||!mindControl.target) return;
-  if((mindControl.atkCD||0)>0) return;
   const p=mindControl.target;
-  // Find nearest other human within swing range
-  let victim=null, bestD=36;
-  for(const h of humans){
-    if(h===p||h.collected||h.hidden||h.ragdoll||h.isDino) continue;
-    const d=dist(p.bodyX,p.bodyY,h.bodyX,h.bodyY);
-    if(d<bestD){bestD=d; victim=h;}
+  // Temporarily swap the alien's position/facing so alienShoot() spawns the weapon
+  // at the puppet — this reuses all the existing weapon logic and cooldowns.
+  const pDir = (p.walkDir||0) >= 0 ? 1 : -1;
+  const facingDir = pDir !== 0 ? pDir : (alien.facing||1);
+  const sx=alien.x, sy=alien.y, sf=alien.facing;
+  alien.x = p.bodyX;
+  alien.y = p.bodyY + 14; // alienShoot spawns shots at alien.y-14, so this matches the puppet's chest
+  alien.facing = facingDir;
+  try { alienShoot(); } finally {
+    alien.x=sx; alien.y=sy; alien.facing=sf;
   }
-  mindControl.atkCD=22;
+  // Puppet animation feedback
   p.armSwing=1; p.armSwingTimer=10;
-  if(!victim){ return; }
-  const dir=victim.bodyX<p.bodyX?-1:1;
-  victim.ragdoll=true; victim.crying=true; victim.panicLevel=10;
-  applyForce(victim, dir*3, -3);
-  bleedEffect(victim, dir*2, -2, 1.4);
-  if(Math.random()<0.35) spawnGibs(victim, dir*2, -2, 1.2);
-  addScore(1);
+  mindControl.atkCD=8;
 }
 
 // Transfer: alien teleports to puppet, puppet's body explodes.
@@ -9010,6 +9549,7 @@ function alienShoot(){
       // Rapid melee arc in front of the alien — short range, big damage, bloody particles
       chainsawSlashes.push({x:alien.x+dir*14,y:alien.y-12,dir,life:10,maxLife:10});
       chainsawRev=Math.min(30, chainsawRev+4);
+      try{chainsawCutSfx.volume=0.01;chainsawCutSfx.currentTime=0;chainsawCutSfx.play().catch(()=>{});}catch(e){}
       for(let i=0;i<4;i++)particles.push({
         x:alien.x+dir*(12+Math.random()*10),
         y:alien.y-10+(Math.random()-0.5)*10,
@@ -9018,6 +9558,87 @@ function alienShoot(){
         life:8,color:'#fd4',size:Math.random()*2+1,
       });
       triggerShake(1); break;
+  }
+}
+// Fire current weapon inside the mothership walkable scenes.
+// NPCs killed are tracked in msDeadCrew / msDeadOps and persist across save/load.
+function fireMothership(){
+  const mi=mothershipInterior;
+  const loadout=getRaceWeapons();
+  const wi=alien.weapon|0;
+  const wDef=loadout[wi]||loadout[0];
+  if((alien.weaponCD[wi]||0)>0) return;
+  alien.weaponCD[wi]=wDef.cd;
+  // Resolve alien position + facing in the current scene
+  let ax, facing;
+  if(mi.screen==='menu' && mi.hub){ ax=mi.hub.x; facing=mi.hub.facing||1; }
+  else if(mi.screen==='comms' && !mi.commsReading && mi.commsWalk){ ax=mi.commsWalk.x; facing=mi.commsWalk.facing||1; }
+  else return;
+  // Build NPC target list for the active scene
+  const targets=[];
+  if(mi.screen==='menu' && mi.hubCrew){
+    mi.hubCrew.forEach(c=>{ if(c && !c.dead) targets.push({obj:c, x:c.x, type:'crew'}); });
+  }
+  if(mi.screen==='comms' && mi.commsWalk && mi.commsWalk.operators){
+    mi.commsWalk.operators.forEach(op=>{ if(op && !op.dead) targets.push({obj:op, x:op.x, type:'op'}); });
+  }
+  // Range / direction per weapon
+  let range=320, radial=false;
+  switch(wDef.id){
+    case 'chainsaw': range=55; break;
+    case 'stunner':  range=140; break;
+    case 'wail':     range=260; radial=true; break;
+    case 'plasma':   range=340; break;
+    case 'laser':    range=400; break;
+    case 'rocket':   range=360; break;
+    case 'gwell':    range=320; radial=true; break;
+    case 'swarm':    range=280; break;
+    case 'acid':     range=180; break;
+  }
+  const killed=[];
+  targets.forEach(tg=>{
+    const dx=tg.x-ax;
+    if(!radial && Math.sign(dx)!==facing) return;
+    if(Math.abs(dx)<=range) killed.push(tg);
+  });
+  killed.forEach(tg=>{
+    tg.obj.dead=true;
+    if(tg.type==='crew') msDeadCrew.add(tg.obj.role);
+    else msDeadOps.add(tg.obj.opId);
+  });
+  if(killed.length){ try{ saveGame(); }catch(e){} }
+  // Feedback
+  if(wDef.id==='chainsaw'){
+    chainsawRev=Math.min(30, chainsawRev+4);
+    try{chainsawCutSfx.volume=0.01;chainsawCutSfx.currentTime=0;chainsawCutSfx.play().catch(()=>{});}catch(e){}
+  }
+  triggerShake(wDef.id==='rocket'||wDef.id==='wail'?4:2);
+  // Visual burst on every killed target + muzzle flash (use mi.ambientParticles — already rendered)
+  const palette = {
+    plasma:[100,250,140], laser:[0,255,255], acid:[204,255,0], rocket:[255,128,0],
+    wail:[255,140,255], stunner:[140,230,255], gwell:[170,0,255], swarm:[255,220,80],
+    chainsaw:[200,40,40],
+  };
+  const col = palette[wDef.id] || [220,80,80];
+  const ch=canvas.height;
+  const floorGuess = (mi.screen==='comms') ? ch-60 : ch-70;
+  if(!mi.fxParticles) mi.fxParticles=[];
+  killed.forEach(tg=>{
+    for(let i=0;i<26;i++){
+      mi.fxParticles.push({
+        x: tg.x, y: floorGuess-30+Math.random()*40,
+        vx:(Math.random()-0.5)*5, vy:-1-Math.random()*3.5,
+        life:35+Math.random()*20, maxLife:55,
+        color:col, size:1.6+Math.random()*2.4,
+      });
+    }
+  });
+  for(let i=0;i<10;i++){
+    mi.fxParticles.push({
+      x: ax+facing*16, y: floorGuess-50+Math.random()*10,
+      vx:facing*(2+Math.random()*3), vy:(Math.random()-0.5)*2,
+      life:18, maxLife:18, color:[255,255,240], size:1+Math.random()*1.5,
+    });
   }
 }
 function alienSwitchWeapon(delta){
@@ -9228,7 +9849,7 @@ function updateAlienWeapons(){
     s.life--;
     const range=42, width=28;
     const cx=s.x+s.dir*range*0.5, cy=s.y;
-    // Humans
+    // Humans — splatter like a vehicle run-over
     for(let hi=0;hi<humans.length;hi++){
       const h=humans[hi];
       if(h.collected||h.hidden)continue;
@@ -9236,8 +9857,13 @@ function updateAlienWeapons(){
       if(Math.sign(dx)!==s.dir) continue;
       if(Math.abs(dx)>range) continue;
       if(Math.abs(h.bodyY-s.y)>width) continue;
-      h.ragdoll=true; h.panicLevel=10; applyForce(h,s.dir*2,-2);
-      for(let p=0;p<4;p++)particles.push({x:h.bodyX,y:h.bodyY,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:18,color:'#c22',size:1+Math.random()*2});
+      const sc = h.scale || 1;
+      const power = Math.min(5, 2 + sc*0.4);
+      spawnGibs(h, s.dir*6, -4-Math.random()*3, power);
+      h.collected=true;
+      triggerShake(Math.min(4, 2.5 + sc*0.3));
+      planetTerror=Math.min(planetTerror+0.25,10);
+      try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
     }
     // Military
     for(let mi=0;mi<military.length;mi++){
@@ -9470,12 +10096,16 @@ function updatePlanetShared(){
     shipMaxY = nearestCaveMaxY;
   }
   ship.y=Math.max(LEAVE_THRESHOLD,Math.min(shipMaxY,ship.y));
-  // Camera follows alien when on foot, ship otherwise
+  // Camera follows alien when on foot, ship otherwise.
+  // While mind-controlling someone on-foot, follow the puppet instead.
   if(playerMode==='onfoot'){
-    camera.x=alien.x-canvas.width/2+screenShake.x;
+    const mcTgt = (mindControl && mindControl.target && !mindControl.target.ragdoll) ? mindControl.target : null;
+    const fx = mcTgt ? (mcTgt.bodyX!=null?mcTgt.bodyX:mcTgt.x) : alien.x;
+    const fy = mcTgt ? (mcTgt.bodyY!=null?mcTgt.bodyY:mcTgt.y) : alien.y;
+    camera.x=fx-canvas.width/2+screenShake.x;
     // Raise camera (less ground, more horizon) — both on foot and driving.
     const _yOff = alien.drivingVehicle ? -80 : -60;
-    camera.y=alien.y-canvas.height/2+_yOff+screenShake.y;
+    camera.y=fy-canvas.height/2+_yOff+screenShake.y;
   }else{
     camera.x=ship.x-canvas.width/2+screenShake.x;
     camera.y=ship.y-canvas.height/2+screenShake.y;
@@ -9497,6 +10127,11 @@ function updatePlanetShared(){
     shipCloak.energy-=shipCloak.drainRate;
     if(shipCloak.energy<=0){shipCloak.energy=0;shipCloak.active=false;showMessage('Cloak depleted!');}
   }else{shipCloak.energy=Math.min(shipCloak.maxEnergy,shipCloak.energy+shipCloak.rechargeRate);}
+  // On-foot cloak
+  if(alienCloak.active){
+    alienCloak.energy-=alienCloak.drainRate;
+    if(alienCloak.energy<=0){alienCloak.energy=0;alienCloak.active=false;showMessage('Cloak depleted!');}
+  }else{alienCloak.energy=Math.min(alienCloak.maxEnergy,alienCloak.energy+alienCloak.rechargeRate);}
 
   // Beam
   const p=currentPlanet||planetDefs[0];
@@ -11074,10 +11709,42 @@ function updateSpace(){
       ship.y+=(transition.planet.spaceY-ship.y)*pull;
       ship.vx*=0.95;ship.vy*=0.95;
       if(t>=1){transition.active=false;loadPlanet(transition.planet);}
+    }else if(transition.type==='docking'){
+      // Smooth pull-in: ship drifts gently toward the hangar bay while the doors open,
+      // then accelerates through the hole. The ship also shrinks as it enters the bay
+      // so it visually "fits" through the small opening.
+      const e=easeInOut(t);
+      transition.zoom=1+e*4;
+      // Target the bay mouth (slightly below mothership centre, matching bay render at my+18).
+      const tx=mothershipPos.x, ty=mothershipPos.y+18;
+      // Gentle glide at first, stronger pull once the doors are mostly open.
+      const pull=0.012+Math.pow(e,1.4)*0.12;
+      ship.x+=(tx-ship.x)*pull;
+      ship.y+=(ty-ship.y)*pull;
+      ship.vx*=0.93;ship.vy*=0.93;
+      if(t>=1){transition.active=false;enterMothership();}
     }else if(transition.type==='leaving'){
       const e=easeOut(t);
       transition.zoom=6-e*5;
       if(t>=1){transition.active=false;transition.zoom=1;}
+    }else if(transition.type==='undocking'){
+      // Reverse of docking: bay doors open, ship emerges shrunken, grows and drifts
+      // DOWN away from the underside bay. Drive position through velocity (not a
+      // position interpolation) so `ship.vy` carries over seamlessly when the
+      // transition ends — no "stand still then move" hiccup at the hand-off.
+      // Mirrors how leaving a planet works: the ship has real velocity the whole time.
+      const e=easeInOut(t);
+      transition.zoom = 5 - e*4;
+      ship.x = mothershipPos.x;
+      ship.vx = 0;
+      ship.vy += 0.08; // thrust: ramps vy from 0 up to ~6.4 across the 80-frame exit
+      ship.y += ship.vy;
+      if(t>=1){
+        transition.active=false;
+        transition.zoom=1;
+        // ship.vy retains its built-up value — normal space drag (0.96/frame)
+        // eases it into a gentle drift, so it keeps moving smoothly.
+      }
     }else if(transition.type==='wormholeIn'){
       // Dive into the wormhole: pull ship to its center, zoom in.
       const e=easeInOut(t);
@@ -11180,8 +11847,9 @@ function updateSpace(){
   const mDist=dist(ship.x,ship.y,mothershipPos.x,mothershipPos.y);
   if(mDist<80){
     ship.vx*=0.95;ship.vy*=0.95;
-    if(mDist<50 && !(mothership._exitCool>0) && !mothershipMode){
-      enterMothership();
+    if(mDist<50 && !(mothership._exitCool>0) && !mothershipMode && !transition.active){
+      transition={active:true,type:'docking',timer:0,duration:160,zoom:1};
+      showMessage(tr('msg.welcomeAboard'));
     }
   }else{mothership._dockMsg=false;}
 
@@ -11341,8 +12009,56 @@ function drawSpace(){
   ctx.fillStyle='#555';ctx.beginPath();ctx.ellipse(mx,my-20,30,15,0,Math.PI,0);ctx.fill();
   // Lights
   for(let i=0;i<8;i++){const la=(i/8)*Math.PI*2+ship.lightPhase*0.5;ctx.fillStyle=i%2===0?'#0f0':'#0a0';ctx.beginPath();ctx.arc(mx+Math.cos(la)*100,my+Math.sin(la)*20,3,0,Math.PI*2);ctx.fill();}
-  // Beam port
-  ctx.fillStyle='rgba(0,255,100,0.15)';ctx.beginPath();ctx.arc(mx,my+25,15,0,Math.PI*2);ctx.fill();
+  // Hangar bay doors on the underside — slide open during docking transition
+  {
+    const bayW=44, bayH=14, bayY=my+18;
+    // Closed bay panel (dark metal)
+    ctx.fillStyle='#181c22';
+    ctx.fillRect(mx-bayW/2, bayY-bayH/2, bayW, bayH);
+    ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=1;
+    ctx.strokeRect(mx-bayW/2, bayY-bayH/2, bayW, bayH);
+    // Open fraction — 0 normally, ramps up during docking / undocking.
+    let openF=0;
+    if(transition.active && transition.type==='docking'){
+      const tt=transition.timer/transition.duration;
+      openF = Math.min(1, Math.max(0, (tt-0.1)/0.55));
+    }else if(transition.active && transition.type==='undocking'){
+      const tt=transition.timer/transition.duration;
+      // Snap open immediately, hold open while the ship exits, then close at the end.
+      if(tt < 0.12) openF = tt/0.12;
+      else if(tt < 0.75) openF = 1;
+      else openF = Math.max(0, 1 - (tt-0.75)/0.25);
+    }
+    if(openF>0){
+      // Inner hangar glow revealed behind the doors
+      const gw=bayW-4, gh=bayH-2;
+      const innerGrad=ctx.createLinearGradient(mx,bayY-gh/2,mx,bayY+gh/2);
+      innerGrad.addColorStop(0,'rgba(255,220,140,0.95)');
+      innerGrad.addColorStop(0.6,'rgba(255,170,80,0.75)');
+      innerGrad.addColorStop(1,'rgba(120,60,20,0.6)');
+      ctx.fillStyle=innerGrad;
+      ctx.fillRect(mx-gw/2, bayY-gh/2, gw, gh);
+      // Door panels slide apart horizontally
+      const panelW=(bayW/2)*(1-openF);
+      ctx.fillStyle='#1a1e26';
+      ctx.fillRect(mx-bayW/2, bayY-bayH/2, panelW, bayH);
+      ctx.fillRect(mx+bayW/2-panelW, bayY-bayH/2, panelW, bayH);
+      // Warning hazard stripe on door edges
+      ctx.fillStyle='rgba(255,200,60,0.9)';
+      ctx.fillRect(mx-bayW/2+panelW-1, bayY-bayH/2, 1, bayH);
+      ctx.fillRect(mx+bayW/2-panelW,   bayY-bayH/2, 1, bayH);
+      // Glow halo beneath the bay
+      const halo=ctx.createRadialGradient(mx,bayY+4,2,mx,bayY+4,bayW*0.9);
+      halo.addColorStop(0,`rgba(255,220,140,${0.35*openF})`);
+      halo.addColorStop(1,'transparent');
+      ctx.fillStyle=halo;
+      ctx.beginPath();ctx.ellipse(mx,bayY+4,bayW*0.9,bayH*1.1,0,0,Math.PI*2);ctx.fill();
+    }else{
+      // Closed: a hairline seam down the middle
+      ctx.strokeStyle='rgba(120,140,170,0.45)';
+      ctx.beginPath();ctx.moveTo(mx,bayY-bayH/2+1);ctx.lineTo(mx,bayY+bayH/2-1);ctx.stroke();
+    }
+  }
   // Label
   const md=dist(ship.x,ship.y,mx,my);
   if(md<500){
@@ -13557,26 +14273,32 @@ function drawPlanet(){
     }
     ctx.restore();
   });
-  // Chainsaw held in hand while revving
-  if(chainsawRev>0 && playerMode==='onfoot'){
-    ctx.save();
-    const hx=alien.x+alien.facing*12, hy=alien.y-12;
-    ctx.translate(hx,hy);
-    ctx.scale(alien.facing,1);
-    // Engine body
-    ctx.fillStyle='#c33'; ctx.fillRect(-4,-4,10,8);
-    ctx.fillStyle='#333'; ctx.fillRect(-4,2,10,3);
-    // Bar
-    ctx.fillStyle='#888'; ctx.fillRect(6,-2,20,4);
-    // Spinning teeth
-    const spin=(frameNow*0.8)%8;
-    ctx.fillStyle='#fd4';
-    for(let ti=0;ti<5;ti++){
-      const tx=8+((ti*4+spin)%18);
-      ctx.beginPath(); ctx.moveTo(tx,-2); ctx.lineTo(tx+2,-4); ctx.lineTo(tx+3,-2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(tx,2); ctx.lineTo(tx+2,4); ctx.lineTo(tx+3,2); ctx.fill();
+  // Chainsaw — always rendered while the weapon is selected on-foot; teeth only spin while revving
+  {
+    const _csLoadoutR = (typeof getRaceWeapons==='function') ? getRaceWeapons() : null;
+    const _csWeaponR = _csLoadoutR ? _csLoadoutR[alien.weapon|0] : null;
+    const _csEquipped = playerMode==='onfoot' && !alien.drivingVehicle && _csWeaponR && _csWeaponR.id==='chainsaw';
+    if(_csEquipped){
+      ctx.save();
+      const hx=alien.x+alien.facing*12, hy=alien.y-12;
+      ctx.translate(hx,hy);
+      ctx.scale(alien.facing,1);
+      // Engine body
+      ctx.fillStyle='#c33'; ctx.fillRect(-4,-4,10,8);
+      ctx.fillStyle='#333'; ctx.fillRect(-4,2,10,3);
+      // Bar
+      ctx.fillStyle='#888'; ctx.fillRect(6,-2,20,4);
+      // Teeth — static row when idle, spinning when revving
+      const spinning = chainsawRev>0;
+      const spin = spinning ? (frameNow*0.8)%8 : 0;
+      ctx.fillStyle = spinning ? '#fd4' : '#bbb';
+      for(let ti=0;ti<5;ti++){
+        const tx=8+((ti*4+spin)%18);
+        ctx.beginPath(); ctx.moveTo(tx,-2); ctx.lineTo(tx+2,-4); ctx.lineTo(tx+3,-2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(tx,2); ctx.lineTo(tx+2,4); ctx.lineTo(tx+3,2); ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   plasmaBolts.forEach(b=>{
@@ -13664,7 +14386,9 @@ function drawPlanet(){
     }
 
     // Body (all races/skins + bodyType variations)
+    if(alienCloak.active){ctx.save();ctx.globalAlpha=0.18+Math.sin(frameNow*0.005)*0.06;}
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
+    if(alienCloak.active)ctx.restore();
 
     // --- Mind-control tether: a psychic tentacle from the alien to the puppet's head ---
     if(mindControl && mindControl.target){
@@ -13967,6 +14691,14 @@ function drawPlanet(){
     ctx.fillStyle=shipCloak.active?`rgba(0,200,255,${0.5+Math.sin(frameNow*0.01)*0.3})`:'#08a';
     ctx.fillRect(cx,cy,ep,6);
     ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(shipCloak.active?'CLOAKED':'CLOAK [V]',canvas.width/2,cy-3);
+  }
+  if(playerMode==='onfoot'&&!alien.drivingVehicle&&gameMode==='planet'&&!mothershipMode&&!pyramidInteriorMode&&(alienCloak.active||alienCloak.energy<alienCloak.maxEnergy)){
+    const cx=canvas.width/2-50,cy=62;
+    ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(cx-1,cy-1,102,8);
+    const ep=alienCloak.energy/alienCloak.maxEnergy*100;
+    ctx.fillStyle=alienCloak.active?`rgba(0,200,255,${0.5+Math.sin(frameNow*0.01)*0.3})`:'#08a';
+    ctx.fillRect(cx,cy,ep,6);
+    ctx.fillStyle='#8cf';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(alienCloak.active?'CLOAKED':'CLOAK [V]',canvas.width/2,cy-3);
   }
 
   // --- ALIEN ACTION CHIPS (on foot) — above the weapon row ---
@@ -14946,6 +15678,24 @@ function drawShip(){
   }
   ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.tilt);
   if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(frameNow*0.005)*0.05;}
+  // Shrink the ship as it flies through the hangar doors during docking.
+  if(transition.active && transition.type==='docking'){
+    const tt=transition.timer/transition.duration;
+    // Start shrinking once the doors are mostly open, ease to a tiny scale at the end.
+    const k = Math.min(1, Math.max(0, (tt-0.35)/0.6));
+    const dockScale = 1 - k*0.88; // 1.0 → 0.12
+    ctx.scale(dockScale, dockScale);
+    ctx.globalAlpha *= (1 - k*0.4);
+  }
+  // Grow the ship back up as it emerges from the bay during undocking.
+  if(transition.active && transition.type==='undocking'){
+    const tt=transition.timer/transition.duration;
+    // Start tiny just inside the bay, grow to full scale by the time it's clear.
+    const k = Math.min(1, tt/0.55);
+    const undockScale = 0.12 + k*0.88; // 0.12 → 1.0
+    ctx.scale(undockScale, undockScale);
+    ctx.globalAlpha *= Math.min(1, 0.4 + tt*2);
+  }
   const pc=shipPaint.color,pa=shipPaint.accent,pt=shipPaint.trail;
   const type=shipPaint.ship||'saucer';
   // Enable pilot-in-bubble rendering only for the actual player ship (not UI previews).
@@ -17446,6 +18196,7 @@ const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
 // Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
 const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
 const underwaterSfx=mkAudio('underwater-ambience.wav',0,true);
+const chainsawCutSfx=mkAudio('chainsaw-cut.wav',0,false);
 spaceAmbience.loop=true;spaceAmbience.volume=0;
 underwaterSfx.loop=true;underwaterSfx.volume=0;
 let ambienceTarget=0,ambiencePlaying=false;

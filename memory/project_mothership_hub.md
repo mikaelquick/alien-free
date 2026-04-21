@@ -1,24 +1,46 @@
 ---
-name: Mothership walkable hub + new screens
-description: Mothership main menu is now a walkable corridor with doors. Added Star Map, Training Arena, Specimen Lab, Zoo Riot.
+name: Mothership walkable hub + sub-screens
+description: Walkable corridor hub with door-enter sub-scenes — Lab, Zoo, Comms (walk), Bridge, Stats. 2.0x camera zoom, weapon combat, persistent NPC deaths.
 type: project
 ---
 
-Added 2026-04-17. Replaced the 3-card center menu with a walkable corridor. 5 new screens.
+Added 2026-04-17, heavily expanded 2026-04-20.
 
-**Walkable hub** — `mi.hub = {x, vx, facing, walkT, doorX[], nearDoor, width}`. A/D walks, SPACE enters nearest door (within 70px). Doors are evenly spaced along `hub.width=1800`, one per `MS_MENUS` entry. Camera follows alien. Draw at `drawMothership()` menu branch — corridor with ceiling light strips, viewport windows with scrolling stars, animated alien sprite with walk cycle.
+**Walkable hub** — `mi.hub = {x, vx, facing, walkT, doorX[], nearDoor, width}`. A/D walks, SPACE enters nearest door (within 70px). Doors evenly spaced along `hub.width=1800`, one per `MS_MENUS` entry. Camera follows alien with 2.0x zoom + wall clamp so walls stay at screen edges. Draw at `drawMothership()` menu branch — corridor with ceiling light strips, viewport windows with scrolling stars, animated alien sprite with walk cycle.
 
-**MS_MENUS** now 8 entries: `bridge`, `starmap`, `comms`, `lab`, `arena`, `zoo`, `upgrades`, `stats`.
+**Camera zoom pattern** — Used in both menu hub (`_msZoom=2.0`) and comms walk (`_csZoom=2.0`). Formula: `tx = cw/2 - Z*alienScreenX`, clamped to `[cw - Z*(roomW-camX), Z*camX]` so the room walls always pin to screen edges. Apply as `ctx.translate(tx, floorY*(1-Z)); ctx.scale(Z,Z)`.
 
-**Star Map** — `mi.starmap={sel, surveyCD}`. Horizontal planet selector with progress + completion rank. SPACE jumps to unlocked planet (calls `exitMothership()` → `leavePlanet()` → `loadPlanet()` with 50ms gap to avoid race). Locked planets show lock icon.
+**MS_MENUS** — 5 entries: `bridge`, `comms`, `lab`, `zoo`, `stats`. (Star Map, Upgrades, Training Arena all removed by 2026-04-20 — Arena was removed when weapon combat was added.)
 
-**Training Arena** — `mi.arena={active, mode, time, score, ghosts[], _beamX, beamActive, announce, resultTimer}`. 3 modes (easy/medium/hard: 20/25/30s, 8/14/20 ghosts). Player-controlled beam at top of screen, ghosts flee when close. Bronze/Silver/Gold scoring → 10/18/30 pts.
+**Specimen Lab** — `mi.lab={station, specIndex, running, t, bar, barDir, sweetLo, sweetHi, outcome, outcomeT}`. A/D picks specimen, SPACE starts timing minigame. Hit sweet spot = +5-10 pts.
 
-**Specimen Lab** — `mi.lab={station, specIndex, running, t, bar, barDir, sweetLo, sweetHi, outcome, outcomeT}`. A/D picks specimen, SPACE starts timing minigame (moving bar, randomized sweet zone). Hit sweet spot = +5-10 pts. No specimens = friendly message.
+**Zoo Riot** — `mi.riot={active, escapees[], defended, lost, spawnT, duration, trigger}`. 25% chance on entering zoo (if ≥3 specimens). Stun with Q in zoo walk mode within 80px. Must defend ≥3 or timer elapses.
 
-**Zoo Riot** — `mi.riot={active, escapees[], defended, lost, spawnT, duration, trigger}`. 25% chance on entering zoo (if ≥3 specimens). Escapees run; stun with Q in zoo walk mode within 80px. Red-strobe overlay + HUD. Must defend ≥3 or timer elapses to end.
+**Comms (walkable, mission-control style)** — `mi.commsWalk={x, vx, facing, walkT, width:1400, screenX[], nearScreen, operators[], bigScreenPhase}`. Planet transmissions shown on TV-style wall screens (`scrY=deskY-scrH-46`). Operators are player-race aliens with different skins, drawn BEFORE desk (desk covers legs → seated effect). Big MISSION CONTROL display high on back wall. `drawLeaderPortrait()` renders leader on each screen.
 
-**Entry point** — `maybeTriggerRiot()` called when entering zoo door. Active riot draws overlay on top of zoo via `drawZooRiot()`.
+**Docking entry** — no overlay cinematic and no forced auto-walk (both removed 2026-04-20). Alien simply spawns at `hub.x=40` (left wall) with full control immediately. The player naturally walks right under their own input. Do not reintroduce an auto-walk intro or cinematic unless explicitly asked.
 
-**Why:** User asked for "big improvements" to the mothership. Walkable hub makes it feel like a real ship; the drill/lab/starmap/riot give the hub meaningful activities.
-**How to apply:** When adding more screens, push a new MS_MENUS entry, add an update fn, add a draw fn, dispatch in `updateMothership` + `drawMothership` after menu early-return. For door screens that start a minigame, init per-run state in `enterMothership()` and clear on exit if needed.
+**Docking animation (2026-04-21)** — mirrors the planet-landing feel: `transition.type='docking'` with duration 160, ease-in-out zoom 1→5, pull toward bay mouth at `(mothershipPos.x, mothershipPos.y+18)`. Ship visually shrinks (scale 1 → 0.12, alpha fades) once the bay doors open. The mothership renders sliding hangar bay doors (`my+18`, 44×14) that slide apart when `transition.type==='docking'`, revealing an orange inner-glow hangar with hazard stripes. Green "beam port" circle under the mothership was removed because it clashed with the new bay.
+
+**Docking bay in the hub (2026-04-21)** — drawn at world x≈100 (left alcove, before the first door) in `drawMothership()` menu branch. Shows the player's actual selected ship (`drawShipBody(shipPaint.color, accent, trail, shipPaint.ship)`) parked on a lit landing pad with hazard-stripe lip, ceiling umbilical tethers, data-readout panels, and a "DOCKING BAY" sign. Alien's spawn `hub.x=40` places them right by the dock so the hub opens with the player stepping off the ship.
+
+**Back-wall terminals removed (2026-04-21)** — `mi.hubConsoles=[]`. All themed terminals (NAVIGATION, POWER CORE, LIFE SUPPORT, DIAGNOSTICS, SENSORS) were removed because none had gameplay function. Hub crew NPCs fall back to random targets when no consoles exist. The large hanging ceiling signs that labelled each terminal are gone too.
+
+**Door layout after bay (2026-04-21, revised)** — `h.doorX` uses `leftPad=520, rightPad=280` so all five doors sit clearly to the right of the docking bay. Bay ends ~x=270, first door (Command Bridge) is at x=520 → ~250px breathing gap. Door-to-door step = (1800-520-280)/4 = 250px, so every inter-door gap is uniform. Doors: 520/770/1020/1270/1520. Do not let leftPad slip back down — the user explicitly complained that the Command Bridge felt too close to the bay.
+
+**Arrival sequence (2026-04-21)** — `enterMothership()` now spawns the alien at `hub.x=100` (at the bay) and starts `mi.arriving={timer, duration:120, boardFade:1}`. The arrival handler runs at the top of `updateMothership` (before `mi.departing`) and returns early, freezing player input. Phases: (1) ship descends from `shipLift=-70` to `0` by dt=0.4 via `-Math.pow(1-landK,1.5)*70`, with a small settle bounce 0.4–0.5; (2) engine glow + exhaust plume fade out with `engineFx = 1 - landK`; (3) hatch-opens flash between dt=0.5–0.75 (`hatchFlash = sin((k-0.5)/0.25*π)`) — radial glow, bright hatch bar under the ship belly, spark particles; (4) alien fades in from dt=0.67 to 1.0 via `boardFade` (1→0). Reuses the same `boardFade` alpha path as departure.
+
+**Arrival camera (revised)** — the camera must reveal every door during landing, not just the bay. `_msZoom` now interpolates from `fitZoom = clamp(0.5..0.9, (cw-40)/h.width)` (whole corridor visible) → `2.0` across the arrival. An `_arrBlend` factor blends the translate from hub-centered (`cw/2 - zoom*(h.width/2 - camX)`) at ak=0 to player-centered at ak=1. The wall clamp (`_msTXMin..._msTXMax`) is only applied when `_msTXMin <= _msTXMax` — at very wide zooms the clamp inverts and must be skipped, otherwise the frame snaps back to the player. Do not drop below the wide start zoom: the user specifically asked that all terminals be visible while docking.
+
+**Undocking sequence (2026-04-21, velocity-driven)** — When pressing Enter near the bay, `mi.departing={timer, duration:140, boardFade}` plays a three-phase departure in the hub: (1) alien drifts to `x=100` and walks to the ship; (2) `boardFade` ramps 0→1 between `dt=0.30` and `dt=0.45`, fading the alien sprite out; (3) ship warms up and lifts off the pad. When the hub phase ends, `exitMothership()` runs and a `transition={type:'undocking', duration:80, zoom:5}` starts. In `updateSpace`, the undocking transition opens the exterior bay doors (snap open, hold, close near end) and drives the ship **through velocity, not position**: `ship.vx=0; ship.vy+=0.08; ship.y+=ship.vy; ship.x=mothershipPos.x`, while zoom unwinds 5→1. Ship scale grows 0.12→1.0 in `drawShip` during the transition, symmetric with the docking shrink. The downward exit matters: an earlier version pulled the ship up which made it clip through the mothership body. The velocity-based drive matters too: earlier versions used position interpolation and then had to snap `ship.y = ty` / set `ship.vy = 6` at `t=1`, which produced a visible "leave → stand still → leave again" hiccup because vy was forced to 0 during the transition and jumped to 6 at the hand-off. With the velocity approach, `ship.vy` builds up naturally and carries through seamlessly — exactly like how the `leaving` planet transition lets ship velocity flow through.
+
+**Weapon combat in hub** — `fireMothership()` handles Q-fire and Tab-switch while in menu OR comms-walk. Uses full on-foot loadout (`getRaceWeapons()`), per-weapon range+radial detection, palette-colored particles in `mi.fxParticles` (separate from global particles — global ones don't render in mothership). Particles drawn inside the zoom transform so they scale with scene.
+
+**Persistent NPC deaths** — `msDeadCrew:Set<role>` and `msDeadOps:Set<opIndex>`. Added to `saveGame`/`loadGame`. `enterMothership()` skips populating any role/op in the set. Every draw loop early-returns on `c.dead`/`op.dead`. `fireMothership()` calls `saveGame()` immediately on kill.
+
+**Door titles** — corridor door labels render below each door; `zoo` and `lab` get an additional title above the signage plate.
+
+**Window "silhouette reflections" removed (2026-04-21)** — The back-wall panoramic window used to render tiny glowing ghost silhouettes at each crew member's and the player's world X position (inside the window clip, composite `lighter`). Because the player silhouette tracked `mi.hub.x` in real time, it read as "a figure outside the glass walking exactly in sync with the player" and felt uncanny. Block removed in `drawMothership()` between the space-events render and the `ctx.restore()` that closes the window clip. Do not reintroduce any per-entity overlays inside that clip that reuse live world X/Y of the player or crew.
+
+**Why:** User asked for "big improvements" to the mothership, then mission-control comms aesthetic, zoom, cinematic, and "weapons work anywhere, NPCs stay dead."
+**How to apply:** When adding more screens, push a new MS_MENUS entry, add an update fn, add a draw fn, dispatch in `updateMothership` + `drawMothership` after menu early-return. For screens that need weapon combat, dispatch Q/Tab in `updateMothership` like the menu+comms branches do, and render `mi.fxParticles` inside the zoom transform. Use role strings (crew) or stable indices (operators) as death IDs so the sets remain valid across reloads.
