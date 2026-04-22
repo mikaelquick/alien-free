@@ -8222,10 +8222,11 @@ function updateMothership(){
     else{mi.screen='menu';mi.selectedItem=0;mi.zooAction=null;mi.zooDetailView=null;mi.zooInsideCell=null;}
   }
 
-  // E = select (in the zoo, SPACE is reserved for jumping, so only E interacts)
-  const _mmSelectKey = (mi.screen==='zoo') ? keys['e'] : (keys['e']||keys[' ']);
+  // E = select (in zoo and comms, SPACE is reserved for jumping, so only E interacts)
+  const _spaceSelectOK = mi.screen!=='zoo' && mi.screen!=='comms';
+  const _mmSelectKey = _spaceSelectOK ? (keys['e']||keys[' ']) : keys['e'];
   if(_mmSelectKey&&!mi._eCool){
-    mi._eCool=12;keys['e']=false; if(mi.screen!=='zoo') keys[' ']=false;
+    mi._eCool=12;keys['e']=false; if(_spaceSelectOK) keys[' ']=false;
     if(mi.screen==='menu'){
       const sel=MS_MENUS[mi.selectedItem%MS_MENUS.length];
       mi.screen=sel.id;mi.selectedItem=0;
@@ -10822,7 +10823,7 @@ function drawMothership(){
         const leader=available[i];
         const sx=sxAbs-camX;
         if(sx<-120||sx>cw+120)return;
-        const scrX=sx-scrW/2, scrY=ceilY+44;  // raised from deskY-scrH-46 to near ceiling
+        const scrX=sx-scrW/2, scrY=deskY-scrH-80;  // a bit above the original spot, still clearly visible
         const near=(cwk.nearScreen===i);
         // Wall halo glow behind screen (stronger when near)
         const haloA = near ? 0.28 : 0.14;
@@ -10831,13 +10832,15 @@ function drawMothership(){
         haloG.addColorStop(1, 'rgba(255,120,100,0)');
         ctx.fillStyle=haloG;
         ctx.fillRect(scrX-scrW/2, scrY-scrH/2, scrW*2, scrH*2);
-        // Wall-mount arms dropping from the ceiling rail (two tubular pipes)
+        // Wall-mount bracket arms (short, anchored to wall plate just above the screen)
         ctx.strokeStyle='rgba(80,40,35,0.6)'; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(scrX+14, ceilY+18); ctx.lineTo(scrX+14, scrY-6); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(scrX+scrW-14, ceilY+18); ctx.lineTo(scrX+scrW-14, scrY-6); ctx.stroke();
+        const armTopY = scrY-24;
+        ctx.beginPath(); ctx.moveTo(scrX+14, armTopY); ctx.lineTo(scrX+14, scrY-6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(scrX+scrW-14, armTopY); ctx.lineTo(scrX+scrW-14, scrY-6); ctx.stroke();
         ctx.fillStyle='#1a0e10';
-        ctx.beginPath(); ctx.arc(scrX+14, ceilY+18, 2.2, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(scrX+scrW-14, ceilY+18, 2.2, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(scrX+10, armTopY-2, scrW-20, 3);  // wall plate strip
+        ctx.beginPath(); ctx.arc(scrX+14, armTopY, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(scrX+scrW-14, armTopY, 2, 0, Math.PI*2); ctx.fill();
         // Wall-mount bracket (thicker frame)
         ctx.fillStyle='#1a1214';ctx.fillRect(scrX-8,scrY-8,scrW+16,scrH+16);
         // Inner dark bezel
@@ -10898,17 +10901,31 @@ function drawMothership(){
           ctx.setLineDash([]);
         }
       });
-      // --- NPC OPERATORS — same race as player, different skins ---
-      // Drawn BEFORE the desk so the desk visually clips them at the waist (seated effect).
+      // --- NPC OPERATORS — seated in office chairs, typing on computers ---
+      // Chair back drawn BEHIND the operator, then operator drawn in seated pose.
       (cwk.operators||[]).forEach(op=>{
         if(op.dead)return;
         const ox=op.x-camX;
         if(ox<-40||ox>cw+40)return;
         if(!op.skin)return;
-        const bob=Math.sin(t*2+op.bobPhase)*0.6;
-        // Feet planted just below the desk surface so the desk hides the legs.
-        const feetY=deskY+16+bob;
-        // Subtle typing sway by feeding a slow walkPhase
+        const bob=Math.sin(t*2+op.bobPhase)*0.4;
+        // Seated: hide legs under desk. Move feet a bit lower so body sits correctly on chair.
+        const feetY=deskY+18+bob;
+        // Chair backrest — tall padded rectangle behind operator head/shoulders
+        const backW=16, backH=26;
+        const backX = ox - backW/2, backY = feetY - 44;
+        ctx.fillStyle='#1a1012';
+        ctx.fillRect(backX, backY, backW, backH);
+        ctx.strokeStyle='rgba(255,120,100,0.15)'; ctx.lineWidth=0.8;
+        ctx.strokeRect(backX, backY, backW, backH);
+        // Backrest horizontal padding ridge
+        ctx.strokeStyle='rgba(60,30,30,0.7)';
+        ctx.beginPath(); ctx.moveTo(backX+2, backY+8); ctx.lineTo(backX+backW-2, backY+8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(backX+2, backY+16); ctx.lineTo(backX+backW-2, backY+16); ctx.stroke();
+        // Headrest ball at the top
+        ctx.fillStyle='#241418';
+        ctx.beginPath(); ctx.ellipse(backX+backW/2, backY-1, backW/2-1, 3, 0, 0, Math.PI*2); ctx.fill();
+        // Subtle typing sway
         const sway=Math.sin(t*9+op.typePhase)*0.3;
         drawAlienPreview(ox, feetY, op.scale, op.skin, op.facing, sway);
       });
@@ -10917,23 +10934,72 @@ function drawMothership(){
       deskGrad.addColorStop(0,'#2a1a1c');deskGrad.addColorStop(1,'#0c0608');
       ctx.fillStyle=deskGrad;ctx.fillRect(0,deskY,cw,deskH);
       ctx.strokeStyle='rgba(255,100,100,0.15)';ctx.beginPath();ctx.moveTo(0,deskY);ctx.lineTo(cw,deskY);ctx.stroke();
-      // --- Console terminals on the desk in front of each operator ---
+      // --- Workstation — upright monitor + keyboard in front of each operator ---
       (cwk.operators||[]).forEach(op=>{
         if(op.dead)return;
         const ox=op.x-camX;
         if(ox<-40||ox>cw+40)return;
-        const cnX=ox-14, cnY=deskY+4, cnW=28, cnH=16;
-        ctx.fillStyle='#0a0406';ctx.fillRect(cnX,cnY,cnW,cnH);
-        const litR=120+Math.floor(Math.sin(t*3+op.typePhase)*40);
-        ctx.fillStyle=`rgba(${litR},80,80,0.55)`;ctx.fillRect(cnX+2,cnY+2,cnW-4,cnH-8);
-        for(let r=0;r<2;r++){
-          const rw=6+((Math.floor(t*6+op.typePhase*3+r*7))%14);
-          ctx.fillStyle='rgba(255,220,200,0.55)';ctx.fillRect(cnX+3,cnY+3+r*3,rw,1);
+        // Monitor stands ON TOP of the desk (y extends upward from deskY)
+        const mW=28, mH=18;
+        const mX=ox-mW/2, mY=deskY-mH-1;
+        // Monitor stand + base
+        ctx.fillStyle='#0c0608';
+        ctx.fillRect(ox-1.5, mY+mH, 3, 4);
+        ctx.fillRect(ox-5, mY+mH+3, 10, 1.5);
+        // Monitor bezel
+        ctx.fillStyle='#1a0e10';
+        ctx.fillRect(mX-1, mY-1, mW+2, mH+2);
+        ctx.strokeStyle='rgba(255,120,100,0.25)'; ctx.lineWidth=0.6;
+        ctx.strokeRect(mX-1, mY-1, mW+2, mH+2);
+        // Screen content — pulsing red comm-channel readout
+        ctx.fillStyle='#0a0204'; ctx.fillRect(mX, mY, mW, mH);
+        const litR=140+Math.floor(Math.sin(t*3+op.typePhase)*50);
+        ctx.fillStyle=`rgba(${litR},70,70,0.4)`; ctx.fillRect(mX+1, mY+1, mW-2, mH-2);
+        // Rolling text-line bars (incoming telemetry)
+        for(let r=0;r<4;r++){
+          const rw=5+((Math.floor(t*6+op.typePhase*3+r*7))%(mW-8));
+          ctx.fillStyle=`rgba(255,200,180,${0.55-r*0.08})`;
+          ctx.fillRect(mX+2, mY+2+r*3.5, rw, 1);
         }
-        ctx.fillStyle='#1a0e10';ctx.fillRect(cnX+2,cnY+cnH-4,cnW-4,3);
-        if(Math.sin(t*12+op.typePhase)>0.92){
-          ctx.fillStyle='rgba(255,220,160,0.7)';
-          ctx.fillRect(cnX+4+Math.random()*(cnW-8),cnY+cnH-6, 1, 1);
+        // Blinking cursor
+        if(Math.sin(t*8+op.typePhase)>0){
+          ctx.fillStyle='rgba(255,240,200,0.9)';
+          ctx.fillRect(mX+mW-4, mY+mH-4, 2, 2);
+        }
+        // Scan lines on monitor
+        for(let ssy=mY; ssy<mY+mH; ssy+=2){
+          ctx.strokeStyle=`rgba(255,100,100,${0.03+Math.sin(t*5+ssy*0.4)*0.02})`;
+          ctx.beginPath(); ctx.moveTo(mX, ssy); ctx.lineTo(mX+mW, ssy); ctx.stroke();
+        }
+        // Screen glass sheen
+        const shG = ctx.createLinearGradient(mX, mY, mX, mY+mH*0.4);
+        shG.addColorStop(0, 'rgba(255,200,200,0.1)'); shG.addColorStop(1, 'rgba(255,200,200,0)');
+        ctx.fillStyle=shG; ctx.fillRect(mX, mY, mW, mH*0.4);
+        // Keyboard on the desk in front of the monitor
+        const kbX=ox-11, kbY=deskY+8, kbW=22, kbH=5;
+        ctx.fillStyle='#0f0a0c'; ctx.fillRect(kbX, kbY, kbW, kbH);
+        ctx.strokeStyle='rgba(255,120,100,0.2)'; ctx.lineWidth=0.5;
+        ctx.strokeRect(kbX, kbY, kbW, kbH);
+        // Key rows
+        for(let kr=0; kr<2; kr++){
+          for(let kc=0; kc<8; kc++){
+            const flash = (Math.sin(t*14+op.typePhase*2+kr*3+kc)>0.85) ? 0.7 : 0.25;
+            ctx.fillStyle=`rgba(255,180,150,${flash})`;
+            ctx.fillRect(kbX+1.5+kc*2.5, kbY+1+kr*2, 1.8, 1.3);
+          }
+        }
+        // Desk mug / coffee cup to the side
+        if(op.typePhase % 1 > 0.5){
+          ctx.fillStyle='#6a3020'; ctx.fillRect(ox+14, deskY+6, 4, 5);
+          ctx.strokeStyle='rgba(120,60,40,0.6)'; ctx.lineWidth=0.5;
+          ctx.strokeRect(ox+14, deskY+6, 4, 5);
+          // Steam wisp
+          const sA = 0.25 + Math.sin(t*2+op.typePhase)*0.15;
+          ctx.strokeStyle=`rgba(255,220,200,${sA})`; ctx.lineWidth=0.6;
+          ctx.beginPath();
+          ctx.moveTo(ox+16, deskY+6);
+          ctx.quadraticCurveTo(ox+17, deskY+3, ox+16, deskY);
+          ctx.stroke();
         }
       });
       // Alien walking in the room — use cwk.y for jump offset (negative when airborne)
