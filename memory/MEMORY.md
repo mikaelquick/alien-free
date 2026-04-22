@@ -17,6 +17,7 @@
 - [Project: Pending Work](project_pending.md) — Outstanding feature requests not yet done
 - [Project: Recent Changes](project_recent_changes.md) — 2026-04-16 session: rename, biomes, ocean, Sun, ship types
 - [Project: Reality Improvements 2026-04-22](project_reality_improvements_2026-04-22.md) — storms, lightning, bioluminescence, seagulls, crystal gate, reflections, volcanic island, fire scars
+- [Project: Brutality pass 2026-04-22](project_brutality_pass_2026-04-22.md) — persistent gore, fire chains, grieving couples, phone-filming, dismemberment, blackouts, slow-mo combos
 - [Project: Biome fading](project_biome_fading.md) — wide Earth biome transitions; populator picks A/B stochastically in blend zones
 - [Project: Level system](project_level_system.md) — linear planet unlock, roguelike upgrade reset
 - [Project: Perf + resilience](project_perf_and_resilience.md) — sim radius cull, stuck detection, frame/gradient caches

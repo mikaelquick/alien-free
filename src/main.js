@@ -265,6 +265,17 @@ let bloodPools = []; // dark stains on the ground — {x, y, r, targetR, life, m
 let gibs = []; // flying limb chunks — {x, y, vx, vy, rot, rotV, size, life, kind, color, onGround, groundY}
 let skidMarks = []; // tire skid marks — {x, y, w, life, maxLife, alpha}
 let moonFootprints = []; // permanent boot impressions left on the Moon's surface — {x,y,facing}
+let roadkill = []; // flat squashed humanoid decals — {x, y, color, skin, life, maxLife}
+let droppedItems = []; // phones/briefcases/bags dropped by fleeing humans — {x, y, kind, rot, life, maxLife}
+let craters = []; // impact craters from slammed buildings — {x, y, r, life, maxLife}
+let bloodFootprints = []; // red alien footprints — {x, y, facing, life, maxLife}
+let killCount = 0;
+let killCombo = 0;
+let killComboTimer = 0;
+let slowmoTimer = 0;
+let killFlashT = 0;
+let alienBloodyT = 0;
+let _blackoutLevel = 0; // 0..1 — city power grid damage; dims all lit windows
 // On-foot alien weapon projectiles
 let stunWaves = []; // neural stunner cones + panic wails — {x,y,r,maxR,life,maxLife,kind:'cone'|'radial',dir,effect}
 let plasmaBolts = []; // arcing plasma globs — {x,y,vx,vy,life}
@@ -1789,9 +1800,11 @@ function drawBuildingUnit(b) {
     ctx.fillStyle=b.color; ctx.fillRect(sx,sy,w,h);
     ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1; ctx.strokeRect(sx,sy,w,h);
     // Floors + windows
+    const _boMul = (1 - _blackoutLevel) * (window._blackoutFlicker>0 && (window._blackoutFlicker|0)%4<2 ? 0.2 : 1);
     for(let r=0;r<f;r++) for(let c=0;c<cols;c++){
       const wx=sx+6+c*(w-12)/cols, wy=sy+4+r*flH, ww=(w-12)/cols-4, wh=flH-8;
-      ctx.fillStyle=_ws(r*cols+c)?`rgba(255,255,${150+dayNightBrightness*100},${0.3+dayNightBrightness*0.4})`:'rgba(50,50,80,0.6)';
+      const litAlpha = (0.3+dayNightBrightness*0.4) * _boMul;
+      ctx.fillStyle=_ws(r*cols+c)?`rgba(255,255,${150+dayNightBrightness*100},${litAlpha})`:'rgba(50,50,80,0.6)';
       ctx.fillRect(wx,wy,ww,wh);
       ctx.strokeStyle='#333'; ctx.lineWidth=0.5; ctx.strokeRect(wx,wy,ww,wh);
       // Cross panes
@@ -1810,15 +1823,17 @@ function drawBuildingUnit(b) {
     ctx.fillStyle=sg; ctx.fillRect(sx,sy,w,h);
     // Windows grid
     const flH=h/(f+1);
+    const _boMulSK = (1 - _blackoutLevel) * (window._blackoutFlicker>0 && (window._blackoutFlicker|0)%4<2 ? 0.2 : 1);
     for(let r=0;r<f;r++) for(let c=0;c<2;c++){
       const wx=sx+5+c*(w-10)/2, wy=sy+flH*0.5+r*flH, ww=(w-10)/2-3, wh=flH-5;
-      ctx.fillStyle=_ws(r*2+c)?'rgba(200,220,255,0.5)':'rgba(30,40,60,0.6)';
+      ctx.fillStyle=_ws(r*2+c)?`rgba(200,220,255,${0.5*_boMulSK})`:'rgba(30,40,60,0.6)';
       ctx.fillRect(wx,wy,ww,wh);
     }
     // Antenna
     ctx.strokeStyle='#888'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(sx+w/2,sy); ctx.lineTo(sx+w/2,sy-25); ctx.stroke();
-    ctx.fillStyle='#f00'; ctx.beginPath(); ctx.arc(sx+w/2,sy-25,2,0,Math.PI*2); ctx.fill();
+    const _ledAlpha = _blackoutLevel > 0.5 ? 0.3 : 1;
+    ctx.fillStyle=`rgba(255,0,0,${_ledAlpha})`; ctx.beginPath(); ctx.arc(sx+w/2,sy-25,2,0,Math.PI*2); ctx.fill();
     // Door
     ctx.fillStyle='rgba(150,200,255,0.4)'; ctx.fillRect(sx+w/2-10,sy+h-20,20,20);
     break;
@@ -3466,6 +3481,31 @@ function drawBuildingUnit(b) {
         }
       }
     }
+    // Ignite neighbouring buildings — fire chain through adjacent houses.
+    // Once a building has been burning long enough, radiate heat outwards.
+    if(b.burnTimer > 120 && b.burnTimer % 90 === 0 && !b.dead){
+      const bx = b.x + b.w/2;
+      const reach = Math.max(90, b.w * 1.1);
+      for(let bi = 0; bi < blocks.length; bi++){
+        const nb = blocks[bi];
+        if(nb === b || nb.dead || nb.onFire) continue;
+        if(!nb.buildingType) continue; // don't torch loose rubble
+        const dx = Math.abs((nb.x + nb.w/2) - bx);
+        if(dx < reach && Math.abs((nb.y + nb.h/2) - (b.y + b.h/2)) < 120){
+          // Chance scales with proximity + burn intensity
+          const chance = 0.35 + Math.min(0.4, b.burnTimer/2400);
+          if(Math.random() < chance){
+            nb.onFire = true; nb.burnTimer = 1;
+            nb.cracked = true;
+            maybeEvictFromDamage(nb);
+            // Visual: a few embers jumping between
+            for(let k=0;k<3;k++){
+              fires.push({x: b.x + Math.random()*b.w, y: b.y + Math.random()*b.h*0.3, life:60+Math.random()*40, size:3+Math.random()*3, vx:(nb.x>b.x?1:-1)*(0.5+Math.random()), vy:-1-Math.random(), stuck:false});
+            }
+          }
+        }
+      }
+    }
   }
 
   // --- CRACKED OVERLAY ---
@@ -4187,6 +4227,31 @@ function loadPlanet(planet) {
       for(let i=0;i<popCount;i++) generateInhabitant(Math.random()*(worldWidth-400)+200);
     }
     initialPopulation=popCount;
+    // --- ROMEO & JULIET COUPLES ---
+    // Pair up ~6% of humans with a nearby partner. When one dies, the other goes into inconsolable grief.
+    // When alive and panic kicks in, they run toward each other instead of away.
+    if(planet.id==='earth' && !window.prehistoricEra){
+      const eligible = humans.filter(h=>!h.isDino&&!h.isRobot&&!h.isAstronaut&&!h.costume&&h.type!=='child'&&h.type!=='indigenous');
+      const shuffled = eligible.slice().sort(()=>Math.random()-0.5);
+      const targetPairs = Math.floor(eligible.length*0.06);
+      let made=0;
+      for(let i=0;i<shuffled.length && made<targetPairs;i++){
+        const a = shuffled[i];
+        if(a.loverId!==undefined) continue;
+        // Find nearest unpaired eligible
+        let best=null, bestD=400;
+        for(let j=0;j<shuffled.length;j++){
+          const b=shuffled[j]; if(b===a||b.loverId!==undefined) continue;
+          const d=Math.abs(b.bodyX-a.bodyX);
+          if(d<bestD){ bestD=d; best=b; }
+        }
+        if(best){
+          a.loverId = humans.indexOf(best);
+          best.loverId = humans.indexOf(a);
+          made++;
+        }
+      }
+    }
     // Earth desert: guarantee at least one enterable pyramid
     if(planet.id==='earth'){
       const openPys = buildings.filter(bl => bl.blocks[0]&&bl.blocks[0].buildingType==='openPyramid');
@@ -10969,7 +11034,7 @@ function leavePlanet() {
   ship.vx = 0; ship.vy = -2;
   saveGame(); // auto-save when leaving planet
   blocks=[]; buildings=[]; humans=[]; particles=[]; debris=[]; tears=[]; cows=[];
-  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[];
+  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[]; roadkill=[]; droppedItems=[]; craters=[]; bloodFootprints=[];
   speechBubbles=[]; missiles=[]; fires=[]; clouds=[]; vehicles=[]; weather=[]; hazards=[]; turrets=[]; laserShots=[]; military=[];
   stunWaves=[]; plasmaBolts=[]; gravityWells=[]; parasites=[]; ashPiles=[]; acidPuddles=[]; rockets=[]; chainsawSlashes=[]; chainsawRev=0;
   underwaterCaves=[]; caveCreatures=[]; underwaterObjects=[];
@@ -11268,8 +11333,44 @@ function spawnGibs(h,ix,iy,power){
       rot:Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.4,
       size:sz, life:240+Math.random()*120, kind, color:kind==='torso'?bodyC:skin, bloodC:c, groundY:gy, onGround:false});
   }
-  // Big pool under kill site
-  bloodPools.push({x:h.bodyX,y:gy,r:1,targetR:14+Math.random()*10+P*4,life:1500,maxLife:1500,color:c});
+  // Big pool under kill site — much longer persistence (was 1500, now 7200 ≈ 2 min)
+  bloodPools.push({x:h.bodyX,y:gy,r:1,targetR:14+Math.random()*10+P*4,life:7200,maxLife:7200,color:c});
+  // If the hit was a heavy splat (power ≥ 2 = lasso/vehicle/rocket), also drop a flat roadkill
+  // silhouette under the impact site.
+  if(P>=2){
+    roadkill.push({x:h.bodyX,y:gy,color:bodyC,skin:skin,life:14400,maxLife:14400,rot:(Math.random()-0.5)*0.5});
+  }
+  // Register the kill for HUD counter/combo
+  registerKill(h);
+}
+// Central kill registration — increments counter, combo, triggers screen flash + slowmo.
+// Also broadcasts panic to anyone who witnessed it (LOS: same Y band, within 260px).
+function registerKill(victim){
+  killCount++;
+  killCombo++;
+  killComboTimer=60; // 1s window for combo
+  killFlashT=8;
+  if(killCombo>=5 && slowmoTimer<=0){
+    slowmoTimer=22;
+  }
+  // Witness panic propagation — people who see the kill go berserk
+  if(victim && victim.bodyX!=null){
+    const vx = victim.bodyX, vy = victim.bodyY || GROUND_LEVEL-20;
+    for(let i=0;i<humans.length;i++){
+      const w = humans[i];
+      if(w===victim||w.collected||w.hidden||w.ragdoll||w.isDino) continue;
+      const dx = w.bodyX - vx;
+      const dy = (w.bodyY||GROUND_LEVEL) - vy;
+      if(Math.abs(dx) > 260 || Math.abs(dy) > 100) continue;
+      w.panicLevel = Math.min(10, (w.panicLevel||0) + 3);
+      w.crying = true;
+      // Run away from where the kill happened
+      w.walkDir = dx >= 0 ? 1 : -1;
+      w.walkSpeed = Math.max(w.walkSpeed||0, 2.2);
+      w.filming = false;
+      w._droppedItem = w._droppedItem; // keep item drop flag state
+    }
+  }
 }
 function stepGibs(){
   for(let i=gibs.length-1;i>=0;i--){
@@ -11301,6 +11402,160 @@ function stepSkidMarks(){
   for(let i=skidMarks.length-1;i>=0;i--){
     const s=skidMarks[i]; s.life--;
     if(s.life<=0)skidMarks.splice(i,1);
+  }
+}
+function stepRoadkill(){
+  for(let i=roadkill.length-1;i>=0;i--){
+    const r=roadkill[i]; r.life--;
+    if(r.life<=0)roadkill.splice(i,1);
+  }
+  if(roadkill.length>60)roadkill.splice(0, roadkill.length-60);
+}
+function stepCraters(){
+  for(let i=craters.length-1;i>=0;i--){
+    const c=craters[i]; c.life--;
+    if(c.life<=0)craters.splice(i,1);
+  }
+  if(craters.length>30)craters.splice(0, craters.length-30);
+}
+function stepDroppedItems(){
+  for(let i=droppedItems.length-1;i>=0;i--){
+    const d=droppedItems[i]; d.life--;
+    if(d.life<=0)droppedItems.splice(i,1);
+  }
+  if(droppedItems.length>80)droppedItems.splice(0, droppedItems.length-80);
+}
+function stepBloodFootprints(){
+  for(let i=bloodFootprints.length-1;i>=0;i--){
+    const f=bloodFootprints[i]; f.life--;
+    if(f.life<=0)bloodFootprints.splice(i,1);
+  }
+  if(bloodFootprints.length>60)bloodFootprints.splice(0, bloodFootprints.length-60);
+}
+function stepKillStats(){
+  if(killComboTimer>0){ killComboTimer--; if(killComboTimer===0) killCombo=0; }
+  if(slowmoTimer>0) slowmoTimer--;
+  if(killFlashT>0) killFlashT--;
+  if(alienBloodyT>0) alienBloodyT--;
+  // Power grid recovers very slowly
+  if(_blackoutLevel > 0) _blackoutLevel = Math.max(0, _blackoutLevel - 0.00015);
+  if(window._blackoutFlicker > 0) window._blackoutFlicker--;
+}
+function drawRoadkill(){
+  for(const r of roadkill){
+    const sx=r.x-camera.x, sy=r.y-camera.y;
+    if(sx<-40||sx>canvas.width+40||sy<-30||sy>canvas.height+30) continue;
+    const fade=Math.min(1, r.life/r.maxLife);
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(r.rot);
+    // Flat red smear base
+    ctx.globalAlpha = 0.55*fade;
+    ctx.fillStyle = '#4a0d08';
+    ctx.beginPath(); ctx.ellipse(0,0, 22, 7, 0, 0, Math.PI*2); ctx.fill();
+    // Squashed body (flat silhouette)
+    ctx.globalAlpha = 0.85*fade;
+    ctx.fillStyle = r.color || '#333';
+    ctx.beginPath(); ctx.ellipse(0,-1, 14, 4.5, 0, 0, Math.PI*2); ctx.fill();
+    // Head blob
+    ctx.fillStyle = r.skin || '#d8b892';
+    ctx.beginPath(); ctx.ellipse(-10, -1, 4.5, 3, 0, 0, Math.PI*2); ctx.fill();
+    // Darker outer red ring (coagulating)
+    ctx.globalAlpha = 0.4*fade;
+    ctx.fillStyle = '#22040a';
+    ctx.beginPath(); ctx.ellipse(0,0, 26, 8, 0, 0, Math.PI*2);
+    ctx.ellipse(0,0, 16, 4.5, 0, 0, Math.PI*2);
+    ctx.fill('evenodd');
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+}
+function drawCraters(){
+  for(const c of craters){
+    const sx=c.x-camera.x;
+    if(sx<-120||sx>canvas.width+120) continue;
+    const fade=Math.min(1, c.life/c.maxLife);
+    // Dark pit
+    ctx.globalAlpha = 0.6*fade;
+    ctx.fillStyle = '#1a1208';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r, c.r*0.35, 0, 0, Math.PI*2); ctx.fill();
+    // Inner darker
+    ctx.globalAlpha = 0.8*fade;
+    ctx.fillStyle = '#0a0604';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y+1, c.r*0.7, c.r*0.22, 0, 0, Math.PI*2); ctx.fill();
+    // Rim highlight (dust ring)
+    ctx.globalAlpha = 0.35*fade;
+    ctx.strokeStyle = '#5c4a2a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r*1.05, c.r*0.38, 0, 0, Math.PI*2); ctx.stroke();
+    // Debris chunks around edges
+    ctx.globalAlpha = 0.5*fade;
+    ctx.fillStyle = '#3a2a18';
+    const seed = (c.x|0);
+    for(let i=0;i<6;i++){
+      const a = (seed*13 + i*57) % 360;
+      const rad = c.r*0.9;
+      const dx = Math.cos(a*0.0174)*rad;
+      const dy = Math.sin(a*0.0174)*rad*0.35;
+      ctx.fillRect(c.x+dx-1.5, c.y+dy-1, 3, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+function drawDroppedItems(){
+  for(const d of droppedItems){
+    const sx=d.x-camera.x;
+    if(sx<-30||sx>canvas.width+30) continue;
+    const fade=Math.min(1, d.life/d.maxLife);
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.rot||0);
+    ctx.globalAlpha = fade;
+    if(d.kind==='phone'){
+      ctx.fillStyle='#111'; ctx.fillRect(-2, -4, 4, 8);
+      ctx.fillStyle='#3af'; ctx.globalAlpha=fade*(0.5+Math.random()*0.5);
+      ctx.fillRect(-1.5, -3.5, 3, 6);
+    } else if(d.kind==='bag'){
+      ctx.fillStyle=d.color||'#7a4a22'; ctx.fillRect(-4, -3, 8, 5);
+      ctx.fillStyle='#3a2010'; ctx.fillRect(-4, -3, 8, 1);
+      ctx.strokeStyle='#3a2010'; ctx.lineWidth=0.8;
+      ctx.beginPath(); ctx.arc(0, -3, 2.5, Math.PI, 0); ctx.stroke();
+    } else if(d.kind==='briefcase'){
+      ctx.fillStyle='#222'; ctx.fillRect(-5, -3, 10, 5);
+      ctx.strokeStyle='#c9a24a'; ctx.lineWidth=0.6;
+      ctx.strokeRect(-5, -3, 10, 5);
+      ctx.fillStyle='#c9a24a'; ctx.fillRect(-1, -4, 2, 1);
+    } else if(d.kind==='groceries'){
+      ctx.fillStyle='#8a4a2a'; ctx.fillRect(-4, -4, 8, 6);
+      ctx.fillStyle='#2a8a3a'; ctx.fillRect(-3, -5, 2, 2);
+      ctx.fillStyle='#d83030'; ctx.beginPath(); ctx.arc(1, -5, 1.2, 0, Math.PI*2); ctx.fill();
+    } else if(d.kind==='doll'){
+      ctx.fillStyle='#f2b8c4'; ctx.beginPath(); ctx.arc(0,-3,2,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#d84a60'; ctx.fillRect(-2, -1, 4, 4);
+    } else {
+      ctx.fillStyle='#666'; ctx.fillRect(-3,-3,6,6);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+}
+function drawBloodFootprints(){
+  for(const f of bloodFootprints){
+    const sx=f.x-camera.x;
+    if(sx<-30||sx>canvas.width+30) continue;
+    const fade=Math.min(1, f.life/f.maxLife);
+    ctx.globalAlpha = 0.6*fade;
+    ctx.fillStyle = '#5a0c08';
+    // Small 3-toe alien print
+    ctx.beginPath();
+    ctx.ellipse(f.x, f.y, 3, 1.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(f.x-1.5*(f.facing||1), f.y-2, 0.8, 0.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(f.x+0.3, f.y-2, 0.8, 0.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(f.x+2.0*(f.facing||1), f.y-2, 0.8, 0.8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
   }
 }
 function drawBloodPools(){
@@ -11472,8 +11727,22 @@ function mindControlAttack(){
   mindControl.atkCD=8;
 }
 
-// Transfer: alien teleports to puppet, puppet's body explodes.
+// Transfer: alien flows down the psychic tentacle into the puppet.
+// Kicks off a multi-frame animation — updateAlienOnFoot ticks _xfer and
+// mindControlFinishTransfer is called at progress>=1.
 function mindControlTransfer(){
+  if(!mindControl||!mindControl.target) return;
+  if(mindControl._xfer) return; // already transferring
+  mindControl._xfer = { t:0, duration:42 };
+  // Pre-departure spark at the alien's head — like the body is dissolving into the tether
+  for(let i=0;i<14;i++){
+    const a=Math.random()*Math.PI*2;
+    particles.push({x:alien.x,y:alien.y-26,vx:Math.cos(a)*1.5,vy:Math.sin(a)*1.5-0.5,life:24,
+      color:['#c4f','#a0f','#e8f','#fff'][Math.floor(Math.random()*4)],size:Math.random()*1.8+0.8});
+  }
+  triggerShake(2);
+}
+function mindControlFinishTransfer(){
   if(!mindControl||!mindControl.target) return;
   const p=mindControl.target;
   // Move alien to puppet position
@@ -11486,10 +11755,12 @@ function mindControlTransfer(){
   p.ragdoll=true; p.mindControlled=false; p.panicLevel=10;
   applyForce(p, (Math.random()-0.5)*2, -6);
   if(!window._explosionFlashes) window._explosionFlashes=[];
-  window._explosionFlashes.push({x:p.bodyX,y:p.bodyY,r:6,maxR:38,life:14});
-  for(let i=0;i<24;i++){
-    particles.push({x:p.bodyX,y:p.bodyY,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6-1,life:30,color:['#c4f','#a0f','#f0c','#fff'][Math.floor(Math.random()*4)],size:Math.random()*2+1});
+  window._explosionFlashes.push({x:p.bodyX,y:p.bodyY,r:6,maxR:48,life:18});
+  for(let i=0;i<32;i++){
+    particles.push({x:p.bodyX,y:p.bodyY,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.5)*7-1,life:34,
+      color:['#c4f','#a0f','#f0c','#fff','#e8f'][Math.floor(Math.random()*5)],size:Math.random()*2.5+1});
   }
+  triggerShake(4);
   mindControl=null;
   showMessage('Transferred');
 }
@@ -11563,6 +11834,39 @@ function checkBuildingDestroyed(b){if(b.building && b.health<=0 && !b.building.d
   if(currentPlanet)leaderRelations[currentPlanet.id]=Math.max(-10,(leaderRelations[currentPlanet.id]||0)-0.5);
   document.getElementById('buildings').textContent=buildingsDestroyed;showMessage(tr('msg.structureDemolished'));
   if(currentMission&&currentMission.type==='destroy'){currentMission.progress++;updateMission();}
+  // --- POWER GRID DAMAGE ---
+  // Any tall city building destroyed knocks out more of the grid. Flickers briefly then dims.
+  if(b.buildingType==='skyscraper' || b.buildingType==='office' || b.buildingType==='apartment'){
+    _blackoutLevel = Math.min(1, _blackoutLevel + 0.12);
+    window._blackoutFlicker = 40; // frames of flicker
+  }
+  // --- COLLAPSING-BUILDING TRAP ---
+  // Anyone standing in the building's footprint at the moment it falls gets crushed.
+  // Gib them, crater the ground, big shake.
+  const fx = b.x, fw = b.w, fRight = b.x + b.w;
+  for(let hi=0;hi<humans.length;hi++){
+    const hm = humans[hi];
+    if(hm.collected||hm.hidden||hm.ragdoll) continue;
+    if(hm.bodyX > fx - 10 && hm.bodyX < fRight + 10 && Math.abs(hm.bodyY - GROUND_LEVEL) < 80){
+      // Crushed
+      hm.ragdoll = true;
+      hm.crying = true;
+      hm.panicLevel = 10;
+      applyForce(hm, 0, 4); // flattened
+      spawnGibs(hm, 0, 2, 3); // heavy gib burst
+      registerKill(hm);
+      hm.collected = true;
+    }
+  }
+  // Crater where the building stood
+  craters.push({x: b.x + b.w/2, y: GROUND_LEVEL, r: Math.min(80, b.w*0.5+20), life: 36000, maxLife: 36000});
+  // Dust cloud
+  for(let i=0;i<20;i++){
+    particles.push({x: b.x + Math.random()*b.w, y: b.y + b.h*0.3 + Math.random()*b.h*0.5,
+      vx: (Math.random()-0.5)*5, vy: -Math.random()*3-1, life: 60+Math.random()*40,
+      color: `rgba(${180+Math.random()*30},${160+Math.random()*30},${140+Math.random()*30},0.55)`,
+      size: Math.random()*6+3});
+  }
   // Explosion debris
   triggerShake(6);
   for(let i=0;i<12;i++) debris.push({x:b.x+Math.random()*b.w,y:b.y+Math.random()*b.h,
@@ -11735,6 +12039,16 @@ function updateLasso(){
           try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
         }
       });
+    }
+    // Crater when lassoed building slams the ground
+    if(tgt.y+tgt.h >= GROUND_LEVEL-2 && _blkSpeed>5 && !tgt._cratered){
+      craters.push({x:tgt.x+tgt.w/2, y:GROUND_LEVEL, r:Math.min(60, tgt.w*0.6+_blkSpeed*2), life:36000, maxLife:36000});
+      // Debris puff
+      for(let i=0;i<12;i++){
+        particles.push({x:tgt.x+Math.random()*tgt.w, y:GROUND_LEVEL, vx:(Math.random()-0.5)*6, vy:-Math.random()*4-1, life:40, color:'rgba(120,100,80,0.7)', size:Math.random()*3+2});
+      }
+      triggerShake(8);
+      tgt._cratered=true;
     }
   } else if(l.targetType==='vehicle'){
     tgt.vx = (tgt.vx||0) + ux*pull*1.2;
@@ -12335,6 +12649,23 @@ function updateAlienWeapons(){
       const sc = h.scale || 1;
       const power = Math.min(5, 2 + sc*0.4);
       spawnGibs(h, s.dir*6, -4-Math.random()*3, power);
+      // DISMEMBERMENT: chainsaw sends extra limbs flying that linger on the ground
+      const bloodC = h.skinColor ? '#7a0a0a' : '#7a0a0a';
+      const bc = h.color || '#444';
+      const gy = (typeof GROUND_LEVEL !== 'undefined') ? GROUND_LEVEL : h.bodyY+40;
+      const limbKinds = ['arm','leg','arm','leg','head'];
+      for(let k=0;k<3+Math.floor(Math.random()*2);k++){
+        gibs.push({x:h.bodyX+(Math.random()-0.5)*6, y:h.bodyY-10+(Math.random()-0.5)*8,
+          vx: s.dir*(3+Math.random()*4), vy: -3-Math.random()*3,
+          rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.35,
+          size: 3+Math.random()*1.5, life: 900, kind: limbKinds[Math.floor(Math.random()*limbKinds.length)],
+          color: bc, bloodC: bloodC, groundY: gy, onGround: false});
+      }
+      // Extra arterial spray
+      for(let k=0;k<10;k++){
+        particles.push({x:h.bodyX, y:h.bodyY-10, vx: s.dir*(2+Math.random()*3)+(Math.random()-0.5)*2,
+          vy: -2-Math.random()*3, life: 22+Math.random()*12, color: '#c00020', size: 1.5+Math.random()*2, gravity: 0.2});
+      }
       h.collected=true;
       triggerShake(Math.min(4, 2.5 + sc*0.3));
       planetTerror=Math.min(planetTerror+0.25,10);
@@ -12428,6 +12759,21 @@ function updateAlienWeapons(){
           const sc=h.scale||1;
           const power=Math.min(5, 2.5+sc*0.4);
           spawnGibs(h, fx*2, fy*2-2, power);
+          // DISMEMBERMENT: rocket hit — scatter multiple limb gibs radially
+          const bloodC = '#7a0a0a';
+          const bc = h.color || '#444';
+          const gy = (typeof GROUND_LEVEL !== 'undefined') ? GROUND_LEVEL : h.bodyY+40;
+          const limbKinds = ['arm','leg','arm','leg','head','torso'];
+          const nLimbs = 4 + Math.floor(Math.random()*3);
+          for(let k=0;k<nLimbs;k++){
+            const ang = Math.random()*Math.PI*2;
+            const sp = 4 + Math.random()*5;
+            gibs.push({x:h.bodyX+(Math.random()-0.5)*8, y:h.bodyY-10+(Math.random()-0.5)*10,
+              vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - 3,
+              rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.5,
+              size: 3+Math.random()*2, life: 1200, kind: limbKinds[Math.floor(Math.random()*limbKinds.length)],
+              color: bc, bloodC: bloodC, groundY: gy, onGround: false});
+          }
           h.collected=true;
           planetTerror=Math.min(planetTerror+0.25,10);
           try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
@@ -12975,13 +13321,45 @@ function updatePlanetShared(){
           if(Math.abs(f.x-h.bodyX)<22&&Math.abs(f.y-h.bodyY)<36){h.onFire=true;h.burnTimer=360+Math.random()*180;h.ignitionCD=45;break;}
         }
       }
+      // Mind-controlled puppets are steered entirely by updateAlienOnFoot's MC tick.
+      // Skip the normal behavior AI so it can't override walkDir/walkSpeed or drag the puppet around.
+      if(h.mindControlled){
+        h.panicLevel = 0;
+        h.crying = false;
+        h.filming = false;
+        h.praying = false;
+        h.begging = false;
+      } else
       if(h.idleTimer<=0){const dS=dist(ship.x,ship.y,h.bodyX,h.bodyY);
         const terrorBonus=planetTerror*0.3;
         // Only panic when attacked: beam active, flamethrower, explosions nearby, or high terror
         const beamNear=ship.beamActive&&dS<300;
         const flameNear=ship.flameOn&&dS<250;
         const terrorClose=planetTerror>2&&dS<200+planetTerror*20;
-        const shouldPanic=beamNear||flameNear||terrorClose;
+        let shouldPanic=beamNear||flameNear||terrorClose;
+        // --- LOVER GRIEF / REUNITE ---
+        if(h.loverId!==undefined){
+          const lover = humans[h.loverId];
+          if(!lover || lover.collected || (lover.ragdoll && !lover.beingBeamed) || !lover.alive){
+            // Partner dead/taken — inconsolable grief, kneel and wail
+            h.grieving = true;
+            h.crying = true;
+            h.panicLevel = Math.max(h.panicLevel, 7);
+            h.walkSpeed = 0.2;
+            // If near the body, kneel (stop walking)
+            if(lover && !lover.collected && Math.abs(lover.bodyX - h.bodyX) < 40){
+              h.walkSpeed = 0;
+              h.walkDir = 0;
+            }
+          } else if(shouldPanic){
+            // Panic — run toward each other if alive (reunite), override default flee direction
+            const dxL = lover.bodyX - h.bodyX;
+            if(Math.abs(dxL) > 30 && Math.abs(dxL) < 800){
+              h.walkDir = dxL>0?1:-1;
+            }
+          }
+        }
+        if(h.grieving) shouldPanic = true;
         if(h.onFire){
           // Burning: zigzag panic-run, emit flame particles, spread to nearby humans, tick down to ash
           h.burnTimer--;
@@ -12994,16 +13372,20 @@ function updatePlanetShared(){
               vx:(Math.random()-0.5)*0.8,vy:-Math.random()*2-0.5,life:14,
               color:['#f80','#fa0','#f40','#fc0'][Math.floor(Math.random()*4)],size:Math.random()*2.5+1});
           }
-          // Contact spread (throttled)
-          if(h.ignitionCD<=0&&Math.random()>0.85){
+          // Contact spread — more aggressive now. Wider range, better chance, can ignite
+          // multiple victims per tick for real chain-reactions through crowds.
+          if(h.ignitionCD<=0&&Math.random()>0.6){
+            let lit=0;
             for(let hi=0;hi<humans.length;hi++){
               const h2=humans[hi];
               if(h2===h||h2.collected||h2.onFire||h2.ragdoll||h2.hidden)continue;
-              if(Math.abs(h2.bodyX-h.bodyX)<24&&Math.abs(h2.bodyY-h.bodyY)<32){
-                h2.onFire=true;h2.burnTimer=320+Math.random()*180;h2.ignitionCD=60;break;
+              if(Math.abs(h2.bodyX-h.bodyX)<34&&Math.abs(h2.bodyY-h.bodyY)<38){
+                h2.onFire=true;h2.burnTimer=320+Math.random()*180;h2.ignitionCD=60;
+                h2.panicLevel=10; h2.crying=true;
+                if(++lit>=2) break;
               }
             }
-            h.ignitionCD=18;
+            h.ignitionCD=14;
           }
           // Ocean extinguishes
           if(currentPlanet&&currentPlanet.id==='earth'&&isOverOcean(h.bodyX)){h.onFire=false;h.burnTimer=0;}
@@ -13016,10 +13398,18 @@ function updatePlanetShared(){
             bloodPools.push({x:h.bodyX,y:GROUND_LEVEL,r:2,targetR:9+Math.random()*4,life:1400,maxLife:1400,color:'#2a0a06'});
             // Charred bone fragments
             for(let i=0;i<2;i++)gibs.push({x:h.bodyX+(Math.random()-0.5)*6,y:GROUND_LEVEL-4,vx:(Math.random()-0.5)*1.5,vy:-Math.random()*2,rot:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.2,size:3,life:400,kind:'torso',color:'#3a2a20',bloodC:'#1a0402',groundY:GROUND_LEVEL,onGround:false});
+            registerKill(h);
             h.collected=true;return;
           }
         }
         else if(shouldPanic){h.panicLevel=Math.min(h.panicLevel+0.05+terrorBonus*0.02,10);h.crying=true;h.walkDir=h.bodyX<ship.x?-1:1;h.walkSpeed=1.5+h.panicLevel*0.3+terrorBonus*0.15;
+          // Drop whatever you were carrying once, first time panic spikes
+          if(h.panicLevel>3 && !h._droppedItem && !h.isDino && !h.isRobot){
+            h._droppedItem=true;
+            const kinds=['phone','phone','phone','bag','briefcase','groceries','doll'];
+            const kind=kinds[Math.floor(Math.random()*kinds.length)];
+            droppedItems.push({x:h.bodyX+(Math.random()-0.5)*8, y:GROUND_LEVEL-2, kind:kind, rot:(Math.random()-0.5)*1.5, life:3600, maxLife:3600, color:'#7a4a22'});
+          }
           const screamChance=0.98-planetTerror*0.01;
           if(h.panicLevel>1.5&&Math.random()>screamChance)speechBubbles.push({x:h.headX,y:h.headY-20,text:ta('planet.'+p.id+'.cryPhrases')[Math.floor(Math.random()*ta('planet.'+p.id+'.cryPhrases').length)],life:70,vy:-0.3});
           // Panic propagation: every ~30 frames, a heavily-panicking human scares one nearby witness (wave effect).
@@ -13043,6 +13433,45 @@ function updatePlanetShared(){
           speechBubbles.push({x:h.headX,y:h.headY-20,text:["THEY'RE HERE","RUN","HIDE","IT'S OVER"][Math.floor(Math.random()*4)],life:60,vy:-0.3});
         }else{
           h.panicLevel=Math.max(0,h.panicLevel-0.01);if(h.panicLevel<0.5)h.crying=false;
+          // PRAYING: priests always pray when ship approaches; nearby civilians pray during medium terror if a church is close.
+          const isPriest = h.type==='priest';
+          let nearChurch = false;
+          if(!h.isDino && !h.isRobot){
+            if(isPriest && dS < 700){
+              nearChurch = true;
+            } else if(planetTerror > 2 && planetTerror < 6){
+              // Check if any nearby church building exists
+              for(let bi=0;bi<blocks.length;bi++){
+                const bb=blocks[bi];
+                if(bb.dead||bb.buildingType!=='church') continue;
+                if(Math.abs((bb.x+bb.w/2) - h.bodyX) < 140){ nearChurch = true; break; }
+              }
+            }
+          }
+          if(nearChurch && !h.ragdoll && !h.onFire && !h.beingBeamed){
+            h.begging = true;
+            h.beggingTimer = Math.max(h.beggingTimer||0, 120);
+            h.praying = true;
+            h.walkSpeed = 0;
+            h.walkDir = h.bodyX < ship.x ? 1 : -1;
+            h.filming = false;
+          } else {
+            h.praying = false;
+            // PHONE FILMING: ship is visible but not attacking yet → some civilians stop and film.
+            // Idiots. Great viral content, terrible survival instinct.
+            if(!h.isDino && !h.isRobot && !h.grieving && dS<500 && dS>120 && planetTerror<4 && h.type!=='child' && h.type!=='indigenous'){
+              if(h._filmRoll===undefined) h._filmRoll = Math.random();
+              if(h._filmRoll < 0.35){
+                h.filming = true;
+                h.walkSpeed = 0;
+                h.walkDir = h.bodyX < ship.x ? 1 : -1; // face the ship
+              } else {
+                h.filming = false;
+              }
+            } else {
+              h.filming = false;
+            }
+          }
           h.behaviorTimer=(h.behaviorTimer||0)-1;
           // --- CARNIVORE DINO HUNTING ---
           // T-Rex and Raptors (when in prehistoric Earth) hunt the herbivore dinos.
@@ -13398,6 +13827,7 @@ function updatePlanetShared(){
   stepParticles();
   if(particles.length>150)particles.splice(0,particles.length-150);
   stepBloodDroplets(); stepGibs(); stepBloodPools(); stepSkidMarks();
+  stepRoadkill(); stepCraters(); stepDroppedItems(); stepBloodFootprints(); stepKillStats();
   if(bloodPools.length>120)bloodPools.splice(0,bloodPools.length-120);
   if(gibs.length>80)gibs.splice(0,gibs.length-80);
   if(skidMarks.length>200)skidMarks.splice(0,skidMarks.length-200);
@@ -13565,6 +13995,16 @@ function updatePlanetShared(){
     if(v.hijacked) return; // player-controlled; updated in updateAlienOnFoot
     // Sim radius: skip AI for vehicles far from player (still renders if on-screen)
     if(Math.abs(v.x-_simPX)>3000)return;
+    // --- MASS EXODUS: at high terror, vehicles floor it away from the ship ---
+    if(planetTerror > 4 && !v._exodusBoost){
+      const baseSpeed = v.speed || Math.abs(v.vx) || 1.5;
+      // Flee away from ship
+      const awayDir = (v.x + v.w/2) < ship.x ? -1 : 1;
+      v.vx = awayDir * baseSpeed * (1.8 + Math.min(1.5, (planetTerror-4)*0.2));
+      v._exodusBoost = true; // one-time nudge
+      v._exodusHonk = 120; // panic honking window
+    }
+    if(v._exodusHonk > 0){ v._exodusHonk--; }
     v.x+=v.vx;
     // Stay in home zone, avoid ocean
     const vMin=v.homeMin||100, vMax=v.homeMax||(worldWidth-100);
@@ -13815,10 +14255,51 @@ function updateAlienOnFoot(){
     if(!tgt||tgt.collected||tgt.hidden||tgt.ragdoll){ mindControl=null; }
     else {
       if(mindControl.atkCD>0) mindControl.atkCD--;
-      // Steer the puppet
-      tgt.walkSpeed=0;
-      if(keys['a']||keys['arrowleft']){ tgt.walkDir=-1; tgt.walkSpeed=2.5; }
-      else if(keys['d']||keys['arrowright']){ tgt.walkDir=1; tgt.walkSpeed=2.5; }
+      // Transfer animation in progress — lock out steering, alien sits still,
+      // the render hook draws the traveling blob inside the tentacle.
+      if(mindControl._xfer){
+        mindControl._xfer.t++;
+        // Spark trail emitted from somewhere along the spine each frame
+        const k = Math.min(1, mindControl._xfer.t / mindControl._xfer.duration);
+        // Approx point between alien head and puppet head — particles at the leading edge
+        const sxp=alien.x, syp=alien.y-26;
+        const tx=tgt.headX, ty=tgt.headY;
+        const bx = sxp + (tx-sxp)*k, by = syp + (ty-syp)*k;
+        if(particles.length<260){
+          for(let i=0;i<2;i++){
+            particles.push({x:bx+(Math.random()-0.5)*6, y:by+(Math.random()-0.5)*6,
+              vx:(Math.random()-0.5)*1.4, vy:(Math.random()-0.5)*1.4-0.3, life:18+Math.random()*10,
+              color:['#c4f','#a0f','#e8f','#fff'][Math.floor(Math.random()*4)], size:Math.random()*1.6+0.6});
+          }
+        }
+        alien.vx*=0.5;
+        if(mindControl._xfer.t >= mindControl._xfer.duration){
+          mindControlFinishTransfer();
+        }
+        return; // skip normal alien movement and puppet steering this frame
+      }
+      // Steer the puppet — resolve direction cleanly (can't go both ways at once)
+      // and sprint with Shift. Apply the movement directly here and zero walkSpeed
+      // so the human AI loop can't drag the puppet elsewhere this frame.
+      const wantL = !!(keys['a']||keys['arrowleft']);
+      const wantR = !!(keys['d']||keys['arrowright']);
+      const sprintMC = !!(keys['shift']||keys['shiftleft']||keys['shiftright']);
+      let dir = 0;
+      if(wantL && !wantR) dir = -1;
+      else if(wantR && !wantL) dir = 1;
+      const mcSpeed = sprintMC ? 4.2 : 2.5;
+      if(dir !== 0){
+        tgt.walkDir = dir;
+        const dx = dir * mcSpeed;
+        tgt.bodyX += dx; tgt.headX += dx;
+        tgt.legLX += dx; tgt.legRX += dx;
+        tgt.armLX += dx; tgt.armRX += dx;
+        tgt.footLX += dx; tgt.footRX += dx;
+        tgt.walkTimer = (tgt.walkTimer||0) + 0.15 + (sprintMC?0.1:0);
+      }
+      // Zero walkSpeed so the normal human AI loop (which also applies walkDir*walkSpeed later)
+      // doesn't add a second motion vector on top of ours.
+      tgt.walkSpeed = 0;
       // Jump (SPACE — edge-triggered, only when grounded)
       if(tgt.mcJumpY==null) tgt.mcJumpY=0;
       if(tgt.mcJumpVY==null) tgt.mcJumpVY=0;
@@ -14000,6 +14481,26 @@ function updateAlienOnFoot(){
     if(alien.diveSuitShownT>0) alien.diveSuitShownT--;
     if(alien.y>=floorY){alien.y=floorY;alien.vy=0;alien.onGround=true;alien.jetpackFuel=Math.min(100,alien.jetpackFuel+0.3);}
     else{alien.onGround=false;}
+  }
+
+  // Bloody footprints: if alien steps through a blood pool, feet become gory and print on ground for a while.
+  if(alien.onGround && Math.abs(alien.vx) > 0.3){
+    // Check pool contact
+    for(let i=bloodPools.length-1;i>=0;i--){
+      const p=bloodPools[i];
+      if(Math.abs(p.x-alien.x) < p.r*0.8 && Math.abs(p.y-GROUND_LEVEL) < 6){
+        alienBloodyT = Math.max(alienBloodyT, 240); // ~4s of bloody prints
+        break;
+      }
+    }
+    if(alienBloodyT > 0){
+      if(!alien._bfNext) alien._bfNext = 0;
+      alien._bfNext -= Math.abs(alien.vx);
+      if(alien._bfNext <= 0){
+        alien._bfNext = 10;
+        bloodFootprints.push({x: alien.x + (Math.random()-0.5)*2, y: GROUND_LEVEL-1, facing: alien.facing||1, life: 1200, maxLife: 1200});
+      }
+    }
   }
 
   // Moon footprints: leave permanent boot impressions when walking on the lunar surface.
@@ -15177,6 +15678,41 @@ function drawSpace(){
   }
 
   if(!transition.active)drawMinimap();
+
+  // --- TERROR VIGNETTE PULSE ---
+  // Red screen-edge glow that pulses with planetTerror. Stronger/faster as terror rises.
+  if(planetTerror > 1.5){
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    const cw=canvas.width, ch=canvas.height;
+    const t = performance.now()/1000;
+    const pulse = 0.5 + 0.5*Math.sin(t*(1+planetTerror*0.3));
+    const intensity = Math.min(1, (planetTerror-1.5)/6);
+    const rg = ctx.createRadialGradient(cw/2, ch/2, Math.min(cw,ch)*0.3, cw/2, ch/2, Math.max(cw,ch)*0.75);
+    rg.addColorStop(0, 'rgba(0,0,0,0)');
+    rg.addColorStop(1, `rgba(120,0,0,${(0.22+0.28*intensity)*(0.6+0.4*pulse)})`);
+    ctx.fillStyle = rg; ctx.fillRect(0,0,cw,ch);
+    ctx.restore();
+  }
+  // --- KILL FLASH — quick red whiteout on registerKill ---
+  if(killFlashT > 0){
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = `rgba(180,20,20,${0.18*(killFlashT/8)})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.restore();
+  }
+  // --- SLOWMO DESATURATION TINT ---
+  if(slowmoTimer > 0){
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = `rgba(160,40,40,${0.08*(slowmoTimer/22)})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // "COMBO" marker
+    if(killCombo >= 5){
+      ctx.fillStyle=`rgba(255,60,60,${0.5+0.5*Math.sin(performance.now()/40)})`;
+      ctx.font='bold 22px monospace'; ctx.textAlign='center';
+      ctx.fillText(`x${killCombo} COMBO`, canvas.width/2, 80);
+    }
+    ctx.restore();
+  }
 }
 
 function drawMinimap(){
@@ -17158,7 +17694,11 @@ function drawPlanet(){
 
   // --- GROUND-LEVEL GORE / TIRE MARKS (under humans) ---
   drawSkidMarks();
+  drawCraters();
   drawBloodPools();
+  drawRoadkill();
+  drawBloodFootprints();
+  drawDroppedItems();
 
   // --- DRAW INHABITANTS (with frustum culling) ---
   humans.forEach(h=>{if(h.collected||h.hidden)return;
@@ -17612,9 +18152,14 @@ function drawPlanet(){
     }
 
     // Body (all races/skins + bodyType variations)
-    if(alienCloak.active){ctx.save();ctx.globalAlpha=0.18+Math.sin(frameNow*0.005)*0.06;}
+    // During mind-control transfer, fade the alien body — it's flowing into the tentacle
+    const _mcx = mindControl && mindControl._xfer;
+    if(_mcx){
+      const _xk = Math.min(1, _mcx.t/_mcx.duration);
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - _xk*1.2);
+    } else if(alienCloak.active){ctx.save();ctx.globalAlpha=0.18+Math.sin(frameNow*0.005)*0.06;}
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
-    if(alienCloak.active)ctx.restore();
+    if(_mcx || alienCloak.active) ctx.restore();
 
     // --- Mind-control tether: a psychic tentacle from the alien to the puppet's head ---
     if(mindControl && mindControl.target){
@@ -17644,8 +18189,17 @@ function drawPlanet(){
         pts.push({x:sx+dx*k+px*w, y:sy+dy*k+py*w, k});
       }
       ctx.save();
+      // Transfer state — beef up the tentacle and plan a traveling blob
+      const xfer = mindControl._xfer;
+      const xk = xfer ? Math.min(1, xfer.t/xfer.duration) : -1;
+      const boost = xfer ? (1 + 0.8*Math.sin(xfer.t*0.5)) : 1;
       // Tapered tentacle body — draw several overlapping strokes, thickest first
-      const layers=[
+      const layers = xfer ? [
+        {w:12*boost, c:'rgba(160,80,220,0.5)'},
+        {w:7*boost,  c:'rgba(200,120,240,0.95)'},
+        {w:4,        c:'rgba(230,170,250,1)'},
+        {w:1.6,      c:'rgba(255,240,255,1)'}
+      ] : [
         {w:8, c:'rgba(120,60,180,0.35)'},   // outer glow
         {w:5, c:'rgba(170,90,220,0.85)'},   // main body
         {w:3, c:'rgba(210,140,240,0.95)'},  // mid highlight
@@ -17667,12 +18221,58 @@ function drawPlanet(){
         ctx.fillStyle='rgba(255,200,255,0.5)';
         ctx.beginPath(); ctx.arc(p.x-0.4, p.y-0.4, r*0.4, 0, Math.PI*2); ctx.fill();
       }
-      // Pulsing grip at the puppet's head (tip)
-      const pulse=0.5+Math.sin(now*3)*0.3;
-      const eg=ctx.createRadialGradient(txp,typ,0,txp,typ,11);
+      // Traveling alien blob — you see the alien flowing down the tentacle
+      if(xfer){
+        // Ease in-out so it settles into the puppet
+        const ease = xk<0.5 ? 2*xk*xk : 1 - Math.pow(-2*xk+2,2)/2;
+        const idxF = ease*(pts.length-1);
+        const i0 = Math.floor(idxF), i1 = Math.min(pts.length-1, i0+1);
+        const ft = idxF - i0;
+        const bx = pts[i0].x + (pts[i1].x-pts[i0].x)*ft;
+        const by = pts[i0].y + (pts[i1].y-pts[i0].y)*ft;
+        // Tangent angle so the silhouette rides the tentacle
+        const tdx = pts[i1].x-pts[i0].x, tdy = pts[i1].y-pts[i0].y;
+        const ang = Math.atan2(tdy,tdx);
+        // Outer halo
+        const haloR = 14 + Math.sin(xfer.t*0.6)*3;
+        const haloG = ctx.createRadialGradient(bx,by,0,bx,by,haloR);
+        haloG.addColorStop(0,'rgba(230,180,255,0.95)');
+        haloG.addColorStop(0.5,'rgba(180,100,230,0.55)');
+        haloG.addColorStop(1,'transparent');
+        ctx.fillStyle=haloG; ctx.beginPath(); ctx.arc(bx,by,haloR,0,Math.PI*2); ctx.fill();
+        // Squished alien silhouette rotating along the tentacle direction
+        ctx.save();
+        ctx.translate(bx,by); ctx.rotate(ang);
+        // Body — gradient
+        const bodyG = ctx.createLinearGradient(-5,0,5,0);
+        bodyG.addColorStop(0,'#5a2a80');
+        bodyG.addColorStop(0.5,'#b070e0');
+        bodyG.addColorStop(1,'#5a2a80');
+        ctx.fillStyle = bodyG;
+        ctx.beginPath(); ctx.ellipse(0,0, 7, 3.2, 0, 0, Math.PI*2); ctx.fill();
+        // Head in front of travel direction
+        ctx.fillStyle = '#d8b0ff';
+        ctx.beginPath(); ctx.ellipse(4.5,-0.5, 2.8, 2.2, 0, 0, Math.PI*2); ctx.fill();
+        // Eyes — black almonds
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.ellipse(5.4,-0.8, 0.9, 0.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(3.8,-0.8, 0.9, 0.5, 0, 0, Math.PI*2); ctx.fill();
+        // Trailing wisps behind body
+        ctx.strokeStyle='rgba(230,180,255,0.7)'; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-10-Math.sin(xfer.t*0.7)*2,-1.6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-10-Math.cos(xfer.t*0.5)*2, 1.6); ctx.stroke();
+        ctx.restore();
+        // Bright core flash
+        ctx.fillStyle='rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(bx,by, 2+Math.sin(xfer.t*0.8)*0.8, 0, Math.PI*2); ctx.fill();
+      }
+      // Pulsing grip at the puppet's head (tip) — brighter during transfer
+      const pulse = xfer ? (0.75 + Math.sin(now*5)*0.2) : (0.5 + Math.sin(now*3)*0.3);
+      const gripR = xfer ? 15 : 11;
+      const eg=ctx.createRadialGradient(txp,typ,0,txp,typ,gripR);
       eg.addColorStop(0,`rgba(220,160,255,${pulse})`);
       eg.addColorStop(1,'transparent');
-      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(txp,typ,11,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(txp,typ,gripR,0,Math.PI*2);ctx.fill();
       // Crown ring orbiting the puppet's head — clear "this one is controlled" marker
       ctx.strokeStyle=`rgba(220,160,255,${0.55+Math.sin(now*4)*0.25})`;ctx.lineWidth=1.3;
       ctx.beginPath();ctx.ellipse(txp,typ-2,10,3.8,Math.sin(now*2)*0.4,0,Math.PI*2);ctx.stroke();
@@ -19711,6 +20311,27 @@ function renderHuman(h){
   }
   if(flipDir)ctx.restore();
   if(_floatApplied) ctx.restore();
+  // Phone in hand (drawn unflipped so it's always pointed at ship)
+  if(h.filming && !h.ragdoll && !h.beingBeamed){
+    const ps = h.scale||1;
+    const phx = h.bodyX + 6*ps, phy = h.bodyY - 12*ps;
+    ctx.fillStyle='#111';
+    ctx.fillRect(phx-2, phy-4, 4, 8);
+    // Screen glow — pulses subtly
+    const glow = 0.4 + 0.2*Math.sin(performance.now()/120 + h.bodyX*0.01);
+    ctx.fillStyle = `rgba(80,160,255,${glow})`;
+    ctx.fillRect(phx-1.5, phy-3.5, 3, 7);
+    // Camera lens on back
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(phx, phy-2.5, 0.6, 0, Math.PI*2); ctx.fill();
+    // Arm holding phone up (thin line from body)
+    ctx.strokeStyle = h.skinColor || '#d8b892';
+    ctx.lineWidth = 1.8*ps;
+    ctx.beginPath();
+    ctx.moveTo(h.bodyX+2, h.bodyY-4*ps);
+    ctx.lineTo(phx, phy);
+    ctx.stroke();
+  }
 }
 
 function renderCow(c){
@@ -21862,6 +22483,12 @@ function gameLoop(){
   }
   let _t0=performance.now();
   if(hitStopFrames>0){ hitStopFrames--; }
+  else if(slowmoTimer>0){
+    // Run update at 50% rate — skip every other frame for bullet-time feel
+    window._slowmoSkip = !window._slowmoSkip;
+    if(!window._slowmoSkip) update();
+    else stepKillStats(); // still decay the timer while slow
+  }
   else { update(); }
   window._tUpd=(performance.now()-_t0)|0;_t0=performance.now();draw();window._tDrw=(performance.now()-_t0)|0;updateAmbience();
   // FPS tracking
@@ -22066,7 +22693,7 @@ function exitDebugMode(){
   mainMenuSel=0;
   // Reset arrays so a later real game start is clean
   humans=[]; cows=[]; vehicles=[]; military=[]; hazards=[]; particles=[]; speechBubbles=[];
-  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[];
+  bloodPools=[]; gibs=[]; skidMarks=[]; bloodDroplets=[]; roadkill=[]; droppedItems=[]; craters=[]; bloodFootprints=[];
 }
 
 // Auto-save periodically
