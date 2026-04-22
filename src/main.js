@@ -4346,6 +4346,17 @@ function generateVehicles(){
       vehicles.push({...vTypes[4],x:_dMin+500+Math.random()*(_dMax-_dMin-1000),y:GROUND_LEVEL,vx:(Math.random()>0.5?1:-1)*0.6,alive:true,
         exploding:0,homeMin:_dMin,homeMax:_dMax,color:'#8a7060'});
     }
+    // Snow: 3 snowmobiles instead of cars — roads don't work in snowdrifts
+    const _snow=earthBiomes.find(b=>b.id==='snow');
+    if(_snow){
+      const sledColors=['#c33','#2a6aa0','#e8a020'];
+      for(let i=0;i<3;i++){
+        vehicles.push({type:'snowmobile',w:54,h:22,color:sledColors[i%sledColors.length],speed:1.6,label:'Snowmobile',
+          x:_snow.from+300+Math.random()*(_snow.to-_snow.from-600),y:GROUND_LEVEL,
+          vx:(Math.random()>0.5?1:-1)*1.6,alive:true,exploding:0,
+          homeMin:_snow.from,homeMax:_snow.to});
+      }
+    }
     // Farmland: 2 tractors (use truck body, green paint)
     const _farm=earthBiomes.find(b=>b.id==='farmland');
     if(_farm){
@@ -5376,11 +5387,17 @@ function updatePyramidInterior(){
   const a=pi.alien;
   const ch=canvas.height;
   const floorY=ch-70;
-  // Movement
-  if(keys['a']||keys['arrowleft']){a.vx-=0.5;a.facing=-1;}
-  if(keys['d']||keys['arrowright']){a.vx+=0.5;a.facing=1;}
+  // Movement — shift sprints (matches overworld)
+  const sprinting = !!(keys['shift']||keys['shiftleft']||keys['shiftright']);
+  const accel = sprinting ? 0.9 : 0.5;
+  if(keys['a']||keys['arrowleft']){a.vx-=accel;a.facing=-1;}
+  if(keys['d']||keys['arrowright']){a.vx+=accel;a.facing=1;}
   if((keys[' ']||keys['w']||keys['arrowup'])&&a.onGround){a.vy=-9;a.onGround=false;}
   a.vy+=GRAVITY*0.6;
+  // Higher top speed when sprinting
+  const maxVx = sprinting ? 6.5 : 3.5;
+  if(a.vx>maxVx) a.vx=maxVx;
+  if(a.vx<-maxVx) a.vx=-maxVx;
   a.vx*=0.85;
   a.x+=a.vx; a.y+=a.vy;
   // Floor (canvas-relative, not world GROUND_LEVEL)
@@ -7711,10 +7728,12 @@ function drawPyramidInterior(){
   }
 
   // Alien — reuse the real on-foot renderer so it looks identical to the overworld
-  const ax=a.x, ay=floorTop;
-  // Shadow
-  ctx.fillStyle='rgba(0,0,0,0.4)';
-  ctx.beginPath(); ctx.ellipse(ax, floorTop+2, 16, 4, 0, 0, Math.PI*2); ctx.fill();
+  const ax=a.x, ay=a.y;
+  // Shadow (always at floor, shrinks with jump height)
+  const airH=Math.max(0, floorTop-a.y);
+  const shadowS=Math.max(0.3, 1-airH/180);
+  ctx.fillStyle=`rgba(0,0,0,${0.4*shadowS})`;
+  ctx.beginPath(); ctx.ellipse(ax, floorTop+2, 16*shadowS, 4*shadowS, 0, 0, Math.PI*2); ctx.fill();
   drawAlienPreview(ax, ay, 1.0, getAlienSkin(), a.facing, a.walkT);
 
   ctx.restore();
@@ -20091,6 +20110,74 @@ function renderVehicle(v){
     ctx.fillStyle='#999';
     ctx.beginPath();ctx.arc(v.x+v.w*0.12,v.y,wr*0.45,0,Math.PI*2);ctx.arc(v.x+v.w*0.85,v.y,wr*0.45,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.fillText('42',v.x+v.w/2,v.y-v.h-1);
+  }else if(v.type==='snowmobile'){
+    // Ski-based snow vehicle — twin skis, low body with cowl, handlebars, seat, track at rear.
+    const t=performance.now()*0.003;
+    // Snow spray behind the track (small, motion-based)
+    const sprayX = v.x + v.w*0.85;
+    for(let si=0;si<3;si++){
+      const sx = sprayX + si*2 + Math.sin(t*5+si)*1.5;
+      const sy = v.y - 2 - si*1.2;
+      ctx.fillStyle=`rgba(240,248,255,${0.5-si*0.12})`;
+      ctx.beginPath();ctx.arc(sx,sy,1.6+si*0.4,0,Math.PI*2);ctx.fill();
+    }
+    // Twin skis along the ground
+    ctx.fillStyle='#1a1a24';
+    // Front ski (curls up at the tip)
+    ctx.beginPath();
+    ctx.moveTo(v.x+v.w*0.05, v.y);
+    ctx.lineTo(v.x+v.w*0.05, v.y+2);
+    ctx.lineTo(v.x+v.w*0.35, v.y+2);
+    ctx.lineTo(v.x+v.w*0.4, v.y-1);
+    ctx.lineTo(v.x+v.w*0.38, v.y-2);
+    ctx.lineTo(v.x+v.w*0.08, v.y-1.5);
+    ctx.closePath();ctx.fill();
+    // Rear track (treaded belt)
+    ctx.fillStyle='#222';
+    roundRect(ctx, v.x+v.w*0.45, v.y-3, v.w*0.5, 5, 1.5); ctx.fill();
+    // Tread lines
+    ctx.strokeStyle='#555';ctx.lineWidth=0.6;
+    for(let tl=0;tl<6;tl++){
+      const tx=v.x+v.w*0.48+tl*(v.w*0.07);
+      ctx.beginPath();ctx.moveTo(tx,v.y-3);ctx.lineTo(tx,v.y+1);ctx.stroke();
+    }
+    // Main body / cowl — curved profile
+    ctx.fillStyle=v.color;
+    ctx.beginPath();
+    ctx.moveTo(v.x+v.w*0.08, v.y-v.h*0.45);
+    ctx.quadraticCurveTo(v.x+v.w*0.18, v.y-v.h*0.95, v.x+v.w*0.4, v.y-v.h*0.85);
+    ctx.lineTo(v.x+v.w*0.9, v.y-v.h*0.55);
+    ctx.lineTo(v.x+v.w*0.9, v.y-3);
+    ctx.lineTo(v.x+v.w*0.15, v.y-3);
+    ctx.closePath();ctx.fill();
+    // Darker stripe along the cowl
+    ctx.fillStyle='rgba(0,0,0,0.22)';
+    ctx.fillRect(v.x+v.w*0.15, v.y-v.h*0.45, v.w*0.7, 3);
+    // Windshield
+    ctx.fillStyle='rgba(180,220,255,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(v.x+v.w*0.25, v.y-v.h*0.85);
+    ctx.quadraticCurveTo(v.x+v.w*0.3, v.y-v.h*1.25, v.x+v.w*0.48, v.y-v.h*1.05);
+    ctx.lineTo(v.x+v.w*0.5, v.y-v.h*0.75);
+    ctx.closePath();ctx.fill();
+    // Handlebars
+    ctx.strokeStyle='#333';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(v.x+v.w*0.4, v.y-v.h*0.85);
+    ctx.lineTo(v.x+v.w*0.35, v.y-v.h*1.1);
+    ctx.moveTo(v.x+v.w*0.35, v.y-v.h*1.1);
+    ctx.lineTo(v.x+v.w*0.28, v.y-v.h*1.05);
+    ctx.moveTo(v.x+v.w*0.35, v.y-v.h*1.1);
+    ctx.lineTo(v.x+v.w*0.42, v.y-v.h*1.05);
+    ctx.stroke();
+    // Seat hump
+    ctx.fillStyle='#1a1a1a';
+    roundRect(ctx, v.x+v.w*0.55, v.y-v.h*0.75, v.w*0.3, v.h*0.25, 2);ctx.fill();
+    // Headlight at front
+    if(typeof dayNightBrightness!=='undefined' && dayNightBrightness<0.3){
+      ctx.fillStyle='rgba(255,240,180,0.75)';
+      ctx.beginPath();ctx.arc(v.x+v.w*0.15, v.y-v.h*0.55, 3, 0, Math.PI*2);ctx.fill();
+    }
   }else if(v.type==='rover'){
     ctx.fillStyle=v.color;ctx.fillRect(v.x,v.y-v.h,v.w,v.h*0.5);
     ctx.fillRect(v.x+10,v.y-v.h-8,v.w-20,8);
