@@ -79,15 +79,15 @@ export const ALIEN_RACES = [
       {id:'titan_gold',   name:'Gilded Colossus',  body:'#c8a040',  head:'#e8c060',  eyes:'#f0f', glow:'#ff4', accent:'#806828', cyber:true},
       {id:'titan_obsd',   name:'Obsidian Wall',    body:'#181820',  head:'#2a2a32',  eyes:'#f00', glow:'#f44', accent:'#0a0a0e', cyber:true},
   ]},
-  { id:'cosmic',    name:'Cosmic',    description:'Floating beings of energy & phantom spirits', bodyType:'energy', skins:[
-      {id:'rainbow',    name:'Prismatic',      body:'rainbow',  head:'rainbow',  eyes:'#fff', glow:'#fff', accent:'rainbow'},
-      {id:'cos_nebula', name:'Nebula',         body:'#6030a0',  head:'#8040d0',  eyes:'#fff', glow:'#a0f', accent:'#4020a0'},
-      {id:'cos_stars',  name:'Stardust',       body:'#e0d0ff',  head:'#fff0ff',  eyes:'#fff', glow:'#fff', accent:'#c0b0e0'},
-      {id:'cos_void',   name:'Void Born',      body:'#101030',  head:'#202050',  eyes:'#f0f', glow:'#80f', accent:'#080820'},
-      {id:'wraith_pale', name:'Pale Haunt',    body:'#a8a8c0',  head:'#c0c0d8',  eyes:'#400', glow:'#cce', accent:'#808098'},
-      {id:'wraith_bone', name:'Bone Shade',    body:'#ebe4c8',  head:'#f4ecd0',  eyes:'#0f0', glow:'#fe8', accent:'#a89860'},
-      {id:'wraith_ash',  name:'Ash Revenant',  body:'#403a48',  head:'#5a5260',  eyes:'#f40', glow:'#f86', accent:'#2a2430'},
-      {id:'wraith_vngnc',name:'Vengeful',      body:'#1a0818',  head:'#3a1838',  eyes:'#0ff', glow:'#f0f', accent:'#0a000a'},
+  { id:'cosmic',    name:'Cosmic',    description:'Psionic warriors in gilded armor — telepathic, robe-cloaked crusaders', bodyType:'energy', skins:[
+      {id:'rainbow',    name:'Prismatic',      body:'rainbow',  head:'rainbow',  eyes:'#ffd080', glow:'#fff', accent:'rainbow'},
+      {id:'cos_khala',  name:'Khala Zealot',   body:'#2a4890',  head:'#3258b0',  eyes:'#ffd068', glow:'#8cf',  accent:'#e0a028'},
+      {id:'cos_templar',name:'High Templar',   body:'#5030a0',  head:'#6038c0',  eyes:'#ffe080', glow:'#c8e0ff', accent:'#ffd040'},
+      {id:'cos_nerazim',name:'Dark Templar',   body:'#201830',  head:'#302440',  eyes:'#40ffcc', glow:'#60ffd0', accent:'#80e8a0'},
+      {id:'cos_nebula', name:'Nebula Seer',    body:'#4a2080',  head:'#6030a0',  eyes:'#ffaaff', glow:'#b060ff', accent:'#d040a0'},
+      {id:'cos_executor',name:'Executor',      body:'#1a6a6a',  head:'#208080',  eyes:'#ffd040', glow:'#a0f0f0', accent:'#ffc020'},
+      {id:'cos_purifier',name:'Purifier',      body:'#a03020',  head:'#c04030',  eyes:'#ffff80', glow:'#ffd080', accent:'#ffc040'},
+      {id:'cos_void',   name:'Void Born',      body:'#101030',  head:'#202050',  eyes:'#c0a0ff', glow:'#8040f0', accent:'#6030a0'},
   ]},
   { id:'sluggoth',  name:'Sluggoth',  description:'Enormous slimy slug-crimelords', bodyType:'slug',   skins:[
       {id:'slug_green', name:'Swamp Baron',    body:'#7a8040',  head:'#a0a860',  eyes:'#fc0', glow:'#cd4', accent:'#4a5028'},
@@ -96,11 +96,11 @@ export const ALIEN_RACES = [
       {id:'slug_pale',  name:'Maggot Tyrant',  body:'#d0c8a0',  head:'#e8e0c0',  eyes:'#400', glow:'#fea', accent:'#887858'},
   ]},
   { id:'southpark', name:'South Park', description:'Chunky round-headed cartoon visitors', bodyType:'humanoid', skins:[
+      {id:'sp_butters', name:'Butters',     body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'southpark', outfitA:'#8ac8e0', outfitB:'#e0c880', hat:'none',      pants:'#c0a040'},
       {id:'sp_cart',    name:'Cartman',     body:'#f2d4b4', head:'#fce0c0', eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#5a3a1a', outfit:'southpark', outfitA:'#c02020', outfitB:'#f0d000', hat:'beanie_yel', pants:'#4a2a18'},
       {id:'sp_stan',    name:'Stan',        body:'#f2d4b4', head:'#f8dcbe', eyes:'#224', glow:'#fff', accent:'#d4a878', hair:'#3a1e0e', outfit:'southpark', outfitA:'#1e4db3', outfitB:'#5a3a1a', hat:'beanie_red', pants:'#2a1a88'},
       {id:'sp_kyle',    name:'Kyle',        body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#c03020', outfit:'southpark', outfitA:'#e06020', outfitB:'#4a6a1a', hat:'ushanka',    pants:'#185018'},
       {id:'sp_kenny',   name:'Kenny',       body:'#f2d4b4', head:'#f8dcbe', eyes:'#224', glow:'#fa0', accent:'#d4a878', hair:'#d08040', outfit:'southpark', outfitA:'#d86a14', outfitB:'#2a2a2a', hat:'parka',     pants:'#2a2a2a'},
-      {id:'sp_butters', name:'Butters',     body:'#f2d4b4', head:'#f8dcbe', eyes:'#148', glow:'#fff', accent:'#d4a878', hair:'#f0d060', outfit:'southpark', outfitA:'#8ac8e0', outfitB:'#e0c880', hat:'none',      pants:'#c0a040'},
       {id:'sp_chef',    name:'Chef',        body:'#6a4832', head:'#744e36', eyes:'#000', glow:'#fc8', accent:'#4a3424', hair:'#1a0a06', outfit:'southpark', outfitA:'#c02020', outfitB:'#2040a0', hat:'chef',      pants:'#1a3870'},
   ]},
   { id:'arachnid',  name:'Arachnid',  description:'Eight-legged stalkers from web-worlds', bodyType:'spider', skins:[

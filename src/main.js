@@ -1107,18 +1107,30 @@ const planetDefs = [
       "MOMMY","NOOOO","I LEFT THE OVEN ON","MY PARKING METER"],
   },
   {
-    id: 'mars', name: 'Mars', desc: '"The Red Planet. 4th from the Sun. Dust storms forever."',
+    id: 'mars', name: 'Mars', desc: '"The Red Planet. 4th from the Sun. Home of the ancient Martian clans."',
     radius: 140, color: '#8a3a1a', color2: '#6a2a0a', atmosphere: '#ff6a3a',
     skyTop: '#1a0a0a', skyMid: '#3a1a0a', skyBot: '#5a2a1a',
     groundColor: ['#6a3a2a','#5a2a1a','#4a1a0a'], grassColor: '#7a4a3a',
-    buildingColors: [['#766','#877','#655'],['#776','#887','#665']],
-    inhabitantCount: 25, buildingDensity: 0.7, hasClouds: false, isAlien: false,
+    buildingColors: [['#8a4a2a','#6a3a1a','#4a2a0a'],['#7a3a1a','#5a2a0a','#3a1a00']],
+    inhabitantCount: 25, buildingDensity: 0.7, hasClouds: false, isAlien: true,
     gravityScale: 0.38, // Mars ~0.38 g
     rotationPeriod: 1.03, // Mars day ~24.6 h — nearly Earth-like
-    sadFacts: ['"They spent 7 months getting here..."','"Mars was supposed to be safe..."',
-      '"The colony was finally self-sustaining..."','"Their oxygen supply was just restocked..."'],
-    cryPhrases: ["NOT HERE TOO","WE CAME SO FAR","THE COLONY","MY OXYGEN",
-      "EARTH WAS RIGHT","MAYDAY MAYDAY","SEAL THE AIRLOCK"],
+    alienSkin: ['#cc5544','#a03020','#dd6a4a','#882010'],
+    alienHeadShape: 'wide', // broad reptilian skull
+    alienExtra: 'horns',
+    alienLabel: 'Martian',
+    sadFacts: ['"The clans have held these red sands for ten thousand cycles..."',
+      '"Their warlords were undefeated until today..."',
+      '"The rust caves were sacred to them..."',
+      '"They carved canals before Earth had life..."'],
+    cryPhrases: ["KREX PROTECT US","THE RED COVENANT","OUR SANDS","BLOODMOON FALLS",
+      "SEAL THE CANYONS","WARLORD NO","ANCIENT ONES SAVE US"],
+    alienTypes: [
+      { type:'warrior', label:'Red Warrior',   scale:1,    bodyWidth:6, headR:10, mass:1.2, colors:['#cc5544','#a03020','#dd6a4a'] },
+      { type:'chieftain',label:'Clan Chieftain',scale:1.25, bodyWidth:7, headR:12, mass:1.8, colors:['#882010','#6a1008','#a02018'] },
+      { type:'hatchling',label:'Martian Hatchling',scale:0.6,bodyWidth:3,headR:8,  mass:0.3, colors:['#ee8868','#cc6a4a','#dd7858'] },
+      { type:'seer',    label:'Dust Seer',     scale:1.1,  bodyWidth:5, headR:11, mass:1.1, colors:['#a04030','#803020','#b05040'] },
+    ],
   },
   {
     id: 'glimora', name: 'Jupiter', desc: '"The gas giant. 5th from the Sun. A storm larger than Earth rages for centuries."',
@@ -3642,8 +3654,8 @@ const COW_TYPES = {
             {label:'Chimp',color:'#6a4a2a',spots:'#4a3218',size:0.7,wack:'monkey'},
             {label:'Gorilla',color:'#2a2a2a',spots:'#1a1a1a',size:1.4,wack:'monkey'},
             {label:'Orangutan',color:'#c06820',spots:'#8a4a10',size:1.1,wack:'monkey'}],
-  'mars': [{label:'Mars Moo',color:'#d88060',spots:'#8a3a1a',size:1,wack:'spacesuit'},
-           {label:'Crater Cow',color:'#c06040',spots:'#602010',size:1.3,wack:'fat'},
+  'mars': [{label:'Rust Beast',color:'#d88060',spots:'#8a3a1a',size:1,wack:'normal'},
+           {label:'Crater Stomper',color:'#c06040',spots:'#602010',size:1.3,wack:'fat'},
            {label:'Dust Calf',color:'#e0a080',spots:'#b06030',size:0.5,wack:'tiny'}],
   'glimora': [{label:'Crystal Cow',color:'#e0c0ff',spots:'#a060ff',size:1,wack:'crystal'},
               {label:'Glow Moo',color:'#ff80ff',spots:'#c040ff',size:0.8,wack:'glow'},
@@ -4451,12 +4463,7 @@ function generateHazards(){
         width:600,timer:Math.random()*400,cooldown:400,active:false,duration:200});
     }
   }
-  if(p.id==='mars'){
-    for(let i=0;i<3;i++){
-      const tx=Math.random()*worldWidth*0.7+400;
-      turrets.push({x:tx,y:GROUND_LEVEL-30,cooldown:0,range:400,alive:true,bullets:[]});
-    }
-  }
+  // Mars no longer has turrets — it's an alien Martian world now, not a human colony.
 }
 
 // --- MILITARY SPAWNING (based on wanted level) ---
@@ -4794,7 +4801,7 @@ function enterMothership(){
   mi.arriving={timer:0, duration:150, boardFade:1};
   mi.departing=null;
   // Walkable comms room (screens showing each planet leader)
-  mi.commsWalk={x:600, vx:0, facing:1, walkT:0, width:1400, screenX:[], nearScreen:-1, operators:[], bigScreenPhase:Math.random()*1000};
+  mi.commsWalk={x:600, vx:0, y:0, vy:0, onGround:true, facing:1, walkT:0, width:1400, screenX:[], nearScreen:-1, operators:[], bigScreenPhase:Math.random()*1000};
   // Mission-control style operators at consoles — same race as player, different skins
   {
     const cwOps=mi.commsWalk.operators;
@@ -8168,15 +8175,25 @@ function updateMothership(){
     const avail=planetLeaders.filter(l=>unlockedPlanets.includes(l.planetId));
     const cw2=mi.commsWalk;
     if(!mi.commsReading && avail.length>0){
-      // Walkable comms room: A/D walks alien past the screens; E to interact with nearest.
-      if(keys['a']||keys['arrowleft']){cw2.vx-=0.5;cw2.facing=-1;}
-      if(keys['d']||keys['arrowright']){cw2.vx+=0.5;cw2.facing=1;}
-      cw2.vx*=0.82;
+      // Walkable comms room — same on-foot physics as the mothership hub.
+      if(cw2.vy==null) cw2.vy=0;
+      if(cw2.y==null) cw2.y=0;
+      if(cw2.onGround==null) cw2.onGround=true;
+      const running = !!(keys['shift']||keys['shiftleft']||keys['shiftright']);
+      const accel = running ? 0.9 : 0.5;
+      if(keys['a']||keys['arrowleft']){cw2.vx-=accel;cw2.facing=-1;}
+      if(keys['d']||keys['arrowright']){cw2.vx+=accel;cw2.facing=1;}
+      cw2.running = running;
+      if(keys[' ']&&cw2.onGround){cw2.vy=-7;cw2.onGround=false;}
+      cw2.vy+=0.36;
+      cw2.vx*=0.85;
       cw2.x+=cw2.vx;
+      cw2.y+=cw2.vy;
+      if(cw2.y>=0){cw2.y=0;cw2.vy=0;cw2.onGround=true;}else{cw2.onGround=false;}
       const pad=60;
       if(cw2.x<pad){cw2.x=pad;cw2.vx=0;}
       if(cw2.x>cw2.width-pad){cw2.x=cw2.width-pad;cw2.vx=0;}
-      if(Math.abs(cw2.vx)>0.15)cw2.walkT+=0.15;
+      if(Math.abs(cw2.vx)>0.3 && cw2.onGround) cw2.walkT += running?0.36:0.22;
       // Layout screens evenly across the room
       const edgePad=160, usable=cw2.width-edgePad*2;
       cw2.screenX = avail.map((_,i)=>avail.length===1 ? cw2.width/2 : edgePad + (usable*i)/(avail.length-1));
@@ -10744,6 +10761,30 @@ function drawMothership(){
         ctx.fillStyle=`rgba(255,100,100,${0.25+Math.sin(t*2+lx)*0.1})`;
         ctx.fillRect(sxL-30,ceilY+4,60,2);
       }
+      // Atmospheric wall accents — vertical warning stripes at the edges + dust motes
+      ctx.save();
+      ctx.fillStyle='rgba(255,100,60,0.08)';
+      for(let wy=ceilY+10; wy<floorY-20; wy+=16){
+        ctx.fillRect(6-camX*0.5, wy, 6, 8);
+        ctx.fillRect(roomW-12-camX*0.5, wy, 6, 8);
+      }
+      // Floating dust / sparks
+      for(let dp=0; dp<14; dp++){
+        const dx = ((dp*137 + (t*20)|0) % roomW) - camX;
+        const dy = ceilY + 40 + (dp*53 % (floorY-ceilY-80)) + Math.sin(t*0.8+dp)*8;
+        const da = 0.15 + 0.15*Math.sin(t*1.2+dp*0.7);
+        ctx.fillStyle=`rgba(255,180,140,${da})`;
+        ctx.beginPath(); ctx.arc(dx, dy, 0.8, 0, Math.PI*2); ctx.fill();
+      }
+      // Wall cable trays along the back wall — atmospheric piping
+      ctx.strokeStyle='rgba(120,40,30,0.4)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(0, ceilY+14); ctx.lineTo(cw, ceilY+14); ctx.stroke();
+      ctx.strokeStyle='rgba(80,30,20,0.3)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0, ceilY+18); ctx.lineTo(cw, ceilY+18); ctx.stroke();
+      // Rivets along top rail
+      ctx.fillStyle='rgba(60,20,20,0.6)';
+      for(let rx=-camX; rx<cw; rx+=80){ ctx.beginPath(); ctx.arc(rx, ceilY+14, 1.2, 0, Math.PI*2); ctx.fill(); }
+      ctx.restore();
       // --- BIG CENTRAL MISSION DISPLAY — mounted high on the wall ---
       {
         const bigW=320, bigH=90;
@@ -10775,19 +10816,43 @@ function drawMothership(){
       }
       // Desk geometry for layout (drawn AFTER operators so it hides their legs)
       const deskY=floorY-28, deskH=28;
-      // --- SCREENS — mounted like TVs on the wall, a bit above the console row ---
+      // --- SCREENS — mounted HIGH on the wall, near the ceiling ---
       const scrW=120, scrH=80;
       cwk.screenX.forEach((sxAbs,i)=>{
         const leader=available[i];
         const sx=sxAbs-camX;
         if(sx<-120||sx>cw+120)return;
-        const scrX=sx-scrW/2, scrY=deskY-scrH-46;
+        const scrX=sx-scrW/2, scrY=ceilY+44;  // raised from deskY-scrH-46 to near ceiling
         const near=(cwk.nearScreen===i);
-        // Wall-mount bracket
-        ctx.fillStyle='#1a1214';ctx.fillRect(scrX-6,scrY-6,scrW+12,scrH+12);
-        ctx.strokeStyle=near?`rgba(255,120,100,${0.6+Math.sin(t*4)*0.25})`:'rgba(180,80,60,0.25)';
-        ctx.lineWidth=near?2:1;
-        ctx.strokeRect(scrX-6,scrY-6,scrW+12,scrH+12);
+        // Wall halo glow behind screen (stronger when near)
+        const haloA = near ? 0.28 : 0.14;
+        const haloG = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, 4, scrX+scrW/2, scrY+scrH/2, scrW*1.1);
+        haloG.addColorStop(0, `rgba(255,120,100,${haloA})`);
+        haloG.addColorStop(1, 'rgba(255,120,100,0)');
+        ctx.fillStyle=haloG;
+        ctx.fillRect(scrX-scrW/2, scrY-scrH/2, scrW*2, scrH*2);
+        // Wall-mount arms dropping from the ceiling rail (two tubular pipes)
+        ctx.strokeStyle='rgba(80,40,35,0.6)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(scrX+14, ceilY+18); ctx.lineTo(scrX+14, scrY-6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(scrX+scrW-14, ceilY+18); ctx.lineTo(scrX+scrW-14, scrY-6); ctx.stroke();
+        ctx.fillStyle='#1a0e10';
+        ctx.beginPath(); ctx.arc(scrX+14, ceilY+18, 2.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(scrX+scrW-14, ceilY+18, 2.2, 0, Math.PI*2); ctx.fill();
+        // Wall-mount bracket (thicker frame)
+        ctx.fillStyle='#1a1214';ctx.fillRect(scrX-8,scrY-8,scrW+16,scrH+16);
+        // Inner dark bezel
+        ctx.fillStyle='#0a0606'; ctx.fillRect(scrX-4,scrY-4,scrW+8,scrH+8);
+        ctx.strokeStyle=near?`rgba(255,140,120,${0.7+Math.sin(t*4)*0.25})`:'rgba(180,80,60,0.3)';
+        ctx.lineWidth=near?2.2:1.2;
+        ctx.strokeRect(scrX-8,scrY-8,scrW+16,scrH+16);
+        // Status LEDs along the top of the bezel
+        for(let li=0; li<4; li++){
+          const lx=scrX + 10 + li*((scrW-20)/3);
+          const lit = (Math.sin(t*2.2+i*0.7+li)+1)*0.5;
+          const col = li===0 ? `rgba(80,255,120,${0.4+lit*0.4})` : li===1 ? `rgba(255,200,80,${0.4+lit*0.4})` : `rgba(255,100,100,${0.4+lit*0.4})`;
+          ctx.fillStyle=col;
+          ctx.beginPath(); ctx.arc(lx, scrY-5, 1.1, 0, Math.PI*2); ctx.fill();
+        }
         // Screen background
         ctx.fillStyle='rgba(18,4,4,0.95)';ctx.fillRect(scrX,scrY,scrW,scrH);
         // Static scan lines
@@ -10797,25 +10862,40 @@ function drawMothership(){
         }
         // Draw a small leader portrait on the screen
         drawLeaderPortrait(leader, scrX+scrW/2, scrY+scrH*0.55, scrH*0.75, t, near?mi.commsTalkAnim:0);
-        // Screen glass reflection
-        ctx.fillStyle='rgba(255,180,180,0.05)';ctx.fillRect(scrX,scrY,scrW,scrH*0.25);
+        // Vignette corners inside screen (TV feel)
+        const vg = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, scrH*0.3, scrX+scrW/2, scrY+scrH/2, scrW*0.6);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
+        ctx.fillStyle=vg; ctx.fillRect(scrX,scrY,scrW,scrH);
+        // Screen glass reflection (stronger)
+        const glR = ctx.createLinearGradient(scrX, scrY, scrX, scrY+scrH*0.35);
+        glR.addColorStop(0, 'rgba(255,200,200,0.12)');
+        glR.addColorStop(1, 'rgba(255,200,200,0)');
+        ctx.fillStyle=glR; ctx.fillRect(scrX,scrY,scrW,scrH*0.35);
         // Planet name above the screen
         const pDef=planets.find(p=>p.id===leader.planetId);
         const planetName=((pDef&&pDef.name)||leader.planetId).toUpperCase();
-        ctx.fillStyle=near?`rgba(255,200,180,${0.95})`:'rgba(200,140,120,0.55)';
+        ctx.fillStyle=near?`rgba(255,220,200,${0.98})`:'rgba(220,160,140,0.65)';
         ctx.font=`${near?'bold ':''}12px monospace`;ctx.textAlign='center';
-        ctx.fillText(planetName,sx,scrY-12);
+        ctx.fillText(planetName,sx,scrY-14);
         // Leader name tag on screen
         ctx.fillStyle='rgba(255,200,180,0.8)';ctx.font='8px monospace';
         ctx.fillText(leader.name,sx,scrY+scrH-6);
-        // Active transmission indicator
-        const blink=Math.sin(t*5+i)>0?0.6:0.2;
+        // Active transmission indicator (pulsing with ring)
+        const blink=Math.sin(t*5+i)>0?0.7:0.25;
         ctx.fillStyle=`rgba(255,50,50,${blink})`;
         ctx.beginPath();ctx.arc(scrX+scrW-8,scrY+8,3,0,Math.PI*2);ctx.fill();
-        // Interact prompt when near
+        ctx.strokeStyle=`rgba(255,80,80,${blink*0.6})`; ctx.lineWidth=1;
+        ctx.beginPath();ctx.arc(scrX+scrW-8,scrY+8,5,0,Math.PI*2);ctx.stroke();
+        // Interact prompt when near — now points at the HIGHER screen
         if(near){
-          ctx.fillStyle=`rgba(255,220,180,${0.6+Math.sin(t*4)*0.3})`;ctx.font='bold 10px monospace';
-          ctx.fillText('[E] Open channel',sx,scrY+scrH+22);
+          ctx.fillStyle=`rgba(255,220,180,${0.7+Math.sin(t*4)*0.3})`;ctx.font='bold 11px monospace';
+          ctx.fillText('[E] Open channel',sx,scrY+scrH+24);
+          // Beacon line from alien up to the screen
+          const alienHeadY = floorY - 26;
+          ctx.strokeStyle=`rgba(255,180,140,${0.25+Math.sin(t*3)*0.12})`;
+          ctx.setLineDash([3,4]); ctx.lineWidth=1;
+          ctx.beginPath(); ctx.moveTo(sx, scrY+scrH+4); ctx.lineTo(sx, alienHeadY); ctx.stroke();
+          ctx.setLineDash([]);
         }
       });
       // --- NPC OPERATORS — same race as player, different skins ---
@@ -10856,10 +10936,12 @@ function drawMothership(){
           ctx.fillRect(cnX+4+Math.random()*(cnW-8),cnY+cnH-6, 1, 1);
         }
       });
-      // Alien walking in the room
-      const ax=cwk.x-camX, ay=floorY;
-      ctx.fillStyle='rgba(0,0,0,0.45)';
-      ctx.beginPath();ctx.ellipse(ax,floorY+2,10,2.5,0,0,Math.PI*2);ctx.fill();
+      // Alien walking in the room — use cwk.y for jump offset (negative when airborne)
+      const ax=cwk.x-camX, ay=floorY+(cwk.y||0);
+      // Shadow stays on the floor and shrinks with altitude
+      const shadowScale = 1 - Math.min(0.5, Math.abs(cwk.y||0)/60);
+      ctx.fillStyle=`rgba(0,0,0,${0.45*shadowScale})`;
+      ctx.beginPath();ctx.ellipse(ax,floorY+2,10*shadowScale,2.5*shadowScale,0,0,Math.PI*2);ctx.fill();
       drawAlienPreview(ax, ay, 1.0, getAlienSkin(), cwk.facing, cwk.walkT);
       // Weapon-effect particles (blood/spark from kills)
       if(mi.fxParticles && mi.fxParticles.length){
@@ -10872,7 +10954,7 @@ function drawMothership(){
       ctx.restore();
       // Hint
       ctx.fillStyle='rgba(255,255,255,0.25)';ctx.font='9px monospace';ctx.textAlign='center';
-      ctx.fillText('A/D: Walk  |  E: Open channel  |  ESC: Back',cw/2,ch-10);
+      ctx.fillText('A/D: Walk  |  SHIFT: Run  |  SPACE: Jump  |  E: Open channel  |  ESC: Back',cw/2,ch-10);
       if(currentMission){ctx.fillStyle='rgba(255,200,0,0.4)';ctx.font='8px monospace';ctx.fillText('Active mission: '+currentMission.desc,cw/2,ch-24);}
     }else{
       // === BIG SCREEN / TRANSMISSION VIEW ===
@@ -20899,19 +20981,25 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   const ax=cx, ay=cy;
   const bt=skin.bodyType||'grey';
 
-  // --- ENERGY BODY TYPE: floating particle trail beneath ---
+  // --- ENERGY BODY TYPE (PROTOSS-LIKE): psionic robe trail beneath, gold/cyan aura ---
   if(bt==='energy'){
-    for(let pi=0;pi<6;pi++){
-      const pa=t2*2+pi*1.1;
-      const pr=4+Math.sin(pa)*2;
-      const py=ay-2*s+Math.sin(pa*1.3)*3*s;
-      ctx.fillStyle=`rgba(${skin.glow==='#fff'?'220,200,255':'180,120,255'},${0.4-pi*0.05})`;
-      ctx.beginPath();ctx.arc(ax+Math.cos(pa)*pr*s,py,(3-pi*0.3)*s,0,Math.PI*2);ctx.fill();
+    const isRainbowB = skin.body==='rainbow';
+    const _hx2rgb = (h)=>{ if(!h||h[0]!=='#') return '180,220,255'; let x=h.slice(1); if(x.length===3) x=x.split('').map(c=>c+c).join(''); return parseInt(x.slice(0,2),16)+','+parseInt(x.slice(2,4),16)+','+parseInt(x.slice(4,6),16); };
+    const glowRGB = isRainbowB ? '180,220,255' : (skin.glow==='#fff' ? '180,230,255' : _hx2rgb(skin.glow||'#7cf'));
+    // Psionic robe tail — flowing teal/gold wisps under the warrior
+    for(let pi=0;pi<7;pi++){
+      const pa=t2*1.5+pi*0.9;
+      const pr=3+Math.sin(pa)*2;
+      const py=ay-1*s+Math.sin(pa*1.4)*2*s + pi*0.3*s;
+      ctx.fillStyle=`rgba(${glowRGB},${0.5-pi*0.06})`;
+      ctx.beginPath();ctx.arc(ax+Math.cos(pa)*pr*s,py,(3.2-pi*0.32)*s,0,Math.PI*2);ctx.fill();
     }
-    // Energy aura halo
-    const eg=ctx.createRadialGradient(ax,ay-14*s,0,ax,ay-14*s,22*s);
-    eg.addColorStop(0,`rgba(255,255,255,0.3)`);eg.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=eg;ctx.fillRect(ax-25*s,ay-35*s,50*s,40*s);
+    // Psionic aura halo — larger, centered higher at torso
+    const eg=ctx.createRadialGradient(ax,ay-18*s,0,ax,ay-18*s,26*s);
+    eg.addColorStop(0,`rgba(${glowRGB},0.28)`);
+    eg.addColorStop(0.6,`rgba(${glowRGB},0.08)`);
+    eg.addColorStop(1,`rgba(${glowRGB},0)`);
+    ctx.fillStyle=eg;ctx.fillRect(ax-28*s,ay-40*s,56*s,44*s);
   }
 
   // Back arm (skip for limbless body types; southpark draws its own mittens; energy draws wispy tendrils)
@@ -20921,17 +21009,27 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.lineWidth=0.8*s;
     for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax-f*11*s,ay-6*s);ctx.lineTo(ax-f*(12.5+Math.abs(i)*0.5)*s,ay+(-4+i*2)*s);ctx.stroke();}
   } else if(bt==='energy'){
-    // Wispy back-tendril — fades out, drifts with time
-    const drift1 = Math.sin(t2*1.5)*2*s;
-    const gradArm = ctx.createLinearGradient(ax-f*4*s, ay-16*s, ax-f*14*s, ay-6*s);
-    const bc = (skin.body==='rainbow') ? 'rgba(220,200,255,' : `rgba(${skin.glow==='#fff'?'220,210,240':'200,170,240'},`;
-    gradArm.addColorStop(0, bc+'0.7)');
-    gradArm.addColorStop(1, bc+'0)');
-    ctx.strokeStyle = gradArm; ctx.lineWidth = 2.5*s; ctx.lineCap='round';
+    // Protoss back arm — armored with pauldron. Solid plate shoulder + gauntleted arm.
+    const armorC = (skin.body==='rainbow') ? '#6a8ac8' : (skin.body||'#4a6a90');
+    const trimC  = (skin.accent==='rainbow') ? '#d4a040' : (skin.accent||'#c89020');
+    // Large back pauldron plate (curved shield over shoulder)
+    ctx.fillStyle = armorC;
     ctx.beginPath();
-    ctx.moveTo(ax-f*3*s, ay-18*s);
-    ctx.quadraticCurveTo(ax-f*9*s, ay-12*s+drift1, ax-f*13*s, ay-5*s-drift1);
+    ctx.moveTo(ax-f*2*s, ay-22*s);
+    ctx.quadraticCurveTo(ax-f*10*s, ay-22*s, ax-f*11*s, ay-14*s);
+    ctx.quadraticCurveTo(ax-f*8*s, ay-12*s, ax-f*3*s, ay-15*s);
+    ctx.closePath(); ctx.fill();
+    // Gold trim ridge along pauldron edge
+    ctx.strokeStyle = trimC; ctx.lineWidth = 0.9*s;
+    ctx.beginPath();
+    ctx.moveTo(ax-f*2*s, ay-22*s);
+    ctx.quadraticCurveTo(ax-f*10*s, ay-22*s, ax-f*11*s, ay-14*s);
     ctx.stroke();
+    // Armored upper arm + forearm (segmented plates)
+    ctx.strokeStyle = armorC; ctx.lineWidth = 2.2*s; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(ax-f*8*s, ay-14*s); ctx.quadraticCurveTo(ax-f*11*s, ay-10*s, ax-f*12*s, ay-5*s); ctx.stroke();
+    // Elbow plate
+    ctx.fillStyle = trimC; ctx.beginPath(); ctx.arc(ax-f*11*s, ay-10*s, 1.6*s, 0, Math.PI*2); ctx.fill();
   }
 
   // --- LEGS (vary by body type) ---
@@ -21595,71 +21693,93 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=`rgba(${skin.glow==='#fff'?'255,255,255':'180,180,255'},0.3)`;
     ctx.beginPath();ctx.ellipse(ax-f*6*s,ay-16*s,4*s,7*s,-0.3,0,Math.PI*2);ctx.fill();
   } else if(bt==='energy'){
-    // --- COSMIC GHOST BODY ---
-    // Wavy sheet-like torso that fades to a tattered wisp where legs would be.
-    const sway = Math.sin(t2*2)*1.5*s;
-    const sway2 = Math.cos(t2*2.3)*1.2*s;
-    // Core body color — rainbow cosmic uses a soft lavender, otherwise derive from body color.
+    // --- PROTOSS-LIKE PSIONIC WARRIOR BODY ---
+    // Armored torso with golden trim, glowing psionic core, robe/energy tail below.
+    const _hx2rgb2 = (h)=>{ if(!h||h[0]!=='#') return '180,220,255'; let x=h.slice(1); if(x.length===3) x=x.split('').map(c=>c+c).join(''); return parseInt(x.slice(0,2),16)+','+parseInt(x.slice(2,4),16)+','+parseInt(x.slice(4,6),16); };
     const isRainbow = skin.body==='rainbow';
-    const rgbPre = isRainbow ? '220,200,255' : (skin.glow==='#fff' ? '230,220,255' : '200,170,240');
-    // Outer aura glow (larger, very soft)
-    const auraGrad = ctx.createRadialGradient(ax, ay-18*s, 2*s, ax, ay-18*s, 26*s);
-    auraGrad.addColorStop(0, `rgba(${rgbPre},0.35)`);
-    auraGrad.addColorStop(1, `rgba(${rgbPre},0)`);
-    ctx.fillStyle = auraGrad;
-    ctx.beginPath(); ctx.ellipse(ax, ay-18*s, 22*s, 28*s, 0, 0, Math.PI*2); ctx.fill();
-    // Main ghost silhouette — hooded teardrop shape with tattered hem.
-    const bodyGrad = ctx.createLinearGradient(ax, ay-32*s, ax, ay+3*s);
-    bodyGrad.addColorStop(0, `rgba(${rgbPre},0.85)`);
-    bodyGrad.addColorStop(0.55, `rgba(${rgbPre},0.55)`);
-    bodyGrad.addColorStop(1, `rgba(${rgbPre},0)`);
-    ctx.fillStyle = bodyGrad;
+    const armor = isRainbow ? '#4a6aa0' : (skin.body||'#3a5088');
+    const armorDark = isRainbow ? '#2a3e70' : (skin.head||'#2a3868');
+    const trim  = (skin.accent==='rainbow' || !skin.accent) ? '#c89020' : skin.accent;
+    const psiRGB = isRainbow ? '180,220,255' : (skin.glow && skin.glow!=='#fff' ? _hx2rgb2(skin.glow) : '140,210,255');
+    const sway = Math.sin(t2*1.5)*1*s;
+    // Flowing psionic robe/energy tail (where legs would be)
+    const robeGrad = ctx.createLinearGradient(ax, ay-6*s, ax, ay+3*s);
+    robeGrad.addColorStop(0, armorDark);
+    robeGrad.addColorStop(0.6, `rgba(${psiRGB},0.5)`);
+    robeGrad.addColorStop(1, `rgba(${psiRGB},0)`);
+    ctx.fillStyle = robeGrad;
     ctx.beginPath();
-    // Top of head-hood
-    ctx.moveTo(ax-10*s+sway*0.2, ay-24*s);
-    ctx.quadraticCurveTo(ax-12*s+sway, ay-30*s, ax-4*s, ay-33*s);
-    ctx.quadraticCurveTo(ax+4*s, ay-34*s, ax+12*s-sway, ay-30*s);
-    ctx.quadraticCurveTo(ax+13*s-sway, ay-22*s, ax+11*s, ay-14*s);
-    // Right-side drape curve
-    ctx.quadraticCurveTo(ax+13*s+sway2, ay-6*s, ax+10*s+sway2, ay-2*s);
-    // Tattered hem — 6 little pointy tabs fading into nothing
-    for(let tj=0; tj<7; tj++){
-      const tx = ax + 10*s - tj*(20*s/6) + Math.sin(t2*3+tj*0.7)*0.6*s;
-      const dip = (tj%2===0) ? 2*s : -1*s;
-      ctx.lineTo(tx, ay + dip + Math.sin(t2*4+tj)*0.8*s);
-    }
-    // Left-side drape curve back up
-    ctx.quadraticCurveTo(ax-13*s+sway2, ay-6*s, ax-11*s, ay-14*s);
-    ctx.quadraticCurveTo(ax-13*s+sway, ay-22*s, ax-10*s+sway*0.2, ay-24*s);
+    ctx.moveTo(ax-7*s, ay-7*s);
+    ctx.quadraticCurveTo(ax-10*s+sway, ay-2*s, ax-9*s+sway, ay+3*s);
+    ctx.lineTo(ax-5*s+sway*0.5, ay+2*s);
+    ctx.lineTo(ax, ay+3*s);
+    ctx.lineTo(ax+5*s-sway*0.5, ay+2*s);
+    ctx.quadraticCurveTo(ax+10*s-sway, ay-2*s, ax+7*s, ay-7*s);
     ctx.closePath();
     ctx.fill();
-    // Inner shadow folds (robe creases)
-    ctx.strokeStyle = `rgba(${rgbPre.split(',').map(n=>Math.max(0,parseInt(n)-40)).join(',')},0.35)`;
-    ctx.lineWidth = 0.7*s;
+    // Armored chest plate — trapezoidal, wider at shoulders
+    const chestGrad = ctx.createLinearGradient(ax-6*s, ay-22*s, ax+6*s, ay-8*s);
+    chestGrad.addColorStop(0, armorDark);
+    chestGrad.addColorStop(0.5, armor);
+    chestGrad.addColorStop(1, armorDark);
+    ctx.fillStyle = chestGrad;
     ctx.beginPath();
-    ctx.moveTo(ax-5*s, ay-24*s);
-    ctx.quadraticCurveTo(ax-6*s+sway2, ay-14*s, ax-4*s+sway2, ay-4*s);
-    ctx.stroke();
+    ctx.moveTo(ax-7*s, ay-22*s);
+    ctx.lineTo(ax+7*s, ay-22*s);
+    ctx.lineTo(ax+6*s, ay-8*s);
+    ctx.lineTo(ax-6*s, ay-8*s);
+    ctx.closePath();
+    ctx.fill();
+    // V-shaped neckline cutout revealing psionic core
+    ctx.fillStyle = armorDark;
     ctx.beginPath();
-    ctx.moveTo(ax+5*s, ay-24*s);
-    ctx.quadraticCurveTo(ax+6*s-sway2, ay-14*s, ax+4*s-sway2, ay-4*s);
+    ctx.moveTo(ax-4*s, ay-22*s);
+    ctx.lineTo(ax, ay-14*s);
+    ctx.lineTo(ax+4*s, ay-22*s);
+    ctx.closePath();
+    ctx.fill();
+    // Glowing psionic core in chest
+    const coreP = 0.7 + Math.sin(t2*3)*0.25;
+    const coreGrad = ctx.createRadialGradient(ax, ay-15*s, 0, ax, ay-15*s, 5*s);
+    coreGrad.addColorStop(0, `rgba(255,255,255,${coreP})`);
+    coreGrad.addColorStop(0.5, `rgba(${psiRGB},${coreP*0.7})`);
+    coreGrad.addColorStop(1, `rgba(${psiRGB},0)`);
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath(); ctx.arc(ax, ay-15*s, 5*s, 0, Math.PI*2); ctx.fill();
+    // Core center pinprick
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(ax, ay-15*s, 1.2*s, 0, Math.PI*2); ctx.fill();
+    // Gold trim — top shoulder band
+    ctx.strokeStyle = trim; ctx.lineWidth = 1.1*s; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(ax-7*s, ay-22*s); ctx.lineTo(ax-4*s, ay-22*s);
+    ctx.moveTo(ax+4*s, ay-22*s); ctx.lineTo(ax+7*s, ay-22*s);
     ctx.stroke();
-    // Central glowing "heart" / soul-orb
-    const soulP = 0.45 + Math.sin(t2*2.5)*0.2;
-    const soulGrad = ctx.createRadialGradient(ax, ay-16*s, 0, ax, ay-16*s, 4*s);
-    soulGrad.addColorStop(0, `rgba(255,255,255,${soulP})`);
-    soulGrad.addColorStop(1, `rgba(${rgbPre},0)`);
-    ctx.fillStyle = soulGrad;
-    ctx.beginPath(); ctx.arc(ax, ay-16*s, 4*s, 0, Math.PI*2); ctx.fill();
-    // Floating soul particles around the ghost
-    for(let gp=0; gp<5; gp++){
-      const ga = t2*1.3 + gp*1.26;
-      const gr = 8*s + Math.sin(t2*2+gp)*3*s;
-      ctx.fillStyle = `rgba(255,255,255,${0.3+Math.sin(t2*3+gp)*0.2})`;
-      ctx.beginPath();
-      ctx.arc(ax + Math.cos(ga)*gr, ay-18*s + Math.sin(ga)*gr*0.6, (0.8 + Math.sin(ga*2)*0.4)*s, 0, Math.PI*2);
-      ctx.fill();
-    }
+    // Gold V-trim tracing the neckline
+    ctx.strokeStyle = trim; ctx.lineWidth = 0.9*s;
+    ctx.beginPath();
+    ctx.moveTo(ax-4*s, ay-22*s); ctx.lineTo(ax, ay-14*s); ctx.lineTo(ax+4*s, ay-22*s);
+    ctx.stroke();
+    // Belt / waistband — horizontal band at hips
+    ctx.fillStyle = trim;
+    ctx.fillRect(ax-6*s, ay-8*s, 12*s, 1.4*s);
+    ctx.fillStyle = armorDark;
+    ctx.fillRect(ax-1*s, ay-8*s, 2*s, 1.4*s);
+    // Front pauldron on the forward shoulder (mirrors the back pauldron)
+    ctx.fillStyle = armor;
+    ctx.beginPath();
+    ctx.moveTo(ax+f*2*s, ay-22*s);
+    ctx.quadraticCurveTo(ax+f*10*s, ay-22*s, ax+f*11*s, ay-14*s);
+    ctx.quadraticCurveTo(ax+f*8*s, ay-12*s, ax+f*3*s, ay-15*s);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = trim; ctx.lineWidth = 0.9*s;
+    ctx.beginPath();
+    ctx.moveTo(ax+f*2*s, ay-22*s);
+    ctx.quadraticCurveTo(ax+f*10*s, ay-22*s, ax+f*11*s, ay-14*s);
+    ctx.stroke();
+    // Pauldron rivet/stud
+    ctx.fillStyle = trim;
+    ctx.beginPath(); ctx.arc(ax+f*7*s, ay-21*s, 0.9*s, 0, Math.PI*2); ctx.fill();
   } else {
     // GREY / REPTILE default torso
     const tg2=ctx.createLinearGradient(ax-5*s,ay-22*s,ax+5*s,ay-6*s);
@@ -21971,49 +22091,78 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.strokeStyle=_sh2(0x50);ctx.lineWidth=0.6*s;
     ctx.beginPath();ctx.moveTo(hx2-12*s,hy2+4*s);ctx.quadraticCurveTo(hx2,hy2+7*s,hx2+12*s,hy2+4*s);ctx.stroke();
   } else if(bt==='energy'){
-    // Ghostly hollow skull — translucent, with void eye sockets that glow.
+    // Protoss helm — elongated oval head with glowing horizontal eye slits, gold crest, no mouth.
+    const _hx2rgb3 = (h)=>{ if(!h||h[0]!=='#') return '180,220,255'; let x=h.slice(1); if(x.length===3) x=x.split('').map(c=>c+c).join(''); return parseInt(x.slice(0,2),16)+','+parseInt(x.slice(2,4),16)+','+parseInt(x.slice(4,6),16); };
     const isRainbowH = skin.body==='rainbow';
-    const rgbH = isRainbowH ? '230,210,255' : (skin.glow==='#fff' ? '235,225,255' : '210,180,245');
-    // Hood/skull outline (slightly taller than a normal head)
-    const hg3 = ctx.createRadialGradient(hx2-2*s, hy2-3*s, 1*s, hx2, hy2, 13*s);
-    hg3.addColorStop(0, `rgba(${rgbH},0.85)`);
-    hg3.addColorStop(0.6, `rgba(${rgbH},0.55)`);
-    hg3.addColorStop(1, `rgba(${rgbH},0.25)`);
-    ctx.fillStyle = hg3;
+    const helmC  = isRainbowH ? '#5a78b0' : (skin.head || skin.body || '#4a6aa0');
+    const helmD  = isRainbowH ? '#2a3e70' : (skin.body || '#2a3868');
+    const trimH  = (skin.accent==='rainbow' || !skin.accent) ? '#c89020' : skin.accent;
+    const psiH   = isRainbowH ? '180,220,255' : (skin.glow && skin.glow!=='#fff' ? _hx2rgb3(skin.glow) : '140,210,255');
+    const eCol   = skin.eyes || '#fc8';
+    // Helmet silhouette — narrow chin, wide cheek plates, tapered crown with back-swept crest
+    const helmGrad = ctx.createLinearGradient(hx2, hy2-14*s, hx2, hy2+8*s);
+    helmGrad.addColorStop(0, helmD);
+    helmGrad.addColorStop(0.5, helmC);
+    helmGrad.addColorStop(1, helmD);
+    ctx.fillStyle = helmGrad;
     ctx.beginPath();
-    ctx.moveTo(hx2-9*s, hy2+6*s);
-    ctx.quadraticCurveTo(hx2-11*s, hy2-4*s, hx2-8*s, hy2-10*s);
-    ctx.quadraticCurveTo(hx2, hy2-14*s, hx2+8*s, hy2-10*s);
-    ctx.quadraticCurveTo(hx2+11*s, hy2-4*s, hx2+9*s, hy2+6*s);
-    ctx.quadraticCurveTo(hx2+2*s, hy2+8*s, hx2, hy2+8*s);
-    ctx.quadraticCurveTo(hx2-2*s, hy2+8*s, hx2-9*s, hy2+6*s);
+    ctx.moveTo(hx2, hy2-14*s);                                    // tip of crest
+    ctx.quadraticCurveTo(hx2-10*s, hy2-10*s, hx2-9*s, hy2-2*s);   // left temple
+    ctx.quadraticCurveTo(hx2-8*s, hy2+4*s, hx2-4*s, hy2+7*s);     // left jaw
+    ctx.quadraticCurveTo(hx2, hy2+8*s, hx2+4*s, hy2+7*s);          // chin
+    ctx.quadraticCurveTo(hx2+8*s, hy2+4*s, hx2+9*s, hy2-2*s);     // right jaw
+    ctx.quadraticCurveTo(hx2+10*s, hy2-10*s, hx2, hy2-14*s);      // right temple back to crest
     ctx.closePath();
     ctx.fill();
-    // Hollow void eye sockets
-    ctx.fillStyle = 'rgba(8,4,20,0.85)';
-    ctx.beginPath(); ctx.ellipse(hx2-3.5*s, hy2-1*s, 2.2*s, 2.8*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hx2+3.5*s, hy2-1*s, 2.2*s, 2.8*s, 0, 0, Math.PI*2); ctx.fill();
-    // Glowing pinprick eyes deep in the sockets
-    const eyeGlow = 0.55 + Math.sin(t2*3)*0.3;
-    const eCol = skin.eyes || '#fff';
-    ctx.fillStyle = eCol;
-    ctx.globalAlpha = eyeGlow;
-    ctx.beginPath(); ctx.arc(hx2-3.5*s + f*0.5*s, hy2-0.5*s, 1*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(hx2+3.5*s + f*0.5*s, hy2-0.5*s, 1*s, 0, Math.PI*2); ctx.fill();
+    // Back-swept crest fin above the helm (Protoss brow crown)
+    ctx.fillStyle = trimH;
+    ctx.beginPath();
+    ctx.moveTo(hx2-3*s, hy2-12*s);
+    ctx.quadraticCurveTo(hx2-f*6*s, hy2-19*s, hx2-f*2*s, hy2-20*s);
+    ctx.quadraticCurveTo(hx2, hy2-17*s, hx2+3*s, hy2-12*s);
+    ctx.closePath();
+    ctx.fill();
+    // Crest dark underline
+    ctx.strokeStyle = helmD; ctx.lineWidth = 0.6*s;
+    ctx.beginPath(); ctx.moveTo(hx2-3*s, hy2-12*s); ctx.lineTo(hx2+3*s, hy2-12*s); ctx.stroke();
+    // Brow ridge — gold trim V across the forehead
+    ctx.strokeStyle = trimH; ctx.lineWidth = 1*s;
+    ctx.beginPath();
+    ctx.moveTo(hx2-8*s, hy2-4*s);
+    ctx.lineTo(hx2, hy2-6.5*s);
+    ctx.lineTo(hx2+8*s, hy2-4*s);
+    ctx.stroke();
+    // Eye slit — single horizontal dark band beneath the brow ridge
+    ctx.fillStyle = 'rgba(6,12,28,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(hx2-7*s, hy2-2*s);
+    ctx.lineTo(hx2+7*s, hy2-2*s);
+    ctx.lineTo(hx2+6*s, hy2+0.6*s);
+    ctx.lineTo(hx2-6*s, hy2+0.6*s);
+    ctx.closePath(); ctx.fill();
+    // Twin glowing eye slits inside the band
+    const eyeGlow = 0.65 + Math.sin(t2*3)*0.25;
+    ctx.fillStyle = eCol; ctx.globalAlpha = eyeGlow;
+    ctx.fillRect(hx2-5.5*s, hy2-1.3*s, 4*s, 1.2*s);
+    ctx.fillRect(hx2+1.5*s, hy2-1.3*s, 4*s, 1.2*s);
     ctx.globalAlpha = 1;
-    // Outer eye glow haze
+    // Eye glow haze
     for(const ex of [-3.5, 3.5]){
-      const ggrad = ctx.createRadialGradient(hx2+ex*s + f*0.5*s, hy2-0.5*s, 0, hx2+ex*s + f*0.5*s, hy2-0.5*s, 3.5*s);
-      ggrad.addColorStop(0, `rgba(${rgbH},${0.4*eyeGlow})`);
-      ggrad.addColorStop(1, `rgba(${rgbH},0)`);
+      const ggrad = ctx.createRadialGradient(hx2+ex*s, hy2-0.7*s, 0, hx2+ex*s, hy2-0.7*s, 4.5*s);
+      ggrad.addColorStop(0, `rgba(${psiH},${0.5*eyeGlow})`);
+      ggrad.addColorStop(1, `rgba(${psiH},0)`);
       ctx.fillStyle = ggrad;
-      ctx.beginPath(); ctx.arc(hx2+ex*s + f*0.5*s, hy2-0.5*s, 3.5*s, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx2+ex*s, hy2-0.7*s, 4.5*s, 0, Math.PI*2); ctx.fill();
     }
-    // Gaping gasp mouth (small dark oval)
-    ctx.fillStyle = 'rgba(8,4,20,0.65)';
-    ctx.beginPath(); ctx.ellipse(hx2, hy2+5*s, 1.6*s, (1+Math.sin(t2*2))*1*s + 1*s, 0, 0, Math.PI*2); ctx.fill();
-    // Hood brim highlight
-    ctx.strokeStyle = `rgba(${rgbH},0.45)`; ctx.lineWidth = 0.7*s;
+    // Cheek plate / jaw seam — subtle vertical line on each side
+    ctx.strokeStyle = helmD; ctx.lineWidth = 0.6*s;
+    ctx.beginPath(); ctx.moveTo(hx2-7*s, hy2+1*s); ctx.lineTo(hx2-5*s, hy2+6*s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx2+7*s, hy2+1*s); ctx.lineTo(hx2+5*s, hy2+6*s); ctx.stroke();
+    // Chin ridge — small gold vent (no mouth — Protoss are telepathic)
+    ctx.fillStyle = trimH;
+    ctx.fillRect(hx2-1.6*s, hy2+5*s, 3.2*s, 1*s);
+    // Helm sheen highlight
+    ctx.strokeStyle = `rgba(255,255,255,0.25)`; ctx.lineWidth = 0.7*s;
     ctx.beginPath();
     ctx.moveTo(hx2-8*s, hy2-10*s);
     ctx.quadraticCurveTo(hx2, hy2-14*s, hx2+8*s, hy2-10*s);
@@ -22239,19 +22388,22 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       ctx.lineWidth=0.8*s;ctx.strokeStyle=_sb2(0x99);
       for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(ax+f*13*s,ay-12*s);ctx.lineTo(ax+f*14*s,ay+(-12.5+i*1.5)*s);ctx.stroke();}
     } else if(isGhost){
-      // Wispy front tendril leading to the gun hand
-      const isRainbowG = skin.body==='rainbow';
-      const rgbG = isRainbowG ? '220,200,255' : (skin.glow==='#fff' ? '230,220,255' : '200,170,240');
-      const gradArm2 = ctx.createLinearGradient(ax+f*3*s, ay-18*s, ax+f*14*s, ay-12*s);
-      gradArm2.addColorStop(0, `rgba(${rgbG},0)`);
-      gradArm2.addColorStop(0.4, `rgba(${rgbG},0.55)`);
-      gradArm2.addColorStop(1, `rgba(${rgbG},0.9)`);
-      ctx.strokeStyle = gradArm2; ctx.lineWidth = 2.2*s; ctx.lineCap='round';
-      const wobble = Math.sin(t2*2.5)*1.2*s;
+      // Protoss front arm — armored, segmented, holding the weapon
+      const armorF = (skin.body==='rainbow') ? '#4a6aa0' : (skin.body||'#3a5088');
+      const trimF  = (skin.accent==='rainbow' || !skin.accent) ? '#c89020' : skin.accent;
+      ctx.strokeStyle = armorF; ctx.lineWidth = 2.2*s; ctx.lineCap='round';
       ctx.beginPath();
-      ctx.moveTo(ax+f*3*s, ay-18*s);
-      ctx.quadraticCurveTo(ax+f*9*s, ay-15*s+wobble, ax+f*13*s, ay-12*s);
+      ctx.moveTo(ax+f*4*s, ay-17*s);
+      ctx.quadraticCurveTo(ax+f*9*s, ay-14*s, ax+f*13*s, ay-12*s);
       ctx.stroke();
+      // Elbow plate / gold ring
+      ctx.fillStyle = trimF;
+      ctx.beginPath(); ctx.arc(ax+f*9*s, ay-14*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+      // Gauntlet at wrist
+      ctx.fillStyle = armorF;
+      ctx.beginPath(); ctx.arc(ax+f*13*s, ay-12*s, 2*s, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = trimF; ctx.lineWidth = 0.7*s;
+      ctx.beginPath(); ctx.arc(ax+f*13*s, ay-12*s, 2*s, 0, Math.PI*2); ctx.stroke();
     }
     // Gun — position above the mitten for southpark, else from the default arm hand
     const gunX = spOutfit ? ax + f*10*s : ax + f*13*s;
@@ -22369,7 +22521,7 @@ const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
 const alienVoiceSfx=mkAudio('alien-voice.mp3',0.5,false);
 const missileSfx=mkAudio('missile-sfx.wav',0.1,false);
-const lassoSfx=mkAudio('lasso-whip.wav',0.05,false);
+const lassoSfx=mkAudio('lasso-whip.wav',0.015,false);
 const nukeSfx=mkAudio('nuke-sfx.flac',0.12,false);
 // Vehicle run-over splat — quiet so repeated hits aren't overwhelming.
 const vehicleSplatSfx=mkAudio('vehicle-splat.wav',0.08,false);
@@ -22789,6 +22941,21 @@ function drawMainMenu(){
     // Hint
     ctx.fillStyle='rgba(0,200,0,0.25)';ctx.font='11px monospace';ctx.textAlign='center';
     ctx.fillText('W/S or \u2191/\u2193 to select  |  ENTER or SPACE to confirm',cw/2,ch-30);
+    // Fourth-wall-breaking exit snark
+    if(window._exitSnark && window._exitSnarkT>0){
+      window._exitSnarkT--;
+      const alpha=Math.min(1, window._exitSnarkT/30);
+      const bx=cw/2, by=ch*0.44;
+      ctx.fillStyle=`rgba(0,0,0,${0.7*alpha})`;
+      ctx.font='bold 15px monospace';
+      const tw=ctx.measureText(window._exitSnark).width;
+      roundRect(ctx, bx-tw/2-14, by-16, tw+28, 28, 6); ctx.fill();
+      ctx.strokeStyle=`rgba(255,180,0,${0.85*alpha})`; ctx.lineWidth=1.5;
+      roundRect(ctx, bx-tw/2-14, by-16, tw+28, 28, 6); ctx.stroke();
+      ctx.fillStyle=`rgba(255,220,120,${alpha})`;
+      ctx.textAlign='center';
+      ctx.fillText(window._exitSnark, bx, by+4);
+    }
     // Language selector
     const langs=['EN','DE','SV','ES','PT','FR'];
     const langCodes=['en','de','sv','es','pt','fr'];
@@ -24324,9 +24491,16 @@ function updateMainMenu(){
       else if(action==='debug'){mainMenuMode='debug';mainMenuSel=0;}
       else if(action==='credits'){mainMenuMode='credits';mainMenuSel=0;}
       else if(action==='exit'){
-        // Show start-screen overlay and stop the game
-        const ss=document.getElementById('start-screen'); if(ss) ss.style.display='flex';
-        gameStarted=false; mainMenuMode=null;
+        // Breaking the fourth wall — it's a webgame, there's nothing to exit to.
+        const lines=[
+          "broh it's a webgame, what do you want me todo?",
+          "close the tab yourself, I'm not your browser",
+          "you want me to delete the internet?",
+          "there's no exit. we live here now",
+          "this is a browser tab. just hit the X"
+        ];
+        window._exitSnark = lines[Math.floor(Math.random()*lines.length)];
+        window._exitSnarkT = 300;
       }
     }
     // Language hotkeys (1-6)
