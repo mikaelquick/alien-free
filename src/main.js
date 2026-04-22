@@ -993,15 +993,17 @@ const earthBiomes = [
   {id:'ocean',     from:42000, to:52000, groundColor:['#0a3a6a','#082a4a','#041a2a'], grassColor:'#0a3a6a', grassHeight:0, treeDensity:0, treeCanopyColor:'#0a3a6a', isOcean:true},
 ];
 // Transition zones between biomes (wide smooth ground color blend — overlap biome boundaries)
+// Widened 2026-04-22b: each zone now ~2x wider so biome visuals (snow, sand, foliage) fade
+// gradually instead of popping in.
 const earthTransitions = [
-  {from:4000,  to:6500,  biomeA:'snow',      biomeB:'mountains'},
-  {from:8500,  to:11500, biomeA:'mountains', biomeB:'farmland'},
-  {from:14500, to:17000, biomeA:'farmland',  biomeB:'suburbs'},
-  {from:18500, to:21000, biomeA:'suburbs',   biomeB:'city'},
-  {from:22500, to:25000, biomeA:'city',      biomeB:'landmarks'},
-  {from:27000, to:30000, biomeA:'landmarks', biomeB:'jungle'},
-  {from:33000, to:36000, biomeA:'jungle',    biomeB:'desert'},
-  {from:40500, to:43000, biomeA:'desert',    biomeB:'ocean'},
+  {from:2500,  to:7500,  biomeA:'snow',      biomeB:'mountains'},
+  {from:7500,  to:12500, biomeA:'mountains', biomeB:'farmland'},
+  {from:12500, to:17500, biomeA:'farmland',  biomeB:'suburbs'},
+  {from:17500, to:21500, biomeA:'suburbs',   biomeB:'city'},
+  {from:21500, to:25500, biomeA:'city',      biomeB:'landmarks'},
+  {from:25500, to:30500, biomeA:'landmarks', biomeB:'jungle'},
+  {from:31000, to:36500, biomeA:'jungle',    biomeB:'desert'},
+  {from:38500, to:43500, biomeA:'desert',    biomeB:'ocean'},
 ];
 function getEarthBiome(x){
   const ww=EARTH_WORLD_WIDTH;
@@ -1026,6 +1028,23 @@ function getEarthBiome(x){
     }
   }
   return earthBiomes.find(b=>wx>=b.from&&wx<b.to)||earthBiomes[0];
+}
+// Returns 0..1 intensity of a specific biome at world x — fades smoothly through transition zones.
+// Also blends a small margin past each biome's hard edge so visuals don't pop on/off.
+function getBiomeIntensity(x, biomeId){
+  const ww=EARTH_WORLD_WIDTH;
+  const wx=((x%ww)+ww)%ww;
+  for(const tr of earthTransitions){
+    if(wx>=tr.from&&wx<tr.to){
+      let t2=(wx-tr.from)/(tr.to-tr.from);
+      t2=t2*t2*(3-2*t2);
+      if(tr.biomeA===biomeId) return 1-t2;
+      if(tr.biomeB===biomeId) return t2;
+      return 0;
+    }
+  }
+  const b=earthBiomes.find(bb=>wx>=bb.from&&wx<bb.to);
+  return b && b.id===biomeId ? 1 : 0;
 }
 
 // --- PLANET DEFINITIONS ---
@@ -1445,7 +1464,15 @@ function generateBuilding(x) {
   }
 
   if(p.id==='earth'){
-    const biome=getEarthBiome(x);
+    let biome=getEarthBiome(x);
+    // In transition zones, stochastically treat this slot as one of the two biomes, weighted by
+    // blend. This produces a gradual mix of biomeA and biomeB units (e.g. pines + igloos fading
+    // into rocky mountain trees) instead of falling through to the default city branch.
+    if(biome.id==='transition'){
+      const _pickB = Math.random() < biome.blend;
+      const _picked = earthBiomes.find(b=>b.id === (_pickB ? biome.toId : biome.fromId));
+      if(_picked) biome = _picked;
+    }
     if(biome.id==='jungle'){
       // Fixed landmark: Jungle Temple at wx~31000
       const _jgWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
@@ -1586,7 +1613,12 @@ function _addDecor(bx, by, w, h, type, opts={}) {
 function generatePrehistoricFlora() {
   let x = 200;
   while (x < worldWidth - 200) {
-    const biome = getEarthBiome(x);
+    let biome = getEarthBiome(x);
+    if (biome.id==='transition'){
+      const _pickB = Math.random() < biome.blend;
+      const _picked = earthBiomes.find(b=>b.id === (_pickB ? biome.toId : biome.fromId));
+      if(_picked) biome = _picked;
+    }
     if (biome.isOcean || isOverOcean(x)) { x += 200; continue; }
     let placed = false;
     const r = Math.random();
@@ -3457,9 +3489,10 @@ function generateInhabitant(x) {
       template=earthHumanTypes[Math.floor(Math.random()*earthHumanTypes.length)];
       skinColor=`hsl(${Math.random()*30+15},${Math.random()*20+40}%,${Math.random()*20+55}%)`;
     }
-    // Rare costume spawn on Earth (president / ghost / clown / astronaut)
+    // Rare costume spawn on Earth (president / ghost / clown) — no astronauts, they belong on the Moon
     if(p.id==='earth' && !window.prehistoricEra && Math.random()<0.04){
-      template = costumeHumanTypes[Math.floor(Math.random()*costumeHumanTypes.length)];
+      const earthCostumes=costumeHumanTypes.filter(c=>c.costume!=='astronaut');
+      template = earthCostumes[Math.floor(Math.random()*earthCostumes.length)];
     }
   }
 
@@ -5309,7 +5342,7 @@ function updatePyramidInterior(){
   // Movement
   if(keys['a']||keys['arrowleft']){a.vx-=0.5;a.facing=-1;}
   if(keys['d']||keys['arrowright']){a.vx+=0.5;a.facing=1;}
-  if(keys[' ']&&a.onGround){a.vy=-7;a.onGround=false;}
+  if((keys[' ']||keys['w']||keys['arrowup'])&&a.onGround){a.vy=-9;a.onGround=false;}
   a.vy+=GRAVITY*0.6;
   a.vx*=0.85;
   a.x+=a.vx; a.y+=a.vy;
@@ -13242,15 +13275,24 @@ function updatePlanetShared(){
       const cowShouldPanic=(ship.beamActive&&dS<250)||(ship.flameOn&&dS<200)||(planetTerror>3&&dS<150);
       if(cowShouldPanic&&ship.y>GROUND_LEVEL-300){c.walkDir=c.x<ship.x?-1:1;c.walkSpeed=Math.min(c.walkSpeed+0.02,1.2);}
       else{c.walkSpeed=Math.max(0.2,c.walkSpeed-0.005);}
-      // Stuck detection: if a grounded cow can't actually move for 3s, poof it (spawn-wedge safety net).
-      if(!c._eating && c.y>=GROUND_LEVEL-5){
+      // Stuck detection: only kicks in when a grounded cow/monkey/camel is actively trying to walk
+      // but hasn't moved. Instead of killing them, try to unstick (flip direction, tiny hop). Only
+      // poof as an absolute last resort after a very long time wedged.
+      if(!c._eating && c.y>=GROUND_LEVEL-5 && c.walkSpeed>0.05){
         if(c._lastX!=null && Math.abs(c.x-c._lastX)<0.3) c._stuckFrames=(c._stuckFrames||0)+1;
         else c._stuckFrames=0;
         c._lastX=c.x;
-        if(c._stuckFrames>180){
+        // Try to free them: flip direction at 3s and 6s so they walk away from the obstacle.
+        if(c._stuckFrames===180 || c._stuckFrames===360){
+          c.walkDir=-c.walkDir;
+        }
+        // Only actually poof if they've been wedged for 15s straight (edge of world / permanent wall).
+        if(c._stuckFrames>900){
           c.collected=true;
           for(let i=0;i<10;i++)particles.push({x:c.x+(Math.random()-0.5)*12,y:c.bodyY+(Math.random()-0.5)*8,vx:(Math.random()-0.5)*2,vy:-Math.random()*2,life:25,color:'rgba(200,200,200,0.6)',size:Math.random()*3+1});
         }
+      } else {
+        c._stuckFrames=0;
       }
     }
   });
@@ -13382,23 +13424,29 @@ function updatePlanetShared(){
       }
     }
     // Ambient biome life on Earth (cheap atmosphere particles, near camera only)
+    // Intensities fade smoothly across biome transitions so snow/pollen/dust never pop on abruptly.
     if(wp.id==='earth'&&particles.length<140&&typeof getEarthBiome==='function'){
       const ax=camera.x+Math.random()*canvas.width;
       const ab=getEarthBiome(ax);
       if(ab){
         const isNight = dayNightCycle>0.35 && dayNightCycle<0.65;
-        if(ab.id==='jungle'&&Math.random()>0.6){
+        const snowK = getBiomeIntensity(ax,'snow');
+        const jungleK = getBiomeIntensity(ax,'jungle');
+        const desertK = getBiomeIntensity(ax,'desert');
+        const farmK = getBiomeIntensity(ax,'farmland');
+        const subK = getBiomeIntensity(ax,'suburbs');
+        if(jungleK>0.05 && Math.random()<0.4*jungleK){
           // Pollen / spores drifting slowly
-          particles.push({x:ax,y:GROUND_LEVEL-20-Math.random()*120,vx:(Math.random()-0.5)*0.3,vy:-0.1-Math.random()*0.2,life:80,color:'rgba(220,255,140,0.35)',size:Math.random()*1.5+0.8});
-        }else if(ab.id==='desert'&&Math.random()>0.55){
+          particles.push({x:ax,y:GROUND_LEVEL-20-Math.random()*120,vx:(Math.random()-0.5)*0.3,vy:-0.1-Math.random()*0.2,life:80,color:`rgba(220,255,140,${0.35*jungleK})`,size:Math.random()*1.5+0.8});
+        }else if(desertK>0.05 && Math.random()<0.45*desertK){
           // Dust motes
-          particles.push({x:ax,y:GROUND_LEVEL-Math.random()*80,vx:0.5+Math.random()*0.7,vy:(Math.random()-0.5)*0.2,life:70,color:'rgba(220,180,110,0.28)',size:Math.random()*1.4+0.6});
-        }else if((ab.id==='farmland'||ab.id==='suburbs'||ab.id==='suburbs2')&&isNight&&Math.random()>0.5){
+          particles.push({x:ax,y:GROUND_LEVEL-Math.random()*80,vx:0.5+Math.random()*0.7,vy:(Math.random()-0.5)*0.2,life:70,color:`rgba(220,180,110,${0.28*desertK})`,size:Math.random()*1.4+0.6});
+        }else if((farmK>0.05||subK>0.05)&&isNight&&Math.random()<0.5*Math.max(farmK,subK)){
           // Fireflies at night
-          particles.push({x:ax,y:GROUND_LEVEL-30-Math.random()*80,vx:(Math.random()-0.5)*0.4,vy:(Math.random()-0.5)*0.3,life:60,color:'rgba(210,255,120,0.7)',size:1.2});
-        }else if(ab.id==='snow'&&Math.random()>0.5){
-          // Light snowflake flakes falling
-          particles.push({x:ax,y:camera.y+Math.random()*20,vx:Math.sin(frameT+ax*0.01)*0.3,vy:0.6+Math.random()*0.6,life:130,color:'rgba(255,255,255,0.7)',size:Math.random()*1.2+0.6});
+          particles.push({x:ax,y:GROUND_LEVEL-30-Math.random()*80,vx:(Math.random()-0.5)*0.4,vy:(Math.random()-0.5)*0.3,life:60,color:`rgba(210,255,120,${0.7*Math.max(farmK,subK)})`,size:1.2});
+        }else if(snowK>0.05 && Math.random()<0.5*snowK){
+          // Light snowflake flakes falling — density + alpha track snow biome intensity
+          particles.push({x:ax,y:camera.y+Math.random()*20,vx:Math.sin(frameT+ax*0.01)*0.3,vy:0.6+Math.random()*0.6,life:130,color:`rgba(255,255,255,${0.7*snowK})`,size:Math.random()*1.2+0.6});
         }
       }
     }
@@ -14252,15 +14300,21 @@ function updatePlanetSystems(){
   if(p){
     if(p.id==='earth'&&Math.random()>0.7){
       const wx=camera.x+Math.random()*canvas.width;
-      const wb=getEarthBiome(wx);
-      if(wb.id==='desert'){
+      // Biome intensities — smooth fade across transitions, no hard edges
+      const desertK=getBiomeIntensity(wx,'desert');
+      const snowK=getBiomeIntensity(wx,'snow');
+      const mtnK=getBiomeIntensity(wx,'mountains');
+      const oceanK=getBiomeIntensity(wx,'ocean');
+      // Combined snowfall coverage: strongest in snow biome, lighter in mountains, fading out
+      const snowfallK=Math.min(1, snowK + mtnK*0.55);
+      if(desertK>0.05 && Math.random()<0.5*desertK){
         // Desert: sandstorm particles
-        if(Math.random()>0.5)weather.push({x:wx,y:camera.y+Math.random()*canvas.height,vx:2+Math.random()*3,vy:Math.random()-0.3,life:50,type:'dust'});
-      }else if(wb.id==='mountains'){
-        // Mountains: occasional snow + wind
-        if(Math.random()>0.4)weather.push({x:wx,y:camera.y-10,vx:Math.sin(frameT)*1,vy:1.5+Math.random()*2,life:100,type:'snow'});
-      }else if(!wb.isOcean){
-        // Rain for non-desert, non-ocean biomes
+        weather.push({x:wx,y:camera.y+Math.random()*canvas.height,vx:2+Math.random()*3,vy:Math.random()-0.3,life:50,type:'dust'});
+      }else if(snowfallK>0.05 && Math.random()<0.6*snowfallK){
+        // Snow biome + partial mountain fallback, fades through transitions
+        weather.push({x:wx,y:camera.y-10,vx:Math.sin(frameT)*1,vy:1.5+Math.random()*2,life:100,type:'snow'});
+      }else if(oceanK<0.5 && desertK<0.3 && snowfallK<0.3){
+        // Rain for non-desert, non-ocean, non-snowy biomes
         weather.push({x:wx,y:camera.y-10,vx:0.5,vy:8+Math.random()*4,life:80,type:'rain'});
       }
     }
