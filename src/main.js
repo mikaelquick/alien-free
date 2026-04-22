@@ -11631,6 +11631,22 @@ function updateLasso(){
         }
       }
     });
+    // Splatt humans when the dragged building slams into them at speed
+    const _blkSpeed=Math.hypot(tgt.vx,tgt.vy);
+    if(_blkSpeed>4){
+      const _dir=Math.sign(tgt.vx)||1;
+      humans.forEach(h=>{
+        if(h.collected||h.dead)return;
+        if(h.bodyX>tgt.x && h.bodyX<tgt.x+tgt.w && h.bodyY>tgt.y && h.bodyY<tgt.y+tgt.h){
+          const sc=h.scale||1;
+          const power=Math.min(5, 2.5+sc*0.4+_blkSpeed*0.1);
+          spawnGibs(h, _dir*Math.min(10,_blkSpeed*0.8), -3-Math.random()*3, power);
+          h.collected=true;
+          planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        }
+      });
+    }
   } else if(l.targetType==='vehicle'){
     tgt.vx = (tgt.vx||0) + ux*pull*1.2;
     tgt.vy = (tgt.vy||0) + uy*pull*1.2 - 0.35;
@@ -11646,6 +11662,23 @@ function updateLasso(){
         }
       }
     });
+    // Splatt humans when the dragged vehicle plows into them
+    const _vehSpeed=Math.hypot(tgt.vx,tgt.vy);
+    if(_vehSpeed>4){
+      const _vw=tgt.w||40, _vh=tgt.h||20;
+      const _dir=Math.sign(tgt.vx)||1;
+      humans.forEach(h=>{
+        if(h.collected||h.dead)return;
+        if(h.bodyX>tgt.x && h.bodyX<tgt.x+_vw && h.bodyY>tgt.y-_vh && h.bodyY<tgt.y){
+          const sc=h.scale||1;
+          const power=Math.min(5, 2.5+sc*0.4+_vehSpeed*0.1);
+          spawnGibs(h, _dir*Math.min(10,_vehSpeed*0.8), -3-Math.random()*3, power);
+          h.collected=true;
+          planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        }
+      });
+    }
   } else {
     // Human — pull all body parts
     const parts=['head','body','legL','legR','armL','armR','footL','footR'];
