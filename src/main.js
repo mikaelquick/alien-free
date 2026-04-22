@@ -1328,6 +1328,95 @@ const planetDefs = [
     cryPhrases: ["WHEN AM I","TIME BLEEDS","THE LOOP","ECHO OF ECHO"],
     alienTypes: [],
   },
+  {
+    id: 'europa', name: 'Europa', desc: '"Jupiter\'s icy moon. A frozen ocean hides under the cracked shell — something may be swimming below."',
+    radius: 55, color: '#dce6ee', color2: '#a8b8cc', atmosphere: '#d0e0ff',
+    skyTop: '#08101a', skyMid: '#15253a', skyBot: '#2a4a6a',
+    groundColor: ['#c8d8e8','#a8c0d4','#8aa0b8'], grassColor: '#b8d0e4',
+    buildingColors: [['#a8b8cc','#8898ac','#6a7a8e']],
+    inhabitantCount: 16, buildingDensity: 0.4, hasClouds: false, isAlien: true, isMoon: true,
+    orbitsParent: 'glimora', moonOrbitRadius: 420, moonOrbitYears: 0.0097, // ~3.55 days
+    gravityScale: 0.13, // Europa ~0.13 g
+    rotationPeriod: 5,
+    alienSkin: ['#a0e8ff','#7cd0f0','#c0f0ff','#6ab8e0'],
+    alienHeadShape: 'tall',
+    alienExtra: 'antennae',
+    alienLabel: 'Europan',
+    sadFacts: ['"They evolved under the ice..."','"Their songs echoed through frozen oceans..."','"Their eyes never saw the sun..."'],
+    cryPhrases: ["THE ICE CRACKS","OUR OCEAN CRIES","THE DEEP WARNED US","FROZEN TOMB","NO LIGHT","BELOW, BELOW"],
+    alienTypes: [
+      { type:'swimmer',   label:'Ice Swimmer',     scale:1.0, bodyWidth:5,  headR:9,  mass:0.7, colors:['#a0e8ff','#7cd0f0','#c0f0ff'] },
+      { type:'elder',     label:'Tide Elder',      scale:1.3, bodyWidth:7,  headR:11, mass:1.6, colors:['#6aa8c8','#5090b0','#a0d0e8'] },
+      { type:'spawn',     label:'Spawnling',       scale:0.5, bodyWidth:3,  headR:7,  mass:0.25,colors:['#d0f0ff','#a8e0f0','#e0f8ff'] },
+      { type:'leviathan', label:'Deep Leviathan',  scale:1.8, bodyWidth:14, headR:12, mass:4,   colors:['#2a4a6a','#1a3050','#3a6080'], float:true },
+    ],
+  },
+  {
+    id: 'io', name: 'Io', desc: '"Jupiter\'s volcanic moon. Sulfur plumes shoot hundreds of kilometres into nothing — the most geologically active body in the system."',
+    radius: 58, color: '#f0d060', color2: '#c09030', atmosphere: '#ffc040',
+    skyTop: '#301810', skyMid: '#502818', skyBot: '#803820',
+    groundColor: ['#c08830','#a06818','#784010'], grassColor: '#e0a838',
+    buildingColors: [['#a06030','#804018','#602010']],
+    inhabitantCount: 14, buildingDensity: 0.4, hasClouds: false, isAlien: true, isMoon: true,
+    orbitsParent: 'glimora', moonOrbitRadius: 320, moonOrbitYears: 0.0048, // ~1.77 days
+    gravityScale: 0.18, // Io ~0.183 g
+    rotationPeriod: 4,
+    alienSkin: ['#ffb840','#e08830','#ffd060','#c06018'],
+    alienHeadShape: 'pointy',
+    alienExtra: 'horns',
+    alienLabel: 'Iovian',
+    sadFacts: ['"They danced in the sulfur plumes..."','"Their skin adapted to acid rain..."','"They remembered when Io was silent..."'],
+    cryPhrases: ["THE MOUNTAINS EXPLODE","SULFUR TAKES US","OUR PLUMES DIE","PELE WEEPS","LOKI NO","YELLOW BLOOD"],
+    alienTypes: [
+      { type:'dancer',    label:'Plume Dancer',    scale:1.0, bodyWidth:5, headR:9,  mass:0.8, colors:['#ffb840','#e08830','#ffd060'] },
+      { type:'magmalord', label:'Magma Lord',      scale:1.4, bodyWidth:9, headR:11, mass:2.2, colors:['#c06018','#803010','#e07020'] },
+      { type:'spawn',     label:'Ashling',         scale:0.55,bodyWidth:3, headR:7,  mass:0.3, colors:['#ffd880','#e0b060','#ffeea0'] },
+    ],
+  },
+  {
+    id: 'titan', name: 'Titan', desc: '"Saturn\'s largest moon. Thick orange haze hides lakes of liquid methane. A world of perpetual twilight."',
+    radius: 80, color: '#e8a050', color2: '#a06028', atmosphere: '#ffc078',
+    skyTop: '#402010', skyMid: '#703818', skyBot: '#a05828',
+    groundColor: ['#8a5a28','#6a4018','#4a2810'], grassColor: '#a06830',
+    buildingColors: [['#7a5020','#5a3810','#3a2008']],
+    inhabitantCount: 18, buildingDensity: 0.5, hasClouds: true, isAlien: true, isMoon: true,
+    orbitsParent: 'tomb', moonOrbitRadius: 480, moonOrbitYears: 0.0437, // ~15.95 days
+    gravityScale: 0.14, // Titan ~0.14 g
+    rotationPeriod: 5,
+    alienSkin: ['#d09060','#a06830','#e0a070','#805020'],
+    alienHeadShape: 'wide',
+    alienExtra: 'antennae',
+    alienLabel: 'Titanian',
+    sadFacts: ['"They breathed methane..."','"Their lakes were ancient..."','"The orange haze was their only sky..."'],
+    cryPhrases: ["THE LAKE SWALLOWS","AMBER SKY DIES","METHANE WEEPING","NO STARS EVER","THE MIST REMEMBERS","KRAKEN MARE"],
+    alienTypes: [
+      { type:'lakewalker',label:'Lake Walker',     scale:1.0, bodyWidth:5, headR:9,  mass:0.9, colors:['#d09060','#a06830','#e0a070'] },
+      { type:'haze',      label:'Haze Seer',       scale:1.2, bodyWidth:6, headR:10, mass:1.2, colors:['#805020','#603818','#a06838'], float:true },
+      { type:'spawn',     label:'Dusklet',         scale:0.55,bodyWidth:3, headR:7,  mass:0.3, colors:['#e0b088','#c09068','#d0a078'] },
+    ],
+  },
+  {
+    id: 'triton', name: 'Triton', desc: '"Neptune\'s largest moon. Orbits backwards. Pink nitrogen ice shot through with erupting geysers."',
+    radius: 65, color: '#e8c0d0', color2: '#a080a0', atmosphere: '#ffd0e0',
+    skyTop: '#0a0820', skyMid: '#1a1830', skyBot: '#2a2848',
+    groundColor: ['#c8a0b0','#a8809a','#807080'], grassColor: '#d0b0c0',
+    buildingColors: [['#a080a0','#806080','#604060']],
+    inhabitantCount: 12, buildingDensity: 0.4, hasClouds: false, isAlien: true, isMoon: true,
+    orbitsParent: 'asteroid', moonOrbitRadius: 380, moonOrbitYears: -0.0161, // retrograde, ~5.88 days
+    gravityScale: 0.08, // Triton ~0.079 g
+    rotationPeriod: 5,
+    alienSkin: ['#e8b0c8','#c090b0','#ffcae0','#906080'],
+    alienHeadShape: 'tall',
+    alienExtra: 'antennae',
+    alienLabel: 'Tritonian',
+    sadFacts: ['"They orbit backwards — time flows wrong for them..."','"Their skin is dusted with rose-cold crystal..."','"The geysers sang their lullabies..."'],
+    cryPhrases: ["THE GEYSERS STOP","RETROGRADE FEAR","OUR PINK ICE","COLD AND ALONE","NO WARMTH IN HEAVEN","NEPTUNE WEEPS ABOVE"],
+    alienTypes: [
+      { type:'icewalker', label:'Frost Walker',    scale:1.0, bodyWidth:5, headR:9,  mass:0.7, colors:['#e8b0c8','#c090b0','#ffcae0'] },
+      { type:'geyser',    label:'Geyser Priest',   scale:1.2, bodyWidth:6, headR:11, mass:1.2, colors:['#906080','#704060','#a07090'] },
+      { type:'spawn',     label:'Pinklet',         scale:0.5, bodyWidth:3, headR:7,  mass:0.25,colors:['#ffd0e0','#f0b8d0','#ffc8dc'] },
+    ],
+  },
 ];
 
 // --- EARTH HUMAN TYPES ---
@@ -1430,6 +1519,10 @@ function initSpacePlanets() {
     {x:-6500, y:0},       // [8] Sun — farthest inner
     {x:1590,  y:-1500},   // [9] Moon — child of Earth; position overridden by orbit tick
     {x:17500, y:-7800},   // [10] Wormhole — FURTHEST outer; leads to prehistoric Earth
+    {x:6920,  y:-3500},   // [11] Europa — orbits Jupiter; position overridden by orbit tick
+    {x:6820,  y:-3500},   // [12] Io — orbits Jupiter
+    {x:9480,  y:-4500},   // [13] Titan — orbits Saturn
+    {x:14380, y:-6500},   // [14] Triton — orbits Neptune
   ];
   planetDefs.forEach((def,i) => {
     planets.push({ ...def, spaceX:positions[i].x, spaceY:positions[i].y, visited:false, savedState:null });
@@ -1455,6 +1548,17 @@ function initSpacePlanets() {
       p.orbitAngle = 0;
       // ~27.3 Earth days in real life.
       p.orbitSpeed = (Math.PI * 2) / (EARTH_PERIOD_FRAMES * (27.3/365));
+      return;
+    }
+    if(p.orbitsParent){
+      // Moons of gas giants — orbit their parent planet, not the Sun.
+      p.orbits = true;
+      p.orbitRadius = p.moonOrbitRadius || 400;
+      // Spread initial angles so sibling moons (Europa/Io) don't overlap.
+      p.orbitAngle = Math.random()*Math.PI*2;
+      p.initOrbitAngle = p.orbitAngle;
+      const years = p.moonOrbitYears || 0.01;
+      p.orbitSpeed = (Math.PI * 2) / (EARTH_PERIOD_FRAMES * years);
       return;
     }
     const dx = p.spaceX - sunX, dy = p.spaceY - sunY;
@@ -3672,7 +3776,10 @@ const COW_TYPES = {
            {label:'Sacred Jackal',color:'#0a0a0a',spots:'#ffd700',size:1.4,wack:'anubis'}],
   'asteroid': [{label:'Rock Grub',color:'#4a3a4a',spots:'#8a5a7a',size:0.7,wack:'fat'},
                {label:'Pustule Beast',color:'#5a4a3a',spots:'#aa8a4a',size:1.5,wack:'twohead'},
-               {label:'Vein Worm',color:'#3a2a3a',spots:'#6a4a5a',size:0.4,wack:'tiny'}]
+               {label:'Vein Worm',color:'#3a2a3a',spots:'#6a4a5a',size:0.4,wack:'tiny'}],
+  'sun': [{label:'Plasma Wisp',color:'#ffd060',spots:'#ff8020',size:0.6,wack:'glow'},
+          {label:'Solar Slug',color:'#ff6020',spots:'#aa2000',size:0.9,wack:'fire'},
+          {label:'Corona Beast',color:'#ffa040',spots:'#ff3000',size:1.3,wack:'fire'}]
 };
 
 // Vehicle catalogs keyed by planet id (for debug preview). Earth is the only planet with real road traffic.
@@ -3789,6 +3896,10 @@ function generateCows() {
     }
   }else if(p.id==='moon'){
     // Airless, silent moon — no wildlife here.
+  }else if(p.isSun){
+    // Sun has only sparse weird sun-creatures, no earth cattle
+    const count=2+Math.floor(Math.random()*3);
+    for(let i=0;i<count;i++) generateCow(Math.random()*(worldWidth-600)+300);
   }else{
     const count=Math.floor(5+Math.random()*6);
     for(let i=0;i<count;i++) generateCow(Math.random()*(worldWidth-600)+300);
@@ -11175,6 +11286,15 @@ function leavePlanet() {
         pp.spaceY = _earthP.spaceY + Math.sin(ang) * pp.orbitRadius;
       });
     }
+    // Snap parent-orbit moons (Europa/Io/Titan/Triton) to their correct spots around their parents.
+    planets.forEach(pp=>{
+      if(!pp.orbitsParent) return;
+      const par = planets.find(q=>q.id===pp.orbitsParent);
+      if(!par) return;
+      const ang = (pp.orbitAngle!=null) ? pp.orbitAngle : (pp.initOrbitAngle||0);
+      pp.spaceX = par.spaceX + Math.cos(ang) * pp.orbitRadius;
+      pp.spaceY = par.spaceY + Math.sin(ang) * pp.orbitRadius;
+    });
   }
   gameMode = 'space';
   playerMode = 'ship';
@@ -12383,8 +12503,7 @@ function togglePlayerMode(){
 
 function ejectFromShipIntoVehicle(){
   if(playerMode!=='ship') return;
-  // Need to be near ground (same altitude check as togglePlayerMode)
-  if(ship.y<GROUND_LEVEL-100){ showMessage('Get closer to the ground first'); return; }
+  // Altitude restriction removed — you can deploy from any height; vehicle drops to the ground.
   // Pick a spawn X: prefer ship.x, but not over ocean
   let spawnX=ship.x;
   if(currentPlanet&&currentPlanet.id==='earth'){
@@ -12395,9 +12514,12 @@ function ejectFromShipIntoVehicle(){
   // Pick vehicle type — use first earth car if available, else a default sedan.
   const vTypes = (VEHICLE_TYPES[currentPlanet&&currentPlanet.id]||VEHICLE_TYPES.earth);
   const vt = vTypes[Math.floor(Math.random()*Math.min(4,vTypes.length))]; // small cars only (first 4)
-  const v = {...vt, x:spawnX-vt.w/2, y:GROUND_LEVEL, vx:0, alive:true,
+  // Start the vehicle at ship altitude so it visibly falls to the ground
+  const startY = Math.min(ship.y+20, GROUND_LEVEL);
+  const v = {...vt, x:spawnX-vt.w/2, y:startY, vx:0, vy:0, alive:true,
     homeMin:100, homeMax:worldWidth-100,
-    hijacked:true, indestructible:true};
+    hijacked:true, indestructible:true,
+    _deployFalling: startY < GROUND_LEVEL - 5};
   vehicles.push(v);
   // Switch to on-foot and drive
   playerMode='onfoot';
@@ -12408,9 +12530,8 @@ function ejectFromShipIntoVehicle(){
   alien.jetpackFuel=100;
   alien.health=100;
   alien.inCave=false;
-  // Little drop-in flash
+  // Teleport-out flash from the ship at drop moment
   for(let i=0;i<16;i++)particles.push({x:v.x+v.w/2,y:v.y-10,vx:(Math.random()-0.5)*3,vy:-Math.random()*2,life:25,color:['#0f0','#8f8','#fff'][Math.floor(Math.random()*3)],size:Math.random()*3+1});
-  triggerShake(3);
   showMessage('Deployed with '+(vt.label||'vehicle')+'!');
 }
 
@@ -14426,6 +14547,32 @@ function updateAlienOnFoot(){
       // Vehicle somehow got removed; eject
       alien.drivingVehicle=null;
       alien.x=v.x; alien.y=GROUND_LEVEL-10; alien.onGround=false;
+    } else if(v._deployFalling){
+      // Deploy drop: vehicle falls from ship altitude to the ground
+      v.vy = (v.vy||0) + (BASE_GRAVITY*1.2);
+      v.y += v.vy;
+      // Trailing dust/exhaust while falling
+      if(Math.random()<0.7) particles.push({x:v.x+v.w/2+(Math.random()-0.5)*10,y:v.y-v.h*0.3,vx:(Math.random()-0.5)*1.2,vy:-(Math.random()*0.5),life:18+Math.random()*10,color:'rgba(200,210,220,0.6)',size:2+Math.random()*2});
+      // Sync alien to cabin so the camera rides with it
+      alien.x=v.x+v.w*0.3;
+      alien.y=v.y-v.h*0.55;
+      alien.vx=0; alien.vy=0;
+      alien.onGround=true;
+      // Touchdown
+      if(v.y >= GROUND_LEVEL){
+        v.y = GROUND_LEVEL;
+        v.vy = 0;
+        v._deployFalling = false;
+        // Impact dust + shake
+        for(let i=0;i<22;i++) particles.push({x:v.x+Math.random()*v.w,y:GROUND_LEVEL-2,vx:(Math.random()-0.5)*4,vy:-Math.random()*3,life:28+Math.random()*14,color:'rgba(190,180,160,0.8)',size:2+Math.random()*3});
+        for(let i=0;i<6;i++) debris.push({x:v.x+Math.random()*v.w,y:GROUND_LEVEL-2,vx:(Math.random()-0.5)*3,vy:-Math.random()*2-1,life:40,size:Math.random()*2+1,color:'#b0a070'});
+        skidMarks.push({x:v.x+v.w*0.2,y:GROUND_LEVEL-2,w:30,life:600,maxLife:600});
+        skidMarks.push({x:v.x+v.w*0.8,y:GROUND_LEVEL-2,w:30,life:600,maxLife:600});
+        triggerShake(4);
+      }
+      // Cooldowns tick during the fall
+      for(let ci=0;ci<alien.weaponCD.length;ci++) if(alien.weaponCD[ci]>0) alien.weaponCD[ci]--;
+      return;
     } else {
       const boosting = !!keys['shift'];
       const maxSpeed = boosting ? 11 : 5.5;
@@ -14482,6 +14629,36 @@ function updateAlienOnFoot(){
           h.collected=true;
           triggerShake(Math.min(4, 2.5 + s*0.3));
           planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        }
+        // Animals (cows/sheep/monkeys/tigers/etc.)
+        for(let ci=0;ci<cows.length;ci++){
+          const c=cows[ci];
+          if(c.collected) continue;
+          const cs = c.size||1;
+          const halfW = 18*cs + 4;
+          if(c.x+halfW < vL || c.x-halfW > vR) continue;
+          if(c.bodyY < v.y - v.h - 12) continue;
+          if(c.bodyY > v.y + 40) continue;
+          c.collected=true;
+          score+=1;
+          const tint=c.color||'#c33';
+          for(let i=0;i<18;i++) particles.push({x:c.x,y:c.bodyY,vx:(Math.random()-0.5)*6+v.vx*0.3,vy:(Math.random()-0.5)*5-2,life:35+Math.random()*10,color:(Math.random()<0.4? (c.spots||'#7a1818') : tint),size:2+Math.random()*3});
+          for(let i=0;i<6;i++) debris.push({x:c.x,y:c.bodyY,vx:(Math.random()-0.5)*4+v.vx*0.25,vy:-Math.random()*3-1,life:50,size:Math.random()*3+1,color:tint});
+          triggerShake(Math.min(3.5, 2 + cs*0.4));
+          planetTerror=Math.min(planetTerror+0.15,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        }
+        // Military foot units (skip bullets/boulders)
+        for(let mi=0;mi<military.length;mi++){
+          const u=military[mi];
+          if(!u.alive||u.type==='bullet'||u.type==='boulder') continue;
+          if(u.x < vL-10 || u.x > vR+10) continue;
+          if(u.y < v.y - v.h - 12) continue;
+          if(u.y > v.y + 40) continue;
+          u.health=-999; u.alive=false;
+          for(let i=0;i<12;i++) particles.push({x:u.x,y:u.y-10,vx:(Math.random()-0.5)*6+v.vx*0.3,vy:-Math.random()*4,life:30,color:'#a22',size:Math.random()*3+2});
+          triggerShake(2.5);
           try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
         }
         // Skid marks while moving
@@ -15323,7 +15500,7 @@ function doWormholeWarp(wh){
   const sunSX = sunP ? sunP.spaceX : 0, sunSY = sunP ? sunP.spaceY : 0;
   planets.forEach(p=>{
     if(!p.orbits) return;
-    if(p.orbitsEarth) return;
+    if(p.orbitsEarth || p.orbitsParent) return;
     if(p.initOrbitAngle!=null){
       p.orbitAngle = p.initOrbitAngle;
       p.spaceX = sunSX + Math.cos(p.orbitAngle) * p.orbitRadius;
@@ -15338,6 +15515,15 @@ function doWormholeWarp(wh){
       p.spaceX = e.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
       p.spaceY = e.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
     }
+  });
+  // Reset parent-orbit moons to their initial angles around their (just-reset) parents.
+  planets.forEach(p=>{
+    if(!p.orbitsParent) return;
+    const parent = planets.find(q=>q.id===p.orbitsParent);
+    if(!parent || p.initOrbitAngle==null) return;
+    p.orbitAngle = p.initOrbitAngle;
+    p.spaceX = parent.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
+    p.spaceY = parent.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
   });
   if(e){
     const dropAng=Math.random()*Math.PI*2;
@@ -15441,7 +15627,7 @@ function updateSpace(){
     const sunX = sunP ? sunP.spaceX : 0, sunY = sunP ? sunP.spaceY : 0;
     // First pass: advance solar-orbit planets around the Sun
     planets.forEach(p=>{
-      if(!p.orbits || p.orbitsEarth) return;
+      if(!p.orbits || p.orbitsEarth || p.orbitsParent) return;
       p.orbitAngle += p.orbitSpeed;
       p.spaceX = sunX + Math.cos(p.orbitAngle) * p.orbitRadius;
       p.spaceY = sunY + Math.sin(p.orbitAngle) * p.orbitRadius;
@@ -15453,6 +15639,16 @@ function updateSpace(){
       p.orbitAngle += p.orbitSpeed;
       p.spaceX = earth.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
       p.spaceY = earth.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
+    });
+    // Third pass: moons of other planets (Europa/Io → Jupiter, Titan → Saturn, Triton → Neptune).
+    // Runs AFTER the first pass so the parents have already moved this frame.
+    planets.forEach(p=>{
+      if(!p.orbitsParent) return;
+      const parent = planets.find(q=>q.id===p.orbitsParent);
+      if(!parent) return;
+      p.orbitAngle += p.orbitSpeed;
+      p.spaceX = parent.spaceX + Math.cos(p.orbitAngle) * p.orbitRadius;
+      p.spaceY = parent.spaceY + Math.sin(p.orbitAngle) * p.orbitRadius;
     });
   }
 

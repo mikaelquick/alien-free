@@ -178,6 +178,10 @@ en: {
     asteroid: { name: 'Neptune', desc: '"The deep-blue ice giant. 8th from the Sun. Winds at 2,000 km/h."' },
     sun: { name: 'Sun', desc: '"Our star. The heart of the solar system. 109 Earths across."' },
     moon: { name: 'Moon', desc: '"Earth\'s only natural satellite. Airless, silent, pockmarked by eons of impacts."' },
+    europa: { name: 'Europa', desc: '"Jupiter\'s icy moon. A frozen shell hides a liquid ocean — and perhaps more."' },
+    io: { name: 'Io', desc: '"Jupiter\'s volcanic hell-moon. Sulphur plains, tidal heat, constant eruptions."' },
+    titan: { name: 'Titan', desc: '"Saturn\'s largest moon. Orange haze, methane rivers, nitrogen sky."' },
+    triton: { name: 'Triton', desc: '"Neptune\'s largest moon. Retrograde orbit. Pink nitrogen frost, cryovolcanoes."' },
     wormhole: { name: 'Wormhole', desc: '"A tear in spacetime. Where does it lead? WHEN does it lead?"' },
   },
   // --- Boss ---
