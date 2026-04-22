@@ -4186,6 +4186,7 @@ function loadPlanet(planet) {
   lastVisitedPlanet = planet;
   gameMode = 'planet';
   GRAVITY = BASE_GRAVITY * (planet.gravityScale || 1);
+  window._sunDeath = null;
   // Restore saved state or generate fresh
   respawnTimer=0;
   if (planet.savedState) {
@@ -13190,7 +13191,10 @@ function updatePlanetShared(){
       const hDist=Math.abs(h.bodyX-bX),bwH=15+(beamW/2-15)*Math.max(0,(h.bodyY-bY)/(tY-bY));
       if(hDist<bwH&&h.bodyY>bY){
         h.beingBeamed=true;h.crying=true;h.ragdoll=true;h.panicLevel=Math.min(h.panicLevel+0.15,10);
-        const pull=(GRAVITY+0.15)/h.mass,ctr=(bX-h.bodyX)*0.01;
+        // Beam lift is anchored to BASE gravity (not planet-scaled), so high-gravity
+        // worlds (Sun, Jupiter) genuinely resist the tractor beam instead of letting
+        // the pull scale up with gravity and cancel it out.
+        const pull=(BASE_GRAVITY*1.15+0.15)/h.mass,ctr=(bX-h.bodyX)*0.01;
         ['head','body','legL','legR','armL','armR','footL','footR'].forEach(pt=>{h[pt+'VY']-=pull;h[pt+'VY']*=0.95;h[pt+'VX']+=ctr;h[pt+'VX']*=0.96;});
         h.cryTimer++;
         if(h.cryTimer%50===0){
@@ -13373,6 +13377,36 @@ function updatePlanetShared(){
 
   // Block physics
   blocks.forEach(b=>{if(b.fixed)return;b.vy+=GRAVITY;b.vx*=0.98;b.vy*=0.98;b.x+=b.vx;b.y+=b.vy;
+    // Crush/splat anything caught under a moving free block (covers post-lasso drops).
+    const _bspd = Math.hypot(b.vx||0, b.vy||0);
+    if(_bspd > 3 && !b.dead){
+      const _bdir = Math.sign(b.vx||0) || (b.vy>0 ? 0 : 0);
+      humans.forEach(h=>{
+        if(h.collected||h.dead)return;
+        if(h.bodyX>b.x && h.bodyX<b.x+b.w && h.bodyY>b.y && h.bodyY<b.y+b.h){
+          const sc=h.scale||1;
+          const power=Math.min(5, 2.5+sc*0.4+_bspd*0.12);
+          spawnGibs(h, _bdir*Math.min(10,_bspd*0.8), -2-Math.random()*3, power);
+          h.collected=true;
+          planetTerror=Math.min(planetTerror+0.25,10);
+          try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
+        }
+      });
+      cows.forEach(c=>{
+        if(c.collected)return;
+        if(c.x>b.x && c.x<b.x+b.w && c.bodyY>b.y && c.bodyY<b.y+b.h){
+          c.collected=true; score+=1;
+          for(let i=0;i<14;i++)particles.push({x:c.x,y:c.bodyY,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.5)*6-2,life:35,color:c.color||'#c33',size:Math.random()*4+2});
+        }
+      });
+      military.forEach(u=>{
+        if(!u.alive||u.type==='bullet'||u.type==='boulder')return;
+        if(u.x>b.x && u.x<b.x+b.w && u.y>b.y && u.y<b.y+b.h){
+          u.health=-999; u.alive=false;
+          for(let i=0;i<10;i++)particles.push({x:u.x,y:u.y-10,vx:(Math.random()-0.5)*6,vy:-Math.random()*4,life:30,color:'#a22',size:Math.random()*3+2});
+        }
+      });
+    }
     if(b.y+b.h>GROUND_LEVEL){b.y=GROUND_LEVEL-b.h;b.vy*=-0.3;b.vx*=0.8;if(Math.abs(b.vy)<0.5)b.vy=0;if(Math.abs(b.vy)>3){b.health-=Math.abs(b.vy)*5;for(let i=0;i<3;i++)debris.push({x:b.x+Math.random()*b.w,y:b.y+b.h,vx:(Math.random()-0.5)*3,vy:-Math.random()*3,life:40,size:Math.random()*3+1,color:b.color});}}
     if(b.y>GROUND_LEVEL+200){b.dead=true;}
     else if(b.health<=0&&!b.exploding){checkBuildingDestroyed(b);}
@@ -14313,6 +14347,78 @@ function updatePlanetShared(){
 function updateAlienOnFoot(){
   const p=currentPlanet||planetDefs[0];
 
+  // --- SUN BURN-UP DEATH ---
+  // Stepping off the ship onto the Sun's surface is instant immolation.
+  if(p && p.isSun && !alien.drivingVehicle){
+    if(!window._sunDeath){
+      window._sunDeath = { t:0, duration:180 };
+      triggerShake(4);
+      try { if(!window._muted){ const s = mkAudio ? null : null; } } catch(e){}
+    }
+  }
+  if(window._sunDeath){
+    const sd = window._sunDeath;
+    sd.t++;
+    // Lock horizontal input, let gravity slump the body
+    alien.vx *= 0.7;
+    alien.vy += GRAVITY*0.5;
+    alien.x += alien.vx;
+    alien.y += alien.vy;
+    if(alien.y >= GROUND_LEVEL-10){ alien.y = GROUND_LEVEL-10; alien.vy = 0; alien.onGround = true; }
+    // Emit fire/smoke/ember particles around the alien body
+    const ax = alien.x, ay = alien.y;
+    const burnN = sd.t < 60 ? 4 : 2;
+    for(let i=0;i<burnN;i++){
+      const a = Math.random()*Math.PI*2;
+      const r = 4+Math.random()*10;
+      const hue = 10+Math.random()*40; // red→orange→yellow
+      particles.push({
+        x: ax+Math.cos(a)*r, y: ay-10+Math.sin(a)*r*0.6,
+        vx: (Math.random()-0.5)*1.2, vy: -1.5-Math.random()*2.5,
+        life: 22+Math.random()*18,
+        color: `hsl(${hue},100%,${55+Math.random()*25}%)`,
+        size: 2+Math.random()*3.5
+      });
+    }
+    // Dark smoke drift
+    if(sd.t%2===0){
+      particles.push({
+        x: ax+(Math.random()-0.5)*10, y: ay-18,
+        vx: (Math.random()-0.5)*0.5, vy: -0.8-Math.random()*0.8,
+        life: 60+Math.random()*30,
+        color: `rgba(${30+Math.random()*30},${20+Math.random()*20},${15+Math.random()*15},0.55)`,
+        size: 3+Math.random()*3
+      });
+    }
+    // Arterial sparks
+    if(sd.t%3===0){
+      for(let i=0;i<2;i++){
+        const a=Math.random()*Math.PI*2, sp=2+Math.random()*3;
+        particles.push({x:ax, y:ay-12, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.5, life:14+Math.random()*8, color:'#ffd', size:0.8+Math.random()*1.2});
+      }
+    }
+    // Mid-burn: gib-like chunks
+    if(sd.t===100){
+      for(let i=0;i<10;i++){
+        const a=Math.random()*Math.PI*2, sp=2+Math.random()*3;
+        particles.push({x:ax, y:ay-14, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-2, life:40+Math.random()*20, color:'#d84', size:2+Math.random()*2});
+      }
+      triggerShake(3);
+    }
+    // Respawn at ship
+    if(sd.t >= sd.duration){
+      window._sunDeath = null;
+      playerMode = 'ship';
+      alien.health = 100;
+      alien.vx = 0; alien.vy = 0;
+      alien.x = ship.x; alien.y = ship.y+20;
+      alien.jetpackFuel = 100;
+      alien.inCave = false;
+      showMessage('You burned up on the Sun. Back in the ship.');
+    }
+    return; // skip all other on-foot logic while dying
+  }
+
   // --- VEHICLE DRIVING (hijacked) ---
   if(alien.drivingVehicle){
     const v=alien.drivingVehicle;
@@ -14351,9 +14457,10 @@ function updateAlienOnFoot(){
       } else {
         v.x+=v.vx;
       }
-      // World clamp
-      if(v.x<50){v.x=50; v.vx=0;}
-      if(v.x+v.w>worldWidth-50){v.x=worldWidth-50-v.w; v.vx=0;}
+      // World wrap (keeps the seamless torus world — clamping here was the
+      // "invisible wall" that blocked forward progress on non-Earth planets).
+      if(v.x<0) v.x += worldWidth;
+      else if(v.x>worldWidth) v.x -= worldWidth;
       // Drive-over gore — horizontal-overlap based, tolerant of unit scale/floating.
       // Cloaked vehicles pass through units harmlessly.
       if(Math.abs(v.vx)>0.5 && !v.cloaked){
@@ -18309,6 +18416,35 @@ function drawPlanet(){
     drawAlienPreview(ax, ay, 1.0, _askin, f, alien.walkTimer);
     if(_mcx || alienCloak.active) ctx.restore();
 
+    // Sun burn-up overlay — char the alien, add fire aura on top of the body
+    if(window._sunDeath){
+      const sd = window._sunDeath;
+      const k = Math.min(1, sd.t/sd.duration);
+      // Charring darkening pass
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      // Not quite source-atop without clipping to the alien — instead just tint via a translucent black oval
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgba(20,10,5,${Math.min(0.7, k*0.9)})`;
+      ctx.beginPath(); ctx.ellipse(ax, ay-14, 12, 22, 0, 0, Math.PI*2); ctx.fill();
+      // Fire licks rising from the body
+      for(let i=0;i<6;i++){
+        const fx = ax + (Math.random()-0.5)*14;
+        const fy = ay - 4 - Math.random()*26;
+        const fr = 3+Math.random()*5;
+        const hue = 10+Math.random()*40;
+        ctx.fillStyle = `hsla(${hue},100%,55%,0.75)`;
+        ctx.beginPath(); ctx.ellipse(fx, fy, fr*0.6, fr, 0, 0, Math.PI*2); ctx.fill();
+      }
+      // Glowing ember ring at feet
+      const grad = ctx.createRadialGradient(ax, ay-4, 2, ax, ay-4, 28);
+      grad.addColorStop(0, 'rgba(255,220,120,0.35)');
+      grad.addColorStop(1, 'rgba(255,80,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.ellipse(ax, ay-4, 28, 14, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
     // --- Mind-control tether: a psychic tentacle from the alien to the puppet's head ---
     if(mindControl && mindControl.target){
       const tgt=mindControl.target;
@@ -19776,9 +19912,6 @@ function drawShipBody(pc,pa,pt,type){
     }
     // Bubble canopy — large transparent dome on top
     ctx.save();
-    // Glass base ring
-    ctx.fillStyle = lerpColor(pa, '#000', 0.25);
-    ctx.beginPath(); ctx.ellipse(0, -2, 20, 3, 0, 0, Math.PI*2); ctx.fill();
     // Transparent bubble (behind the pilot so they show through)
     const bubbleGrad = ctx.createRadialGradient(-4, -10, 2, 0, -8, 22);
     bubbleGrad.addColorStop(0, 'rgba(220,240,255,0.35)');
@@ -22581,7 +22714,7 @@ function mkAudio(src,vol,loop){const a=new Audio();a.preload='none';a.src=src;a.
 const spaceAmbience=mkAudio('space-ambience.mp3',0,true);
 const flameSfx=mkAudio('flame-sound.mp3',0.03,true);
 const beamSfx=mkAudio('beam-loop.wav',0.005,true);
-const planetMusic={earth:mkAudio('earth-music.wav',0,true),asteroid:mkAudio('eerie-music.mp3',0,true)};
+const planetMusic={earth:mkAudio('earth-music.wav',0,true),asteroid:mkAudio('eerie-music.mp3',0,true),sun:mkAudio('sun-music.wav',0,true),lava:mkAudio('mercury-music.wav',0,true),moon:mkAudio('moon-music.wav',0,true)};
 // Prehistoric Earth ambient track — swapped in when window.prehistoricEra is true on Earth.
 const prehistoricMusic = mkAudio('prehistoric-music.mp3', 0, true);
 const mothershipMusic=mkAudio('mothership-music.mp3',0,true);
