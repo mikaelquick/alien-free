@@ -20231,7 +20231,51 @@ function drawShip(){
     ctx.fillStyle='#444';
     ctx.beginPath();ctx.arc(sx,sy,2.5,0,Math.PI*2);ctx.fill();
   }
-  ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.tilt);
+  // Only asymmetric (nose-to-tail) ship types flip with direction of travel.
+  // Round/symmetric ships (saucer, sphere, domepod, etc.) look the same from any horizontal direction,
+  // so flipping them makes them look like they're squashing for no reason.
+  const _asymShips = {xwing:1,falcon:1,wedge:1,rocket:1,shuttle:1,scout:1,bomber:1,arrowhead:1,cargo:1,viper:1,needle:1,warbird:1,manta:1,dagger:1,dropship:1};
+  const _shipType = shipPaint.ship||'saucer';
+  const _isAsym = !!_asymShips[_shipType];
+  // Sticky facing with hysteresis so it doesn't jitter at zero crossings.
+  if(ship.facing===undefined) ship.facing=1;
+  // facingTheta: 0 when facing right, PI when facing left. Smooth angle gives a natural 3D-style roll.
+  if(ship.facingTheta===undefined) ship.facingTheta=0;
+  if(ship.facingThetaV===undefined) ship.facingThetaV=0;
+  if(_isAsym){
+    if(ship.vx > 0.6) ship.facing = 1;
+    else if(ship.vx < -0.6) ship.facing = -1;
+    const targetTheta = (ship.facing===1) ? 0 : Math.PI;
+    // Critically-damped spring toward target angle — snappy, responsive, no overshoot.
+    // Boosting stiffens the turn further so the nose whips around faster.
+    const k = ship.boosting ? 0.28 : 0.22;
+    const d = 0.65;
+    ship.facingThetaV += (targetTheta - ship.facingTheta) * k;
+    ship.facingThetaV *= d;
+    ship.facingTheta  += ship.facingThetaV;
+  } else {
+    // Non-directional ships: keep facing upright at all times.
+    ship.facing = 1;
+    ship.facingTheta += (0 - ship.facingTheta) * 0.25;
+    ship.facingThetaV = 0;
+  }
+  ctx.save();ctx.translate(ship.x,ship.y);
+  if(_isAsym){
+    const th = ship.facingTheta;
+    const cs = Math.cos(th);                     // +1 → -1 through 0 for the flip
+    const sn = Math.abs(Math.sin(th));           // peaks at 1 during edge-on moment
+    // xScale follows cos(theta) but never goes below ~0.22 so the ship doesn't vanish
+    const xScale = Math.sign(cs||1) * Math.max(0.22, Math.abs(cs));
+    // Subtle vertical lift + side-bank during the flip — makes it feel 3D, not squashed
+    const yScale = 1 + sn*0.08;
+    const bank   = sn * 0.18 * (ship.facing===-1 ? -1 : 1);
+    ctx.rotate(bank);
+    ctx.scale(xScale, yScale);
+  }
+  // Asymmetric (back-and-front) ships fly straighter — tilt is damped heavily so the nose locks
+  // to the travel direction instead of swaying. Symmetric ships keep the original bank feel.
+  const _tiltFactor = _isAsym ? 0.3 : 1;
+  ctx.rotate(ship.tilt * _tiltFactor);
   if(shipCloak.active){ctx.globalAlpha=0.15+Math.sin(frameNow*0.005)*0.05;}
   // Shrink the ship as it flies through the hangar doors during docking.
   if(transition.active && transition.type==='docking'){
@@ -20257,7 +20301,19 @@ function drawShip(){
   window._domeShipPilot = true;
   drawShipBody(pc,pa,pt,type);
   window._domeShipPilot = false;
-  if(ship.boosting){for(let i=0;i<3;i++){ctx.fillStyle=`rgba(255,${Math.random()*100+100},0,${Math.random()*0.5+0.3})`;ctx.beginPath();ctx.arc((Math.random()-0.5)*20,10+Math.random()*10,Math.random()*4+2,0,Math.PI*2);ctx.fill();}}
+  if(ship.boosting){
+    // Asymmetric ships boost from the tail (local -x); symmetric ones from under the belly.
+    for(let i=0;i<3;i++){
+      ctx.fillStyle=`rgba(255,${Math.random()*100+100},0,${Math.random()*0.5+0.3})`;
+      if(_isAsym){
+        const bx=-22-Math.random()*14;
+        const by=(Math.random()-0.5)*8;
+        ctx.beginPath();ctx.arc(bx,by,Math.random()*4+2,0,Math.PI*2);ctx.fill();
+      } else {
+        ctx.beginPath();ctx.arc((Math.random()-0.5)*20,10+Math.random()*10,Math.random()*4+2,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
   ctx.restore();
   if(gameMode==='space'&&(Math.abs(ship.vx)>1||Math.abs(ship.vy)>1)){
     // Exhaust tint shifts with ship damage: healthy trail color → orange → red/black smoke.
@@ -20265,10 +20321,13 @@ function drawShip(){
     if(shipHealth < 30){ exCol = `rgba(60,60,60,${0.4+Math.random()*0.3})`; }
     else if(shipHealth < 60){ exCol = `rgba(255,${80+Math.random()*60},40,0.85)`; }
     else if(shipHealth < 85){ exCol = `rgba(255,${180+Math.random()*50},80,0.85)`; }
-    for(let i=0;i<2;i++)particles.push({x:ship.x+(Math.random()-0.5)*10,y:ship.y+12,vx:-ship.vx*0.3+(Math.random()-0.5),vy:-ship.vy*0.3+(Math.random()-0.5),life:15+Math.random()*10,color:exCol,size:Math.random()*2+1});
+    // Asymmetric ships exhaust from the tail (behind the nose); symmetric ships from the belly.
+    const _exBack = _isAsym ? (ship.facing||1) * -26 : 0;
+    const _exY    = _isAsym ? 0 : 12;
+    for(let i=0;i<2;i++)particles.push({x:ship.x+_exBack+(Math.random()-0.5)*10,y:ship.y+_exY+(Math.random()-0.5)*4,vx:-ship.vx*0.3+(Math.random()-0.5),vy:-ship.vy*0.3+(Math.random()-0.5),life:15+Math.random()*10,color:exCol,size:Math.random()*2+1});
     // Occasional smoke puff when badly damaged.
     if(shipHealth < 40 && Math.random() < 0.15){
-      particles.push({x:ship.x+(Math.random()-0.5)*16,y:ship.y+8,vx:(Math.random()-0.5)*0.8,vy:-Math.random()*0.6,life:40+Math.random()*20,color:'rgba(40,40,40,0.55)',size:Math.random()*3+2});
+      particles.push({x:ship.x+_exBack+(Math.random()-0.5)*16,y:ship.y+_exY*0.7+(Math.random()-0.5)*4,vx:(Math.random()-0.5)*0.8,vy:-Math.random()*0.6,life:40+Math.random()*20,color:'rgba(40,40,40,0.55)',size:Math.random()*3+2});
     }
   }
 }
