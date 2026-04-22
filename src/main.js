@@ -1447,7 +1447,11 @@ function generateBuilding(x) {
   if(p.id==='earth'){
     const biome=getEarthBiome(x);
     if(biome.id==='jungle'){
-      if(Math.random()<0.25){
+      // Fixed landmark: Jungle Temple at wx~31000
+      const _jgWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_jgWx>=31000 && _jgWx<31070){
+        addUnit(x, GROUND_LEVEL-160, 110, 160, 'jungleTemple', {health:700});
+      } else if(Math.random()<0.25){
         addUnit(x, GROUND_LEVEL-86, 50, 86, 'hut', {color:'#6a4a2a', roofColor:'#3a5a1a', accent:'#5a3a1a'});
       }else{
         const th=100+Math.random()*80;
@@ -1473,39 +1477,67 @@ function generateBuilding(x) {
       else if(lp>=900&&lp<960) addUnit(x, GROUND_LEVEL-190, 70, 190, 'eiffelTower', {health:800, color:'#555', accent:'#666'});
       else if(lp>=1600&&lp<1660) addUnit(x, GROUND_LEVEL-195, 40, 195, 'bigBen', {health:800, color:'#c0a060'});
       else if(lp>=2300&&lp<2360) addUnit(x, GROUND_LEVEL-175, 55, 175, 'leaningTower', {health:800, color:'#e8e0d0'});
+      else if(lp>=3000&&lp<3080) addUnit(x, GROUND_LEVEL-110, 140, 110, 'museum', {health:700});
       else{const f=2+Math.floor(Math.random()*4); addUnit(x, GROUND_LEVEL-f*25, 90, f*25, 'apartment', {floors:f, windowCols:3});}
     }else if(biome.id==='mountains'){
-      // Mountains: sparse pines and boulders
-      if(Math.random()<0.6){const th=60+Math.random()*50; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:200, treeColor:'#2a1a0a', canopyColor:'#1a4a1a'});}
+      // Fixed landmark: Mountain Observatory at wx~7500 (enterable star-gazing interior)
+      const _mtnWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_mtnWx>=7500 && _mtnWx<7560){
+        addUnit(x, GROUND_LEVEL-180, 80, 180, 'mountainObservatory', {health:600});
+      } else if(Math.random()<0.6){
+        const th=60+Math.random()*50; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:200, treeColor:'#2a1a0a', canopyColor:'#1a4a1a'});
+      }
       // else nothing — rocky empty terrain
     }else if(biome.id==='snow'){
-      // Snow biome: snow-capped pines and igloos
-      const r=Math.random();
-      if(r<0.55){const th=70+Math.random()*60; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:200, treeColor:'#2a1a0a', canopyColor:'#1a3a2a', snowCap:true});}
-      else if(r<0.7) addUnit(x, GROUND_LEVEL-60, 100, 60, 'igloo', {});
-      else if(r<0.82){const f=2+Math.floor(Math.random()*2); addUnit(x, GROUND_LEVEL-f*22-44, 75, f*22+44, 'iceCastle', {floors:f});}
-      // else empty snow
+      // Fixed landmark: Arctic Radar Base at wx~2700
+      const _snWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_snWx>=2700 && _snWx<2760){
+        addUnit(x, GROUND_LEVEL-150, 100, 150, 'radarBase', {health:600});
+      } else {
+        // Snow biome: snow-capped pines and igloos
+        const r=Math.random();
+        if(r<0.55){const th=70+Math.random()*60; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:200, treeColor:'#2a1a0a', canopyColor:'#1a3a2a', snowCap:true});}
+        else if(r<0.7) addUnit(x, GROUND_LEVEL-60, 100, 60, 'igloo', {});
+        else if(r<0.82){const f=2+Math.floor(Math.random()*2); addUnit(x, GROUND_LEVEL-f*22-44, 75, f*22+44, 'iceCastle', {floors:f});}
+        // else empty snow
+      }
     }else if(biome.id==='farmland'){
-      // Farmland: barns, silos, crops, farmhouses
-      const r=Math.random();
-      if(r<0.18) addUnit(x, GROUND_LEVEL-90, 140, 90, 'barn', {color:'#a0302a', roofColor:'#5a1a10', accent:'#d8d0b0'});
-      else if(r<0.28) addUnit(x, GROUND_LEVEL-120, 50, 120, 'silo', {color:'#c0b8a0', roofColor:'#6a5a3a'});
-      else if(r<0.45) addUnit(x, GROUND_LEVEL-80, 110, 80, 'farmhouse', {color:'#d8c8a0', roofColor:'#5a3a2a', accent:'#8a6a4a'});
-      else if(r<0.7){const th=40+Math.random()*30; addUnit(x, GROUND_LEVEL-th, 30, th, 'haystack', {isHay:true, health:40, color:'#d4a440'});}
-      else{const th=90+Math.random()*40; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:180, treeColor:'#4a3a1a', canopyColor:'#3a7a1a'});}
+      // Fixed landmark: Haunted Root Cellar at wx~12000
+      const _fmWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_fmWx>=12000 && _fmWx<12060){
+        addUnit(x, GROUND_LEVEL-50, 70, 50, 'cellarHatch', {health:400});
+      } else {
+        // Farmland: barns, silos, crops, farmhouses
+        const r=Math.random();
+        if(r<0.18) addUnit(x, GROUND_LEVEL-90, 140, 90, 'barn', {color:'#a0302a', roofColor:'#5a1a10', accent:'#d8d0b0'});
+        else if(r<0.28) addUnit(x, GROUND_LEVEL-120, 50, 120, 'silo', {color:'#c0b8a0', roofColor:'#6a5a3a'});
+        else if(r<0.45) addUnit(x, GROUND_LEVEL-80, 110, 80, 'farmhouse', {color:'#d8c8a0', roofColor:'#5a3a2a', accent:'#8a6a4a'});
+        else if(r<0.7){const th=40+Math.random()*30; addUnit(x, GROUND_LEVEL-th, 30, th, 'haystack', {isHay:true, health:40, color:'#d4a440'});}
+        else{const th=90+Math.random()*40; addUnit(x, GROUND_LEVEL-th, 35, th, 'tree', {isTree:true, health:180, treeColor:'#4a3a1a', canopyColor:'#3a7a1a'});}
+      }
     }else if(biome.id==='suburbs'){
-      if(Math.random()<0.5) addUnit(x, GROUND_LEVEL-87, 130, 87, 'suburbanHouse', {roofColor:['#733','#557','#575','#753'][Math.floor(Math.random()*4)]});
+      // Fixed landmark: Conspiracy Basement at wx~17500
+      const _sbWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_sbWx>=17500 && _sbWx<17560){
+        addUnit(x, GROUND_LEVEL-100, 130, 100, 'conspiracyHouse', {roofColor:'#444', health:500});
+      } else if(Math.random()<0.5) addUnit(x, GROUND_LEVEL-87, 130, 87, 'suburbanHouse', {roofColor:['#733','#557','#575','#753'][Math.floor(Math.random()*4)]});
       else addUnit(x, GROUND_LEVEL-86, 60, 86, 'cottage', {roofColor:'#855'});
     }else if(biome.isOcean){
       return; // no buildings in ocean
     }else{
       // City
-      const r=Math.random();
-      if(r<0.15) addUnit(x, GROUND_LEVEL-87, 90, 87, 'house', {roofColor:'#733'});
-      else if(r<0.45){const f=3+Math.floor(Math.random()*5),c=2+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-f*25, c*30, f*25, 'apartment', {floors:f, windowCols:c});}
-      else if(r<0.75){const f=6+Math.floor(Math.random()*5); addUnit(x, GROUND_LEVEL-f*25-25, 60, f*25+25, 'skyscraper', {floors:f});}
-      else if(r<0.88){const f=4+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-f*25, 90, f*25, 'office', {floors:f, windowCols:3});}
-      else addUnit(x, GROUND_LEVEL-155, 90, 155, 'church', {});
+      // Fixed landmark: Subway Entrance at wx~21500
+      const _ctWx = ((x%EARTH_WORLD_WIDTH)+EARTH_WORLD_WIDTH)%EARTH_WORLD_WIDTH;
+      if(_ctWx>=21500 && _ctWx<21560){
+        addUnit(x, GROUND_LEVEL-40, 80, 40, 'subwayEntrance', {health:500});
+      } else {
+        const r=Math.random();
+        if(r<0.15) addUnit(x, GROUND_LEVEL-87, 90, 87, 'house', {roofColor:'#733'});
+        else if(r<0.45){const f=3+Math.floor(Math.random()*5),c=2+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-f*25, c*30, f*25, 'apartment', {floors:f, windowCols:c});}
+        else if(r<0.75){const f=6+Math.floor(Math.random()*5); addUnit(x, GROUND_LEVEL-f*25-25, 60, f*25+25, 'skyscraper', {floors:f});}
+        else if(r<0.88){const f=4+Math.floor(Math.random()*3); addUnit(x, GROUND_LEVEL-f*25, 90, f*25, 'office', {floors:f, windowCols:3});}
+        else addUnit(x, GROUND_LEVEL-155, 90, 155, 'church', {});
+      }
     }
   }else if(p.id==='mars'){
     const r=Math.random();
@@ -2280,6 +2312,430 @@ function drawBuildingUnit(b) {
     // Highlight
     ctx.fillStyle='rgba(255,230,140,0.3)';
     ctx.beginPath(); ctx.ellipse(sx+w*0.35,sy+h*0.35,w*0.2,h*0.2,0,0,Math.PI*2); ctx.fill();
+    break;
+  }
+  case 'cellarHatch': {
+    // Earthen mound with a sloped wooden hatch embedded in the hillside
+    ctx.fillStyle='#3a2a14';
+    ctx.beginPath();
+    ctx.ellipse(sx+w/2, sy+h, w*0.6, h*0.9, 0, Math.PI, 0);
+    ctx.fill();
+    // Grass tufts
+    ctx.fillStyle='#4a7a2a';
+    for(let _gi=0; _gi<8; _gi++){
+      const _gx=sx+6+_gi*((w-12)/7);
+      ctx.fillRect(_gx, sy+h*0.2+((_gi*5)%8), 2, 4);
+    }
+    // Slanted stone frame around hatch
+    ctx.fillStyle='#6a5a3a';
+    ctx.fillRect(sx+w*0.25, sy+h*0.4, w*0.5, h*0.55);
+    ctx.fillStyle='#8a7040';
+    ctx.fillRect(sx+w*0.27, sy+h*0.42, w*0.46, 4);
+    // Wooden double-door hatch
+    ctx.fillStyle='#4a2e14';
+    ctx.fillRect(sx+w*0.3, sy+h*0.5, w*0.4, h*0.42);
+    ctx.fillStyle='#2a1a08';
+    ctx.fillRect(sx+w*0.49, sy+h*0.5, 2, h*0.42);
+    // Plank lines
+    ctx.strokeStyle='rgba(20,10,4,0.7)'; ctx.lineWidth=1;
+    for(let _pl=0; _pl<4; _pl++){
+      const _py=sy+h*0.5+_pl*(h*0.42/4);
+      ctx.beginPath(); ctx.moveTo(sx+w*0.3, _py); ctx.lineTo(sx+w*0.7, _py); ctx.stroke();
+    }
+    // Iron ring handles
+    ctx.strokeStyle='#2a2a2a'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(sx+w*0.4, sy+h*0.72, 3, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx+w*0.6, sy+h*0.72, 3, 0, Math.PI*2); ctx.stroke();
+    // Green glow seeping from the cracks
+    const _cg = ctx.createRadialGradient(sx+w/2, sy+h*0.7, 1, sx+w/2, sy+h*0.7, w*0.4);
+    _cg.addColorStop(0, `rgba(120,255,140,${0.35+Math.sin(t*2)*0.15})`);
+    _cg.addColorStop(1,'transparent');
+    ctx.fillStyle=_cg;
+    ctx.fillRect(sx, sy+h*0.35, w, h*0.65);
+    // Warning sign nailed to frame
+    ctx.fillStyle='#8a6a3a';
+    ctx.fillRect(sx+w*0.08, sy+h*0.25, 18, 14);
+    ctx.fillStyle='#1a0a02';
+    ctx.font='bold 5px monospace'; ctx.textAlign='center';
+    ctx.fillText('KEEP', sx+w*0.08+9, sy+h*0.25+6);
+    ctx.fillText('OUT', sx+w*0.08+9, sy+h*0.25+12);
+    break;
+  }
+  case 'conspiracyHouse': {
+    // Suburban house but with blackout windows + antennas on roof
+    // Body
+    ctx.fillStyle='#a89888';
+    ctx.fillRect(sx+6, sy+h*0.25, w-12, h*0.75);
+    // Steep roof
+    ctx.fillStyle=b.roofColor||'#444';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy+h*0.25);
+    ctx.lineTo(sx+w/2, sy);
+    ctx.lineTo(sx+w, sy+h*0.25);
+    ctx.closePath(); ctx.fill();
+    // Chimney
+    ctx.fillStyle='#5a4a3a';
+    ctx.fillRect(sx+w*0.7, sy+h*0.08, 10, h*0.18);
+    ctx.fillStyle='#3a2a1a';
+    ctx.fillRect(sx+w*0.7-1, sy+h*0.08, 12, 3);
+    // Antennas (multiple, weird)
+    ctx.strokeStyle='#8a8a92'; ctx.lineWidth=1;
+    const _antX1=sx+w*0.2, _antX2=sx+w*0.85, _antTopY=sy-20;
+    ctx.beginPath(); ctx.moveTo(_antX1, sy+h*0.08); ctx.lineTo(_antX1, _antTopY); ctx.stroke();
+    for(let _ab=0;_ab<3;_ab++){
+      ctx.beginPath(); ctx.moveTo(_antX1-6+_ab*2, _antTopY+_ab*6); ctx.lineTo(_antX1+6-_ab*2, _antTopY+_ab*6); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(_antX2, sy+h*0.08); ctx.lineTo(_antX2, _antTopY+6); ctx.stroke();
+    // Satellite dish
+    ctx.fillStyle='#c8c8cc';
+    ctx.beginPath(); ctx.ellipse(sx+w*0.5, sy+h*0.05, 8, 4, 0.3, 0, Math.PI*2); ctx.fill();
+    // Boarded-up windows
+    ctx.fillStyle='#1a1a1a';
+    ctx.fillRect(sx+18, sy+h*0.4, 22, 18);
+    ctx.fillRect(sx+w-40, sy+h*0.4, 22, 18);
+    ctx.strokeStyle='#5a3a1a'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(sx+16, sy+h*0.45); ctx.lineTo(sx+42, sy+h*0.55); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx+16, sy+h*0.55); ctx.lineTo(sx+42, sy+h*0.45); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx+w-42, sy+h*0.45); ctx.lineTo(sx+w-16, sy+h*0.55); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx+w-42, sy+h*0.55); ctx.lineTo(sx+w-16, sy+h*0.45); ctx.stroke();
+    // Front door
+    const _chdw=20, _chdh=36;
+    const _chdx=sx+w/2-_chdw/2, _chdy=sy+h-_chdh;
+    ctx.fillStyle='#2a1a08';
+    ctx.fillRect(_chdx, _chdy, _chdw, _chdh);
+    // Door peephole with glowing eye
+    ctx.fillStyle=`rgba(150,255,180,${0.5+Math.sin(t*3)*0.3})`;
+    ctx.beginPath(); ctx.arc(_chdx+_chdw/2, _chdy+_chdh/2, 1.5, 0, Math.PI*2); ctx.fill();
+    // "NO VISITORS" sign
+    ctx.fillStyle='#c82020';
+    ctx.fillRect(_chdx+2, _chdy-8, _chdw-4, 6);
+    ctx.fillStyle='#fff';
+    ctx.font='bold 4px monospace'; ctx.textAlign='center';
+    ctx.fillText('NO VISITORS', _chdx+_chdw/2, _chdy-3);
+    break;
+  }
+  case 'museum': {
+    // Neoclassical columned marble museum
+    // Wide base steps
+    ctx.fillStyle='#c8c4b8';
+    ctx.fillRect(sx, sy+h-10, w, 10);
+    ctx.fillStyle='#b0ac9e';
+    ctx.fillRect(sx+6, sy+h-18, w-12, 8);
+    // Marble body
+    ctx.fillStyle='#d8d4c8';
+    ctx.fillRect(sx+14, sy+h*0.22, w-28, h*0.78-18);
+    // Columns (6)
+    ctx.fillStyle='#e8e4d8';
+    const _cols=6;
+    for(let _ci=0; _ci<_cols; _ci++){
+      const _cx=sx+18+_ci*((w-40)/(_cols-1));
+      ctx.fillRect(_cx-3, sy+h*0.3, 6, h*0.7-20);
+      // Column cap + base
+      ctx.fillStyle='#c8c4b8';
+      ctx.fillRect(_cx-5, sy+h*0.3, 10, 4);
+      ctx.fillRect(_cx-5, sy+h-22, 10, 4);
+      ctx.fillStyle='#e8e4d8';
+      // Fluting lines
+      ctx.strokeStyle='rgba(180,170,150,0.5)'; ctx.lineWidth=1;
+      for(let _fl=0; _fl<3; _fl++){
+        ctx.beginPath(); ctx.moveTo(_cx-2+_fl*2, sy+h*0.3+4); ctx.lineTo(_cx-2+_fl*2, sy+h-22); ctx.stroke();
+      }
+    }
+    // Triangular pediment
+    ctx.fillStyle='#e8e4d8';
+    ctx.beginPath();
+    ctx.moveTo(sx+6, sy+h*0.22);
+    ctx.lineTo(sx+w/2, sy);
+    ctx.lineTo(sx+w-6, sy+h*0.22);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='#b0ac9e'; ctx.lineWidth=1;
+    ctx.stroke();
+    // Pediment carving
+    ctx.fillStyle='rgba(140,130,110,0.55)';
+    ctx.font='bold 9px serif'; ctx.textAlign='center';
+    ctx.fillText('MVSEVM', sx+w/2, sy+h*0.15);
+    // Grand door
+    const _mdw=28, _mdh=52;
+    const _mdx=sx+w/2-_mdw/2, _mdy=sy+h-_mdh-10;
+    ctx.fillStyle='#2a1a10';
+    ctx.fillRect(_mdx, _mdy, _mdw, _mdh);
+    // Double-door seam
+    ctx.strokeStyle='#5a4a3a'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(_mdx+_mdw/2, _mdy); ctx.lineTo(_mdx+_mdw/2, _mdy+_mdh); ctx.stroke();
+    // Brass handles
+    ctx.fillStyle='#c8a040';
+    ctx.beginPath(); ctx.arc(_mdx+_mdw/2-4, _mdy+_mdh/2, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(_mdx+_mdw/2+4, _mdy+_mdh/2, 1.5, 0, Math.PI*2); ctx.fill();
+    // Warm interior light spill
+    const _mlg = ctx.createRadialGradient(sx+w/2, _mdy+_mdh*0.4, 1, sx+w/2, _mdy+_mdh*0.4, _mdw*1.4);
+    _mlg.addColorStop(0, `rgba(255,210,140,${0.4+Math.sin(t*2)*0.08})`);
+    _mlg.addColorStop(1,'transparent');
+    ctx.fillStyle=_mlg; ctx.fillRect(_mdx-14, _mdy-8, _mdw+28, _mdh+14);
+    // Plaque
+    ctx.fillStyle='#4a3a2a';
+    ctx.fillRect(sx+w/2-24, _mdy-18, 48, 8);
+    ctx.fillStyle='#d8c888';
+    ctx.font='bold 5px monospace'; ctx.textAlign='center';
+    ctx.fillText('ANTIQUITIES', sx+w/2, _mdy-12);
+    break;
+  }
+  case 'jungleTemple': {
+    // Mossy step-pyramid temple (smaller and squatter than desert pyramid)
+    const _jtLayers = 4;
+    const _jtColors = ['#5a6a3a','#4a5a2a','#3a4a1a','#2a3a0a'];
+    for(let _r=0; _r<_jtLayers; _r++){
+      const _rw = w * (1-_r/_jtLayers*0.5);
+      const _rx = sx + (w-_rw)/2;
+      const _rh = h/_jtLayers;
+      const _ry = sy + h - (_r+1)*_rh;
+      ctx.fillStyle = _jtColors[_r];
+      ctx.fillRect(_rx, _ry, _rw, _rh);
+      // Stone block seams
+      ctx.strokeStyle='rgba(20,30,10,0.5)'; ctx.lineWidth=1;
+      for(let _bx=_rx; _bx<_rx+_rw; _bx+=24){
+        ctx.beginPath(); ctx.moveTo(_bx,_ry); ctx.lineTo(_bx,_ry+_rh); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.moveTo(_rx,_ry); ctx.lineTo(_rx+_rw,_ry); ctx.stroke();
+    }
+    // Vines trailing down the sides (animated sway)
+    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=2;
+    for(let _vi=0; _vi<6; _vi++){
+      const _vx = sx + 8 + _vi*(w-16)/6;
+      const _vSway = Math.sin(t*0.8+_vi)*3;
+      ctx.beginPath();
+      ctx.moveTo(_vx, sy+4);
+      ctx.quadraticCurveTo(_vx+_vSway, sy+h*0.5, _vx+_vSway*1.3, sy+h*0.85);
+      ctx.stroke();
+      // Leaves
+      ctx.fillStyle='#2a7a2a';
+      ctx.beginPath(); ctx.ellipse(_vx+_vSway*1.3-3, sy+h*0.6, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(_vx+_vSway*1.3+2, sy+h*0.75, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Jaguar/sun idol on top platform
+    const _idolX = sx+w/2;
+    const _idolY = sy + h - 4*(h/_jtLayers) - 14;
+    ctx.fillStyle='#c8a040';
+    ctx.beginPath(); ctx.arc(_idolX, _idolY, 10, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#5a3a10';
+    // Eyes
+    ctx.fillRect(_idolX-4, _idolY-2, 2, 2);
+    ctx.fillRect(_idolX+2, _idolY-2, 2, 2);
+    // Rays
+    ctx.strokeStyle='#c8a040'; ctx.lineWidth=1;
+    for(let _rr=0;_rr<8;_rr++){
+      const _ra=_rr*Math.PI/4;
+      ctx.beginPath();
+      ctx.moveTo(_idolX+Math.cos(_ra)*10, _idolY+Math.sin(_ra)*10);
+      ctx.lineTo(_idolX+Math.cos(_ra)*16, _idolY+Math.sin(_ra)*16);
+      ctx.stroke();
+    }
+    // Door at base center
+    const _jdw=24, _jdh=42;
+    const _jdx=sx+w/2-_jdw/2, _jdy=sy+h-_jdh;
+    ctx.fillStyle='#050808';
+    ctx.fillRect(_jdx, _jdy, _jdw, _jdh);
+    // Frame of dressed stone
+    ctx.fillStyle='#7a8a5a';
+    ctx.fillRect(_jdx-4, _jdy-4, 4, _jdh+4);
+    ctx.fillRect(_jdx+_jdw, _jdy-4, 4, _jdh+4);
+    ctx.fillRect(_jdx-4, _jdy-4, _jdw+8, 5);
+    // Glyph above door
+    ctx.fillStyle='rgba(80,50,10,0.85)';
+    ctx.font='bold 8px monospace'; ctx.textAlign='center';
+    ctx.fillText('\u25C8 \u263C \u25C8', sx+w/2, _jdy-8);
+    // Faint green torchlight peeking out
+    const _jg=ctx.createRadialGradient(sx+w/2, _jdy+_jdh*0.4, 1, sx+w/2, _jdy+_jdh*0.4, _jdw*1.3);
+    _jg.addColorStop(0, `rgba(120,220,140,${0.4+Math.sin(t*3)*0.1})`);
+    _jg.addColorStop(1,'transparent');
+    ctx.fillStyle=_jg; ctx.fillRect(_jdx-12, _jdy-10, _jdw+24, _jdh+14);
+    break;
+  }
+  case 'subwayEntrance': {
+    // Small surface structure — stairs descending into the ground
+    // Raised curb
+    ctx.fillStyle='#5a5a62';
+    ctx.fillRect(sx, sy+h-8, w, 8);
+    // Stair mouth — dark rectangle tilting down
+    ctx.fillStyle='#080a0c';
+    ctx.beginPath();
+    ctx.moveTo(sx+14, sy+h-8);
+    ctx.lineTo(sx+w-14, sy+h-8);
+    ctx.lineTo(sx+w-22, sy+h);
+    ctx.lineTo(sx+22, sy+h);
+    ctx.closePath(); ctx.fill();
+    // Railings
+    ctx.fillStyle='#8a8a92';
+    ctx.fillRect(sx+12, sy+h-36, 3, 28);
+    ctx.fillRect(sx+w-15, sy+h-36, 3, 28);
+    // Rails top bar
+    ctx.fillRect(sx+12, sy+h-36, w-24, 3);
+    // Subway sign — roundel
+    ctx.fillStyle='#1a3a7a';
+    ctx.beginPath(); ctx.arc(sx+w/2, sy+h-54, 12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#c82020';
+    ctx.fillRect(sx+w/2-12, sy+h-57, 24, 6);
+    ctx.fillStyle='#fff';
+    ctx.font='bold 9px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('M', sx+w/2, sy+h-51);
+    // Sign post
+    ctx.fillStyle='#4a4a52';
+    ctx.fillRect(sx+w/2-2, sy+h-42, 4, 8);
+    // Warm yellow light spill from stairwell
+    const _sg=ctx.createRadialGradient(sx+w/2, sy+h-2, 1, sx+w/2, sy+h-2, 40);
+    _sg.addColorStop(0, `rgba(255,210,120,${0.55+Math.sin(t*3)*0.1})`);
+    _sg.addColorStop(1,'transparent');
+    ctx.fillStyle=_sg; ctx.fillRect(sx, sy+h-20, w, 22);
+    // Step lines
+    ctx.strokeStyle='rgba(40,50,60,0.9)'; ctx.lineWidth=1;
+    for(let _stp=0; _stp<4; _stp++){
+      const _sy1=sy+h-6+_stp*1.3;
+      const _sx1=sx+22+_stp*2, _sx2=sx+w-22-_stp*2;
+      ctx.beginPath(); ctx.moveTo(_sx1,_sy1); ctx.lineTo(_sx2,_sy1); ctx.stroke();
+    }
+    break;
+  }
+  case 'radarBase': {
+    // Concrete bunker body
+    const _rbBodyH = h * 0.55;
+    const _rbBodyY = sy + h - _rbBodyH;
+    ctx.fillStyle='#8a8a8e';
+    ctx.fillRect(sx+6, _rbBodyY, w-12, _rbBodyH);
+    // Snow cap on roof
+    ctx.fillStyle='#e8f0f5';
+    ctx.fillRect(sx+4, _rbBodyY-4, w-8, 6);
+    // Wall panel lines
+    ctx.strokeStyle='rgba(40,40,50,0.5)'; ctx.lineWidth=1;
+    for(let _px=sx+20; _px<sx+w-10; _px+=20){
+      ctx.beginPath(); ctx.moveTo(_px,_rbBodyY); ctx.lineTo(_px,sy+h); ctx.stroke();
+    }
+    // Small windows with green CRT glow
+    const _nk=(typeof dayNightBrightness==='number')?(1-dayNightBrightness):0.5;
+    for(let _wi=0; _wi<3; _wi++){
+      const _wx=sx+16+_wi*((w-32)/3);
+      const _wy=_rbBodyY+14;
+      ctx.fillStyle=`rgba(80,220,140,${0.5+_nk*0.4+Math.sin(t*2+_wi)*0.08})`;
+      ctx.fillRect(_wx, _wy, 14, 10);
+      ctx.strokeStyle='rgba(30,30,40,0.8)';
+      ctx.strokeRect(_wx, _wy, 14, 10);
+    }
+    // Antenna mast on top
+    const _mastX = sx+w/2;
+    const _mastTop = sy - h*0.15;
+    ctx.strokeStyle='#c0c0c8'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(_mastX, _rbBodyY-4); ctx.lineTo(_mastX, _mastTop); ctx.stroke();
+    // Mast cross-braces
+    for(let _ms=1; _ms<=3; _ms++){
+      const _my = _rbBodyY-4 - _ms*((_rbBodyY-4-_mastTop)/4);
+      const _mw = 10 - _ms*1.5;
+      ctx.beginPath(); ctx.moveTo(_mastX-_mw,_my); ctx.lineTo(_mastX+_mw,_my); ctx.stroke();
+    }
+    // Rotating radar dish
+    ctx.save();
+    ctx.translate(_mastX, _mastTop);
+    const _rot = t*0.5;
+    ctx.rotate(_rot);
+    // Dish
+    ctx.fillStyle='#d8d8dc';
+    ctx.beginPath(); ctx.ellipse(0, -6, 16, 5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#a0a0a8';
+    ctx.beginPath(); ctx.ellipse(0, -6, 10, 3, 0, 0, Math.PI*2); ctx.fill();
+    // Feed horn
+    ctx.fillStyle='#5a5a62';
+    ctx.fillRect(-1, -12, 2, 6);
+    ctx.restore();
+    // Pulse ping arc from dish (radar sweep)
+    const _pulse = (t*0.8)%1;
+    ctx.strokeStyle=`rgba(100,220,140,${0.6*(1-_pulse)})`;
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(_mastX, _mastTop-6, 8+_pulse*40, -Math.PI*0.9, -Math.PI*0.1); ctx.stroke();
+    // Warning light on mast (blinking)
+    if(Math.sin(t*4)>0.3){
+      ctx.fillStyle='rgba(255,80,80,0.9)';
+      ctx.beginPath(); ctx.arc(_mastX, _mastTop+4, 2, 0, Math.PI*2); ctx.fill();
+      // halo
+      ctx.fillStyle='rgba(255,80,80,0.25)';
+      ctx.beginPath(); ctx.arc(_mastX, _mastTop+4, 8, 0, Math.PI*2); ctx.fill();
+    }
+    // Door
+    const _rdw=22, _rdh=34;
+    const _rdx=sx+w/2-_rdw/2, _rdy=sy+h-_rdh;
+    ctx.fillStyle='#1a1e24';
+    ctx.fillRect(_rdx, _rdy, _rdw, _rdh);
+    // Blast-door frame (grey metal)
+    ctx.fillStyle='#5a5a62';
+    ctx.fillRect(_rdx-3, _rdy-3, 3, _rdh+3);
+    ctx.fillRect(_rdx+_rdw, _rdy-3, 3, _rdh+3);
+    ctx.fillRect(_rdx-3, _rdy-3, _rdw+6, 4);
+    // Door amber light
+    const _rdg=ctx.createRadialGradient(sx+w/2, _rdy+_rdh*0.5, 1, sx+w/2, _rdy+_rdh*0.5, _rdw*1.3);
+    _rdg.addColorStop(0, `rgba(255,180,80,${0.4+Math.sin(t*5)*0.1})`);
+    _rdg.addColorStop(1,'transparent');
+    ctx.fillStyle=_rdg; ctx.fillRect(_rdx-12, _rdy-8, _rdw+24, _rdh+12);
+    // Sign
+    ctx.fillStyle='rgba(200,200,210,0.75)';
+    ctx.font='bold 7px monospace'; ctx.textAlign='center';
+    ctx.fillText('RADAR STATION', sx+w/2, _rdy-7);
+    break;
+  }
+  case 'mountainObservatory': {
+    // Stone tower body
+    const _obTowerH = h * 0.72;
+    const _obTowerY = sy + h - _obTowerH;
+    ctx.fillStyle='#6a6a72';
+    ctx.fillRect(sx+8, _obTowerY, w-16, _obTowerH);
+    // Stone block seams
+    ctx.strokeStyle='rgba(40,40,50,0.45)'; ctx.lineWidth=1;
+    for(let _ly=_obTowerY+16; _ly<sy+h; _ly+=18){
+      ctx.beginPath(); ctx.moveTo(sx+8,_ly); ctx.lineTo(sx+w-8,_ly); ctx.stroke();
+    }
+    // Warmly-lit windows (more visible at night)
+    const _nightK = (typeof dayNightBrightness==='number') ? (1-dayNightBrightness) : 0.5;
+    for(let _r=0; _r<3; _r++){
+      const _wy = _obTowerY + 22 + _r*38;
+      ctx.fillStyle = `rgba(255,220,140,${0.35+_nightK*0.55})`;
+      ctx.fillRect(sx+w/2-4, _wy, 8, 12);
+      ctx.strokeStyle='rgba(30,30,40,0.8)'; ctx.lineWidth=1;
+      ctx.strokeRect(sx+w/2-4, _wy, 8, 12);
+    }
+    // Dome on top
+    const _domeR = w*0.45;
+    ctx.fillStyle='#9a9aa2';
+    ctx.beginPath(); ctx.ellipse(sx+w/2, _obTowerY, _domeR, _domeR*0.8, 0, Math.PI, 0); ctx.fill();
+    // Telescope slit (dark gap)
+    ctx.fillStyle='#05080c';
+    ctx.save();
+    ctx.translate(sx+w/2, _obTowerY);
+    ctx.rotate(-0.3);
+    ctx.fillRect(-4, -_domeR*0.9, 8, _domeR*0.9);
+    ctx.restore();
+    // Telescope barrel poking through slit
+    ctx.strokeStyle='#2a2a32'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(sx+w/2-4, _obTowerY-8);
+    const _scopeAng = -0.35 + Math.sin(t*0.3)*0.15;
+    ctx.lineTo(sx+w/2+Math.sin(_scopeAng)*_domeR*0.9, _obTowerY-Math.cos(_scopeAng)*_domeR*0.9);
+    ctx.stroke();
+    // Dome highlight
+    ctx.fillStyle='rgba(255,255,255,0.14)';
+    ctx.beginPath(); ctx.ellipse(sx+w/2-_domeR*0.3, _obTowerY-_domeR*0.22, _domeR*0.35, _domeR*0.15, 0, 0, Math.PI*2); ctx.fill();
+    // Door at base
+    const _dw=22, _dh=36;
+    const _dx=sx+w/2-_dw/2, _dy=sy+h-_dh;
+    ctx.fillStyle='#050608';
+    ctx.fillRect(_dx, _dy, _dw, _dh);
+    ctx.fillStyle='#3a3a42';
+    ctx.fillRect(_dx-3, _dy-3, 3, _dh+3);
+    ctx.fillRect(_dx+_dw, _dy-3, 3, _dh+3);
+    ctx.fillRect(_dx-3, _dy-3, _dw+6, 4);
+    // Warm door light spill
+    const _dg = ctx.createRadialGradient(sx+w/2, _dy+_dh*0.5, 1, sx+w/2, _dy+_dh*0.5, _dw*1.4);
+    _dg.addColorStop(0, `rgba(255,200,120,${0.45+Math.sin(t*3)*0.1})`);
+    _dg.addColorStop(1,'transparent');
+    ctx.fillStyle=_dg; ctx.fillRect(_dx-14, _dy-10, _dw+28, _dh+14);
+    // Sign plaque
+    ctx.fillStyle='rgba(200,180,120,0.7)';
+    ctx.font='bold 7px monospace'; ctx.textAlign='center';
+    ctx.fillText('OBSERVATORY', sx+w/2, _dy-7);
     break;
   }
   case 'igloo': {
@@ -4890,7 +5346,7 @@ function updatePyramidInterior(){
         if(pz.progress>=pz.targetSeq.length){
           pz.solved=true;
           pz.solveAnim=200;
-          showMessage(pi.theme==='cave' ? 'The chest unlocks! Deep-sea treasure revealed.' : 'The tomb opens! Ancient treasure revealed.');
+          showMessage(pi.theme==='cave' ? 'The chest unlocks! Deep-sea treasure revealed.' : pi.theme==='observatory' ? 'The Grand Lens focuses — a celestial star chart is revealed!' : pi.theme==='radar' ? 'Mainframe unlocked — classified intel is streaming!' : pi.theme==='jungleTemple' ? 'The idol awakens! Sacred gold spills forth!' : pi.theme==='subway' ? 'The subway car doors slide open — someone left a stash behind!' : 'The tomb opens! Ancient treasure revealed.');
         }
       } else {
         // Wrong — reset progress and flash red hint
@@ -4908,7 +5364,7 @@ function updatePyramidInterior(){
       pz.rewardGiven=true;
       score=(typeof score==='number'?score:0)+50;
       try{ document.getElementById('score').textContent=score; }catch(e){}
-      showMessage(pi.theme==='cave' ? '+50 pearls from the deep chest!' : '+50 ancient credits from the tomb!');
+      showMessage(pi.theme==='cave' ? '+50 pearls from the deep chest!' : pi.theme==='observatory' ? '+50 stardust from the star chart!' : pi.theme==='radar' ? '+50 intel credits from the mainframe!' : pi.theme==='jungleTemple' ? '+50 sacred gold from the idol!' : pi.theme==='subway' ? '+50 stolen cash from the subway stash!' : '+50 ancient credits from the tomb!');
     }
   }
 
@@ -4921,6 +5377,10 @@ function updatePyramidInterior(){
     if(pi.theme==='cave' && pi.exitY) alien.y=pi.exitY;
     alien.vx=0; alien.vy=0;
     if(pi.theme==='cave') showMessage('You drift back into the ocean.');
+    else if(pi.theme==='observatory') showMessage('You step back onto the mountain slope.');
+    else if(pi.theme==='radar') showMessage('You step back into the arctic wind.');
+    else if(pi.theme==='jungleTemple') showMessage('You emerge from the mossy ruins.');
+    else if(pi.theme==='subway') showMessage('You climb back up to the city street.');
     else showMessage('You step back into the desert sun.');
   }
 }
@@ -4934,9 +5394,44 @@ function drawPyramidInterior(){
   const camX=Math.max(0, Math.min(pi.worldW-cw, a.x-cw/2));
   ctx.clearRect(0,0,cw,ch);
   const isCave = pi.theme==='cave';
-  // Background — tomb stone vs deep cave water
+  const isObservatory = pi.theme==='observatory';
+  const isRadar = pi.theme==='radar';
+  const isJungleTemple = pi.theme==='jungleTemple';
+  const isSubway = pi.theme==='subway';
+  const isCellar = pi.theme==='cellar';
+  const isBasement = pi.theme==='basement';
+  const isMuseum = pi.theme==='museum';
+  // Background — tomb stone vs deep cave water vs observatory night sky
   const bg=ctx.createLinearGradient(0,0,0,ch);
-  if(isCave){
+  if(isMuseum){
+    bg.addColorStop(0,'#18120a');
+    bg.addColorStop(0.5,'#241a10');
+    bg.addColorStop(1,'#0a0604');
+  } else if(isBasement){
+    bg.addColorStop(0,'#14100c');
+    bg.addColorStop(0.5,'#1a1612');
+    bg.addColorStop(1,'#060404');
+  } else if(isCellar){
+    bg.addColorStop(0,'#0a1408');
+    bg.addColorStop(0.5,'#14201a');
+    bg.addColorStop(1,'#040a06');
+  } else if(isSubway){
+    bg.addColorStop(0,'#0a0a0c');
+    bg.addColorStop(0.5,'#14141a');
+    bg.addColorStop(1,'#08080a');
+  } else if(isJungleTemple){
+    bg.addColorStop(0,'#0c1408');
+    bg.addColorStop(0.5,'#142818');
+    bg.addColorStop(1,'#040a04');
+  } else if(isRadar){
+    bg.addColorStop(0,'#10161c');
+    bg.addColorStop(0.5,'#1a242a');
+    bg.addColorStop(1,'#0a0e12');
+  } else if(isObservatory){
+    bg.addColorStop(0,'#040614');
+    bg.addColorStop(0.5,'#0a0e22');
+    bg.addColorStop(1,'#1a1410');
+  } else if(isCave){
     bg.addColorStop(0,'#041018');
     bg.addColorStop(0.5,'#062030');
     bg.addColorStop(1,'#020810');
@@ -4946,13 +5441,178 @@ function drawPyramidInterior(){
     bg.addColorStop(1,'#0a0502');
   }
   ctx.fillStyle=bg; ctx.fillRect(0,0,cw,ch);
+  // Observatory: star field visible above
+  if(isObservatory){
+    for(let si=0; si<140; si++){
+      const sxp=(si*173)%pi.worldW;
+      const syp=((si*67)%140);
+      const tw=0.5+Math.sin(t*2+si)*0.5;
+      ctx.fillStyle=`rgba(220,230,255,${0.3+tw*0.5})`;
+      ctx.fillRect(sxp - camX*0.15, syp, 2-(si%2), 2-(si%2));
+    }
+    // Faint nebula wash
+    const neb=ctx.createRadialGradient(pi.worldW*0.6 - camX*0.1, 60, 10, pi.worldW*0.6 - camX*0.1, 60, 260);
+    neb.addColorStop(0,'rgba(120,80,180,0.18)');
+    neb.addColorStop(1,'transparent');
+    ctx.fillStyle=neb;
+    ctx.fillRect(0,0,cw,160);
+  }
 
   ctx.save();
   ctx.translate(-camX, 0);
 
   // Floor (canvas-relative — independent of world GROUND_LEVEL)
   const floorTop=ch-70;
-  if(isCave){
+  if(isMuseum){
+    // Polished marble with wide inlay
+    ctx.fillStyle='#2a2218';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Marble tiles
+    ctx.strokeStyle='rgba(80,60,30,0.6)'; ctx.lineWidth=1;
+    for(let px=0; px<pi.worldW; px+=70){
+      ctx.beginPath(); ctx.moveTo(px,floorTop); ctx.lineTo(px,ch); ctx.stroke();
+    }
+    // Wide runner carpet
+    ctx.fillStyle='#6a2020';
+    ctx.fillRect(0, floorTop+8, pi.worldW, 30);
+    // Gold trim
+    ctx.fillStyle='#c8a040';
+    ctx.fillRect(0, floorTop+8, pi.worldW, 2);
+    ctx.fillRect(0, floorTop+36, pi.worldW, 2);
+    // Carpet pattern
+    ctx.fillStyle='rgba(200,140,40,0.35)';
+    for(let dx=10; dx<pi.worldW; dx+=60){
+      ctx.fillRect(dx, floorTop+18, 14, 12);
+    }
+  } else if(isBasement){
+    // Scuffed concrete basement floor
+    ctx.fillStyle='#2a2420';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Stains
+    ctx.fillStyle='rgba(10,5,0,0.3)';
+    for(let si=0; si<pi.worldW; si+=90){
+      ctx.beginPath(); ctx.ellipse(si+((si*3)%40), floorTop+20+((si*5)%30), 18, 3, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Cracks
+    ctx.strokeStyle='rgba(10,5,0,0.5)'; ctx.lineWidth=1;
+    for(let ci=0; ci<pi.worldW; ci+=150){
+      ctx.beginPath();
+      ctx.moveTo(ci, floorTop+((ci*3)%20)+8);
+      ctx.lineTo(ci+30, floorTop+((ci*5)%30)+20);
+      ctx.lineTo(ci+60, floorTop+((ci*7)%20)+14);
+      ctx.stroke();
+    }
+    // Thin dust layer
+    ctx.fillStyle='rgba(200,180,140,0.08)';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+  } else if(isCellar){
+    // Dirt floor with roots poking through
+    ctx.fillStyle='#3a2a18';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Soil texture
+    ctx.fillStyle='rgba(20,10,4,0.4)';
+    for(let si=0; si<pi.worldW; si+=6){
+      const dy=floorTop+4+((si*7)%(ch-floorTop-6));
+      ctx.fillRect(si, dy, 3, 2);
+    }
+    // Tree roots
+    ctx.strokeStyle='#5a3a1a'; ctx.lineWidth=2;
+    for(let ri=80; ri<pi.worldW; ri+=260){
+      ctx.beginPath();
+      ctx.moveTo(ri, floorTop);
+      ctx.quadraticCurveTo(ri+20, floorTop+30, ri+40, floorTop+10);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ri+10, floorTop);
+      ctx.quadraticCurveTo(ri-10, floorTop+18, ri-20, floorTop+6);
+      ctx.stroke();
+    }
+    // Puddle reflections (eerie green)
+    for(let pi2=0; pi2<pi.worldW; pi2+=240){
+      const pulse=0.4+Math.sin(t*1.3+pi2)*0.3;
+      ctx.fillStyle=`rgba(120,255,140,${0.18*pulse})`;
+      ctx.beginPath(); ctx.ellipse(pi2+120, floorTop+28, 24, 4, 0, 0, Math.PI*2); ctx.fill();
+    }
+  } else if(isSubway){
+    // Platform edge + tracks
+    ctx.fillStyle='#2a2a30';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Tactile yellow strip near edge
+    ctx.fillStyle='#c8a030';
+    ctx.fillRect(0, floorTop, pi.worldW, 3);
+    // Tile pattern
+    ctx.strokeStyle='rgba(20,20,24,0.55)'; ctx.lineWidth=1;
+    for(let px=0; px<pi.worldW; px+=40){
+      ctx.beginPath(); ctx.moveTo(px, floorTop+6); ctx.lineTo(px, ch); ctx.stroke();
+    }
+    for(let py=floorTop+20; py<ch; py+=20){
+      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(pi.worldW, py); ctx.stroke();
+    }
+    // Trash/litter
+    ctx.fillStyle='rgba(180,160,140,0.35)';
+    for(let li=0; li<pi.worldW; li+=110){
+      ctx.fillRect(li+20, floorTop+45, 8, 3);
+      ctx.fillRect(li+70, floorTop+55, 5, 2);
+    }
+  } else if(isJungleTemple){
+    // Mossy stone floor
+    ctx.fillStyle='#2a3a1a';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Flagstones
+    ctx.strokeStyle='rgba(10,20,5,0.6)'; ctx.lineWidth=1;
+    for(let px=0; px<pi.worldW; px+=50){
+      ctx.beginPath(); ctx.moveTo(px, floorTop); ctx.lineTo(px, ch); ctx.stroke();
+    }
+    for(let py=floorTop+22; py<ch; py+=22){
+      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(pi.worldW, py); ctx.stroke();
+    }
+    // Moss patches
+    ctx.fillStyle='rgba(60,130,60,0.35)';
+    for(let mi=0; mi<pi.worldW; mi+=80){
+      ctx.beginPath(); ctx.ellipse(mi+((mi*7)%40), floorTop+8+((mi*5)%10), 14, 4, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Scattered leaves
+    ctx.fillStyle='rgba(100,180,80,0.4)';
+    for(let li=0; li<pi.worldW; li+=60){
+      ctx.beginPath(); ctx.ellipse(li+((li*11)%50), floorTop+40+((li*7)%20), 3, 1.5, (li*0.3)%Math.PI, 0, Math.PI*2); ctx.fill();
+    }
+  } else if(isRadar){
+    // Steel grating floor
+    ctx.fillStyle='#1a2028';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Grating pattern
+    ctx.strokeStyle='rgba(80,100,120,0.4)'; ctx.lineWidth=1;
+    for(let px=0; px<pi.worldW; px+=20){
+      ctx.beginPath(); ctx.moveTo(px,floorTop); ctx.lineTo(px,ch); ctx.stroke();
+    }
+    for(let py=floorTop+8; py<ch; py+=8){
+      ctx.beginPath(); ctx.moveTo(0,py); ctx.lineTo(pi.worldW,py); ctx.stroke();
+    }
+    // Rivets
+    ctx.fillStyle='rgba(160,180,200,0.4)';
+    for(let rx=10; rx<pi.worldW; rx+=60){
+      ctx.beginPath(); ctx.arc(rx, floorTop+4, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+    // Frost on edges
+    ctx.fillStyle='rgba(200,230,245,0.12)';
+    ctx.fillRect(0, floorTop, pi.worldW, 4);
+  } else if(isObservatory){
+    // Wooden plank floor
+    ctx.fillStyle='#4a3420';
+    ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
+    // Plank seams
+    ctx.strokeStyle='rgba(20,10,4,0.7)'; ctx.lineWidth=1;
+    for(let px=0; px<pi.worldW; px+=80){
+      ctx.beginPath(); ctx.moveTo(px,floorTop); ctx.lineTo(px,ch); ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(20,10,4,0.4)';
+    for(let py=floorTop+20; py<ch; py+=20){
+      ctx.beginPath(); ctx.moveTo(0,py); ctx.lineTo(pi.worldW,py); ctx.stroke();
+    }
+    // Warm floor glow under windows
+    ctx.fillStyle='rgba(255,200,120,0.08)';
+    ctx.fillRect(0, floorTop, pi.worldW, 8);
+  } else if(isCave){
     // Wet cave floor — dark rock with bioluminescent puddles
     ctx.fillStyle='#0a1418';
     ctx.fillRect(0, floorTop, pi.worldW, ch-floorTop);
@@ -4985,7 +5645,229 @@ function drawPyramidInterior(){
 
   // Ceiling
   const ceilH=80;
-  if(isCave){
+  if(isMuseum){
+    // Ornate coffered marble ceiling with hanging chandeliers
+    ctx.fillStyle='#d8cfb8';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Coffer grid
+    ctx.strokeStyle='rgba(120,100,60,0.55)'; ctx.lineWidth=2;
+    for(let _cx=0;_cx<pi.worldW;_cx+=90){
+      ctx.strokeRect(_cx+6, 10, 78, 60);
+      // Inset
+      ctx.fillStyle='rgba(180,160,110,0.25)';
+      ctx.fillRect(_cx+14, 18, 62, 44);
+    }
+    // Gold trim band
+    ctx.fillStyle='#c9a84a';
+    ctx.fillRect(0, ceilH-4, pi.worldW, 3);
+    // Chandeliers
+    for(let _hx=180; _hx<pi.worldW; _hx+=360){
+      ctx.strokeStyle='#4a3a18'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(_hx, ceilH); ctx.lineTo(_hx, ceilH+24); ctx.stroke();
+      ctx.fillStyle='#c9a84a';
+      ctx.beginPath(); ctx.arc(_hx, ceilH+30, 10, 0, Math.PI*2); ctx.fill();
+      for(let _ca=0;_ca<5;_ca++){
+        const _ax=_hx+Math.cos(_ca*1.25)*16;
+        const _ay=ceilH+30+Math.sin(_ca*1.25)*8;
+        ctx.fillStyle='rgba(255,220,140,0.9)';
+        ctx.beginPath(); ctx.arc(_ax,_ay,3,0,Math.PI*2); ctx.fill();
+        const _cg=ctx.createRadialGradient(_ax,_ay,1,_ax,_ay,18);
+        _cg.addColorStop(0,'rgba(255,220,140,0.5)');
+        _cg.addColorStop(1,'transparent');
+        ctx.fillStyle=_cg;
+        ctx.fillRect(_ax-18,_ay-18,36,36);
+      }
+    }
+  } else if(isBasement){
+    // Exposed joists with bare bulbs and wiring
+    ctx.fillStyle='#1a1612';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Joists
+    ctx.fillStyle='#3a2e1e';
+    for(let _jx=0;_jx<pi.worldW;_jx+=80){
+      ctx.fillRect(_jx, 20, 12, ceilH-20);
+    }
+    // Crossbeams
+    ctx.fillStyle='#2a1f12';
+    ctx.fillRect(0, 22, pi.worldW, 6);
+    ctx.fillRect(0, 60, pi.worldW, 6);
+    // Tangled wiring
+    ctx.strokeStyle='#1a1008'; ctx.lineWidth=2;
+    for(let _wi=0;_wi<pi.worldW;_wi+=60){
+      const _ws=Math.sin(t*0.6+_wi*0.03)*2;
+      ctx.beginPath();
+      ctx.moveTo(_wi, ceilH-12);
+      ctx.quadraticCurveTo(_wi+30+_ws, ceilH-4, _wi+60, ceilH-12);
+      ctx.stroke();
+    }
+    // Bare bulbs flickering
+    for(let _bx=120; _bx<pi.worldW; _bx+=220){
+      const _bflick = Math.sin(t*11+_bx)<-0.9 ? 0.2 : 0.85;
+      ctx.strokeStyle='#1a1008'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(_bx, ceilH-4); ctx.lineTo(_bx, ceilH+6); ctx.stroke();
+      ctx.fillStyle=`rgba(255,230,160,${_bflick})`;
+      ctx.beginPath(); ctx.arc(_bx, ceilH+10, 4, 0, Math.PI*2); ctx.fill();
+      const _bg=ctx.createRadialGradient(_bx, ceilH+12, 2, _bx, ceilH+12, 80);
+      _bg.addColorStop(0, `rgba(255,220,150,${0.35*_bflick})`);
+      _bg.addColorStop(1,'transparent');
+      ctx.fillStyle=_bg;
+      ctx.fillRect(_bx-90, ceilH, 180, 150);
+    }
+  } else if(isCellar){
+    // Rough floorboards seen from below + cobwebs + dangling roots
+    ctx.fillStyle='#0c1008';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Planks
+    ctx.fillStyle='#2a2010';
+    for(let _px=0;_px<pi.worldW;_px+=70){
+      ctx.fillRect(_px, 8, 66, ceilH-16);
+      ctx.strokeStyle='rgba(10,6,2,0.7)'; ctx.lineWidth=1;
+      ctx.strokeRect(_px, 8, 66, ceilH-16);
+    }
+    // Nail heads
+    ctx.fillStyle='rgba(40,30,20,0.9)';
+    for(let _nx=10;_nx<pi.worldW;_nx+=70){
+      ctx.fillRect(_nx, 12, 2, 2);
+      ctx.fillRect(_nx, ceilH-18, 2, 2);
+    }
+    // Dangling roots
+    ctx.strokeStyle='#3a2416'; ctx.lineWidth=2;
+    for(let _ri=0;_ri<pi.worldW;_ri+=48){
+      const _rs=Math.sin(t*0.4+_ri*0.04)*2;
+      ctx.beginPath();
+      ctx.moveTo(_ri, ceilH-4);
+      ctx.quadraticCurveTo(_ri+_rs, ceilH+12, _ri+_rs*1.6, ceilH+22+((_ri*7)%10));
+      ctx.stroke();
+    }
+    // Cobwebs in corners
+    ctx.strokeStyle='rgba(220,230,220,0.25)'; ctx.lineWidth=1;
+    for(let _cwi=0; _cwi<pi.worldW; _cwi+=200){
+      for(let _rr=0;_rr<5;_rr++){
+        ctx.beginPath();
+        ctx.moveTo(_cwi, ceilH-2);
+        ctx.lineTo(_cwi+24-_rr*3, ceilH+16-_rr*2);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(_cwi, ceilH+6); ctx.lineTo(_cwi+22, ceilH+6); ctx.stroke();
+    }
+  } else if(isSubway){
+    // Arched tunnel ceiling
+    ctx.fillStyle='#1a1a20';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Tile arch rows
+    ctx.fillStyle='#2a2a32';
+    ctx.fillRect(0, 10, pi.worldW, 60);
+    ctx.strokeStyle='rgba(50,50,60,0.8)'; ctx.lineWidth=1;
+    for(let _ax=0; _ax<pi.worldW; _ax+=16){
+      ctx.beginPath(); ctx.moveTo(_ax,10); ctx.lineTo(_ax,70); ctx.stroke();
+    }
+    for(let _ay=20; _ay<70; _ay+=18){
+      ctx.beginPath(); ctx.moveTo(0,_ay); ctx.lineTo(pi.worldW,_ay); ctx.stroke();
+    }
+    // Flickering old lamps
+    for(let _lx=100; _lx<pi.worldW; _lx+=240){
+      const _lflick = Math.sin(t*13+_lx)<-0.85 ? 0.15 : 0.85;
+      ctx.fillStyle=`rgba(220,210,180,${_lflick})`;
+      ctx.fillRect(_lx-10, 72, 20, 3);
+      const _fg=ctx.createRadialGradient(_lx, 76, 2, _lx, 76, 90);
+      _fg.addColorStop(0, `rgba(220,210,170,${0.35*_lflick})`);
+      _fg.addColorStop(1,'transparent');
+      ctx.fillStyle=_fg;
+      ctx.fillRect(_lx-100, 70, 200, 160);
+    }
+  } else if(isJungleTemple){
+    // Mossy stone ceiling with root intrusions
+    ctx.fillStyle='#1a2a10';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Dripping mossy strands
+    ctx.strokeStyle='#3a6a2a'; ctx.lineWidth=1;
+    for(let _mi=0; _mi<pi.worldW; _mi+=24){
+      const _msway=Math.sin(t*0.6+_mi*0.05)*2;
+      ctx.beginPath();
+      ctx.moveTo(_mi, ceilH-4);
+      ctx.lineTo(_mi+_msway, ceilH+12+((_mi*7)%10));
+      ctx.stroke();
+    }
+    // Ceiling carved patterns (faint gold glyphs)
+    ctx.fillStyle='rgba(200,170,80,0.25)';
+    ctx.font='bold 12px serif'; ctx.textAlign='center';
+    const _jglyphs=['\u2600','\u25C8','\u263C','\u25B2','\u2654'];
+    for(let _gx=50; _gx<pi.worldW; _gx+=90){
+      ctx.fillText(_jglyphs[Math.floor(_gx/90)%_jglyphs.length], _gx, 40);
+    }
+    // Hanging vines from ceiling
+    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=2;
+    for(let _vi=0; _vi<pi.worldW; _vi+=70){
+      const _vSway=Math.sin(t*0.8+_vi*0.03)*4;
+      ctx.beginPath();
+      ctx.moveTo(_vi, ceilH);
+      ctx.quadraticCurveTo(_vi+_vSway, ceilH+20, _vi+_vSway*1.5, ceilH+40);
+      ctx.stroke();
+    }
+  } else if(isRadar){
+    // Concrete + pipes ceiling
+    ctx.fillStyle='#22292e';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Exposed pipes
+    ctx.strokeStyle='#5a6a76'; ctx.lineWidth=6;
+    ctx.beginPath(); ctx.moveTo(0, 24); ctx.lineTo(pi.worldW, 24); ctx.stroke();
+    ctx.strokeStyle='#3a4a56';
+    ctx.beginPath(); ctx.moveTo(0, 50); ctx.lineTo(pi.worldW, 50); ctx.stroke();
+    // Pipe junctions
+    ctx.fillStyle='#2a3640';
+    for(let jx=60; jx<pi.worldW; jx+=140){
+      ctx.fillRect(jx-3, 20, 6, 10);
+      ctx.fillRect(jx-3, 46, 6, 10);
+    }
+    // Ceiling-mounted fluorescents
+    for(let fx=120; fx<pi.worldW; fx+=280){
+      ctx.fillStyle='#1a2026';
+      ctx.fillRect(fx-30, 62, 60, 8);
+      // Tube
+      const flicker = 0.8 + Math.sin(t*12+fx)*0.15 + ((fx*7)%3===0 && Math.sin(t*4)<-0.8?-0.3:0);
+      ctx.fillStyle=`rgba(220,240,255,${0.6*flicker})`;
+      ctx.fillRect(fx-28, 64, 56, 4);
+      // Soft glow
+      const fg=ctx.createRadialGradient(fx, 68, 2, fx, 68, 80);
+      fg.addColorStop(0, `rgba(200,230,255,${0.28*flicker})`);
+      fg.addColorStop(1,'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(fx-100, 60, 200, 120);
+    }
+  } else if(isObservatory){
+    // Wooden dome rim with central oculus revealing night sky
+    ctx.fillStyle='#2a1a0c';
+    ctx.fillRect(0,0,pi.worldW,ceilH);
+    // Exposed rafters
+    ctx.strokeStyle='#4a3420'; ctx.lineWidth=3;
+    for(let rx=20; rx<pi.worldW; rx+=60){
+      ctx.beginPath(); ctx.moveTo(rx,0); ctx.lineTo(rx,ceilH); ctx.stroke();
+    }
+    // Dome oculi — three circular openings to star sky
+    for(let oi=0; oi<4; oi++){
+      const ocX = 300 + oi*400;
+      if(ocX>pi.worldW-80) break;
+      // Sky disc
+      const ocG=ctx.createRadialGradient(ocX, ceilH-6, 2, ocX, ceilH-6, 70);
+      ocG.addColorStop(0,'rgba(20,28,60,1)');
+      ocG.addColorStop(0.85,'rgba(10,14,30,1)');
+      ocG.addColorStop(1,'transparent');
+      ctx.fillStyle=ocG;
+      ctx.beginPath(); ctx.ellipse(ocX, ceilH-4, 70, 32, 0, Math.PI, 0); ctx.fill();
+      // Stars inside oculus
+      for(let osi=0; osi<14; osi++){
+        const oxs=ocX-55 + (osi*9)%110;
+        const oys=ceilH-26 + (osi*5)%22;
+        const tw=0.4+Math.sin(t*2+osi+oi)*0.5;
+        ctx.fillStyle=`rgba(220,230,255,${0.4+tw*0.5})`;
+        ctx.fillRect(oxs, oys, 1+(osi%2), 1+(osi%2));
+      }
+      // Brass ring
+      ctx.strokeStyle='#a68840'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.ellipse(ocX, ceilH-4, 70, 32, 0, Math.PI, 0); ctx.stroke();
+    }
+  } else if(isCave){
     // Irregular rock ceiling with stalactites
     ctx.fillStyle='#06101a';
     ctx.fillRect(0,0,pi.worldW,ceilH);
@@ -5021,7 +5903,201 @@ function drawPyramidInterior(){
   }
 
   // Wall band
-  if(isCave){
+  if(isMuseum){
+    // Framed painting gallery wall
+    ctx.fillStyle='rgba(120,80,50,0.25)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    // Wainscot top trim
+    ctx.fillStyle='#c9a84a';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 2);
+    ctx.fillRect(0, ceilH+98, pi.worldW, 2);
+    for(let _fx=40; _fx<pi.worldW; _fx+=150){
+      // Gilt frame
+      ctx.fillStyle='#c9a84a';
+      ctx.fillRect(_fx, ceilH+56, 90, 40);
+      // Canvas inside
+      const _cvCol = ['#3a5a7a','#6a4a3a','#4a6a4a','#7a5a3a'][(_fx/150|0)%4];
+      ctx.fillStyle=_cvCol;
+      ctx.fillRect(_fx+5, ceilH+61, 80, 30);
+      // Simple painting silhouette
+      ctx.fillStyle='rgba(20,10,6,0.5)';
+      ctx.fillRect(_fx+18, ceilH+78, 8, 14);
+      ctx.beginPath(); ctx.arc(_fx+22, ceilH+72, 5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(220,200,160,0.4)';
+      ctx.fillRect(_fx+50, ceilH+84, 26, 6);
+      // Frame plaque
+      ctx.fillStyle='#8a6a2a';
+      ctx.fillRect(_fx+32, ceilH+94, 26, 4);
+    }
+  } else if(isBasement){
+    // Corkboard with photos + red string conspiracy wall
+    ctx.fillStyle='rgba(80,50,30,0.35)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    // Photo pins
+    const _photos=[];
+    for(let _phx=30; _phx<pi.worldW; _phx+=48){
+      const _phy = ceilH+58 + ((_phx*13)%24);
+      _photos.push([_phx,_phy]);
+      ctx.fillStyle='#e8e0c8';
+      ctx.fillRect(_phx, _phy, 22, 28);
+      // Grainy photo
+      ctx.fillStyle='rgba(60,60,70,0.7)';
+      ctx.fillRect(_phx+2, _phy+2, 18, 20);
+      // UFO or alien silhouette
+      if(_phx%3===0){
+        ctx.fillStyle='rgba(180,200,220,0.7)';
+        ctx.beginPath(); ctx.ellipse(_phx+11, _phy+12, 7, 2, 0, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle='rgba(160,255,160,0.5)';
+        ctx.fillRect(_phx+8, _phy+6, 6, 10);
+      }
+      // Red pin
+      ctx.fillStyle='#ff3030';
+      ctx.beginPath(); ctx.arc(_phx+11, _phy+2, 2, 0, Math.PI*2); ctx.fill();
+    }
+    // Red string connecting photos
+    ctx.strokeStyle='rgba(220,40,40,0.85)'; ctx.lineWidth=1;
+    for(let _pi=0; _pi<_photos.length-1; _pi++){
+      ctx.beginPath();
+      ctx.moveTo(_photos[_pi][0]+11, _photos[_pi][1]+2);
+      ctx.lineTo(_photos[_pi+1][0]+11, _photos[_pi+1][1]+2);
+      ctx.stroke();
+    }
+    // "THE TRUTH" scrawled
+    ctx.fillStyle='rgba(255,60,60,0.55)';
+    ctx.font='italic bold 13px sans-serif'; ctx.textAlign='left';
+    for(let _tx=180; _tx<pi.worldW; _tx+=420){
+      ctx.fillText('THE TRUTH IS OUT THERE', _tx, ceilH+54);
+    }
+  } else if(isCellar){
+    // Earthy wall with rotten shelves and jars
+    ctx.fillStyle='rgba(40,30,14,0.5)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    // Shelf plank
+    ctx.fillStyle='#2a1a0a';
+    ctx.fillRect(0, ceilH+76, pi.worldW, 4);
+    // Alchemy jars on shelf
+    for(let _jx=30; _jx<pi.worldW; _jx+=60){
+      const _jh=14+((_jx*7)%10);
+      const _jpulse=0.6+Math.sin(t*1.5+_jx*0.05)*0.4;
+      const _jcolSet = [[120,220,140],[220,140,60],[160,80,200],[80,200,220]];
+      const _jc = _jcolSet[(_jx/60|0)%4];
+      ctx.fillStyle=`rgba(${_jc[0]},${_jc[1]},${_jc[2]},0.55)`;
+      ctx.fillRect(_jx, ceilH+76-_jh, 14, _jh);
+      // Jar rim
+      ctx.fillStyle='rgba(60,50,40,0.8)';
+      ctx.fillRect(_jx-1, ceilH+76-_jh-2, 16, 3);
+      // Glow
+      const _jg=ctx.createRadialGradient(_jx+7, ceilH+76-_jh/2, 1, _jx+7, ceilH+76-_jh/2, 20);
+      _jg.addColorStop(0, `rgba(${_jc[0]},${_jc[1]},${_jc[2]},${0.3*_jpulse})`);
+      _jg.addColorStop(1, 'transparent');
+      ctx.fillStyle=_jg;
+      ctx.fillRect(_jx-10, ceilH+66-_jh, 34, _jh+22);
+    }
+    // Water stains on earth
+    ctx.fillStyle='rgba(10,8,4,0.6)';
+    for(let _sx=0;_sx<pi.worldW;_sx+=120){
+      ctx.beginPath(); ctx.ellipse(_sx, ceilH+95, 22, 4, 0, 0, Math.PI*2); ctx.fill();
+    }
+  } else if(isSubway){
+    // Tile wall with graffiti and station line
+    ctx.fillStyle='rgba(50,50,60,0.55)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    // Tile pattern
+    ctx.strokeStyle='rgba(20,20,26,0.7)'; ctx.lineWidth=1;
+    for(let _tx=0; _tx<pi.worldW; _tx+=14){
+      ctx.beginPath(); ctx.moveTo(_tx, ceilH+50); ctx.lineTo(_tx, ceilH+100); ctx.stroke();
+    }
+    for(let _ty=ceilH+62; _ty<ceilH+100; _ty+=12){
+      ctx.beginPath(); ctx.moveTo(0, _ty); ctx.lineTo(pi.worldW, _ty); ctx.stroke();
+    }
+    // Station name panels
+    for(let _px=60; _px<pi.worldW; _px+=320){
+      ctx.fillStyle='#0a1a3a';
+      ctx.fillRect(_px, ceilH+66, 160, 22);
+      ctx.fillStyle='#d8d8dc';
+      ctx.font='bold 14px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('CENTRAL STATION', _px+80, ceilH+82);
+      ctx.strokeStyle='rgba(220,220,220,0.5)'; ctx.lineWidth=1;
+      ctx.strokeRect(_px, ceilH+66, 160, 22);
+    }
+    // Graffiti tags
+    ctx.fillStyle='rgba(255,80,200,0.5)';
+    ctx.font='italic bold 11px sans-serif'; ctx.textAlign='left';
+    for(let _gx=220; _gx<pi.worldW; _gx+=400){
+      ctx.fillText('VOID 77', _gx, ceilH+56);
+    }
+    ctx.fillStyle='rgba(80,220,120,0.5)';
+    for(let _gx=380; _gx<pi.worldW; _gx+=400){
+      ctx.fillText('ABDUCT OR DIE', _gx, ceilH+98);
+    }
+  } else if(isJungleTemple){
+    // Carved frieze with jungle motifs
+    ctx.fillStyle='rgba(80,120,60,0.25)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    ctx.strokeStyle='rgba(180,150,80,0.45)'; ctx.lineWidth=1;
+    for(let _px=30; _px<pi.worldW; _px+=110){
+      // Carved panel
+      ctx.strokeRect(_px, ceilH+58, 80, 36);
+      // Glyph inside
+      ctx.fillStyle='rgba(200,170,90,0.7)';
+      ctx.font='bold 20px serif'; ctx.textAlign='center';
+      const _jgg=['\u25C8','\u2600','\u263C','\u25B2','\u2602'];
+      ctx.fillText(_jgg[(_px/110|0)%_jgg.length], _px+40, ceilH+84);
+    }
+    // Creeping moss between panels
+    ctx.fillStyle='rgba(40,100,40,0.5)';
+    for(let _mi=0; _mi<pi.worldW; _mi+=16){
+      ctx.fillRect(_mi, ceilH+50+((_mi*7)%4), 3, 2);
+    }
+  } else if(isRadar){
+    // Server rack / monitor wall band
+    ctx.fillStyle='rgba(30,40,50,0.4)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    for(let px=40; px<pi.worldW; px+=120){
+      // Monitor housing
+      ctx.fillStyle='#1a2028';
+      ctx.fillRect(px, ceilH+56, 80, 40);
+      // CRT screen with scanlines
+      const scrFlick=0.75+Math.sin(t*6+px)*0.12;
+      ctx.fillStyle=`rgba(40,200,120,${0.5*scrFlick})`;
+      ctx.fillRect(px+4, ceilH+60, 72, 32);
+      // Scanlines
+      ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+      for(let sl=ceilH+62; sl<ceilH+92; sl+=3){
+        ctx.beginPath(); ctx.moveTo(px+4,sl); ctx.lineTo(px+76,sl); ctx.stroke();
+      }
+      // Blip animation
+      const blipP=((t*0.8 + px*0.01)%1);
+      ctx.fillStyle='rgba(180,255,200,0.9)';
+      ctx.fillRect(px+8+blipP*60, ceilH+74+Math.sin(t*2+px)*6, 3, 3);
+      // Frame accent
+      ctx.strokeStyle='rgba(100,130,150,0.6)';
+      ctx.strokeRect(px, ceilH+56, 80, 40);
+    }
+  } else if(isObservatory){
+    // Star chart tapestries
+    ctx.fillStyle='rgba(60,50,80,0.2)';
+    ctx.fillRect(0, ceilH+50, pi.worldW, 50);
+    ctx.strokeStyle='rgba(180,150,80,0.45)'; ctx.lineWidth=1;
+    for(let px=40; px<pi.worldW; px+=140){
+      // Framed chart
+      ctx.strokeRect(px, ceilH+58, 90, 36);
+      // Constellation dots + lines inside
+      ctx.fillStyle='rgba(255,230,180,0.7)';
+      const pts=[];
+      for(let k=0;k<5;k++){
+        const dx=px+10+((k*17)%70);
+        const dy=ceilH+62+((k*11)%28);
+        pts.push([dx,dy]);
+        ctx.beginPath(); ctx.arc(dx,dy,1.5,0,Math.PI*2); ctx.fill();
+      }
+      ctx.strokeStyle='rgba(180,150,80,0.35)';
+      ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k][0],pts[k][1]);
+      ctx.stroke();
+    }
+  } else if(isCave){
     // Kelp/barnacle decoration strip
     ctx.fillStyle='rgba(40,100,120,0.18)';
     ctx.fillRect(0, ceilH+50, pi.worldW, 50);
@@ -5045,7 +6121,184 @@ function drawPyramidInterior(){
 
   // Pillars / Crystal clusters
   for(let px=200; px<pi.worldW-100; px+=360){
-    if(isCave){
+    if(isMuseum){
+      // Fluted marble column with gilt capital
+      ctx.fillStyle='#e8e2d0';
+      ctx.fillRect(px-16, ceilH+100, 32, floorTop-ceilH-100);
+      // Flutes
+      ctx.strokeStyle='rgba(140,120,80,0.4)'; ctx.lineWidth=1;
+      for(let _fl=-12; _fl<=12; _fl+=6){
+        ctx.beginPath(); ctx.moveTo(px+_fl, ceilH+108); ctx.lineTo(px+_fl, floorTop-10); ctx.stroke();
+      }
+      // Capital
+      ctx.fillStyle='#c9a84a';
+      ctx.fillRect(px-20, ceilH+100, 40, 10);
+      ctx.fillRect(px-22, ceilH+96, 44, 5);
+      // Base
+      ctx.fillStyle='#c9a84a';
+      ctx.fillRect(px-20, floorTop-10, 40, 10);
+      ctx.fillRect(px-22, floorTop-5, 44, 5);
+      // Pedestal plaque
+      ctx.fillStyle='#8a6a2a';
+      ctx.fillRect(px-12, ceilH+170, 24, 12);
+      ctx.fillStyle='rgba(20,10,4,0.8)';
+      ctx.font='bold 6px serif'; ctx.textAlign='center';
+      ctx.fillText('CA. 1200 BC', px, ceilH+179);
+    } else if(isBasement){
+      // Wood stud with pinned newspaper clippings
+      ctx.fillStyle='#3a2a1a';
+      ctx.fillRect(px-6, ceilH+100, 12, floorTop-ceilH-100);
+      ctx.strokeStyle='rgba(10,6,2,0.8)'; ctx.lineWidth=1;
+      ctx.strokeRect(px-6, ceilH+100, 12, floorTop-ceilH-100);
+      // Pinned newspaper clippings
+      for(let _ci=0;_ci<3;_ci++){
+        const _cy = ceilH+120+_ci*50;
+        const _cw = 28, _ch=36;
+        ctx.save();
+        ctx.translate(px, _cy);
+        ctx.rotate(Math.sin(_ci*2.3)*0.12);
+        ctx.fillStyle='#d8d0b8';
+        ctx.fillRect(-_cw/2, 0, _cw, _ch);
+        ctx.fillStyle='rgba(40,30,20,0.85)';
+        ctx.font='bold 4px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('UFO SEEN', 0, 8);
+        ctx.fillStyle='rgba(40,30,20,0.6)';
+        ctx.fillRect(-_cw/2+3, 12, _cw-6, 3);
+        ctx.fillRect(-_cw/2+3, 18, _cw-6, 3);
+        ctx.fillRect(-_cw/2+3, 24, _cw-6, 3);
+        // Red pin
+        ctx.fillStyle='#ff3030';
+        ctx.beginPath(); ctx.arc(0, 2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    } else if(isCellar){
+      // Wooden post with hanging herbs
+      ctx.fillStyle='#2a1a0a';
+      ctx.fillRect(px-8, ceilH+100, 16, floorTop-ceilH-100);
+      ctx.strokeStyle='rgba(10,6,2,0.9)'; ctx.lineWidth=1;
+      ctx.strokeRect(px-8, ceilH+100, 16, floorTop-ceilH-100);
+      // Knots
+      ctx.fillStyle='#1a0e04';
+      ctx.beginPath(); ctx.arc(px-2, ceilH+140, 2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px+3, ceilH+210, 1.5, 0, Math.PI*2); ctx.fill();
+      // Hanging herb bundles
+      for(let _hi=0;_hi<2;_hi++){
+        const _hy = ceilH+116+_hi*70;
+        ctx.strokeStyle='#5a4a28'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(px, _hy); ctx.lineTo(px, _hy+4); ctx.stroke();
+        // Bundle
+        ctx.fillStyle='#4a6a2a';
+        for(let _hl=0;_hl<5;_hl++){
+          const _hlx = px + Math.cos(_hl*1.3)*4;
+          const _hly = _hy+6 + Math.sin(_hl*1.3)*2;
+          ctx.beginPath(); ctx.ellipse(_hlx, _hly, 4, 2, _hl*0.4, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle='#6a5a2a';
+        ctx.beginPath(); ctx.ellipse(px, _hy+12, 3, 5, 0, 0, Math.PI*2); ctx.fill();
+      }
+      // Cobweb at top
+      ctx.strokeStyle='rgba(220,220,210,0.25)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px-8, ceilH+100); ctx.lineTo(px+8, ceilH+116); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+8, ceilH+100); ctx.lineTo(px-8, ceilH+116); ctx.stroke();
+    } else if(isSubway){
+      // Structural pillar (I-beam)
+      ctx.fillStyle='#3a3a40';
+      ctx.fillRect(px-10, ceilH+100, 20, floorTop-ceilH-100);
+      // Flange shadows
+      ctx.fillStyle='#1a1a22';
+      ctx.fillRect(px-10, ceilH+100, 3, floorTop-ceilH-100);
+      ctx.fillRect(px+7, ceilH+100, 3, floorTop-ceilH-100);
+      // Rust streaks
+      ctx.fillStyle='rgba(180,80,40,0.35)';
+      for(let _rs=ceilH+120; _rs<floorTop-10; _rs+=32){
+        ctx.fillRect(px-4, _rs, 2, 10);
+      }
+      // Poster on beam
+      ctx.fillStyle='#e8d8a0';
+      ctx.fillRect(px-8, ceilH+140, 16, 22);
+      ctx.fillStyle='#c82020';
+      ctx.fillRect(px-8, ceilH+140, 16, 5);
+      ctx.fillStyle='rgba(40,20,10,0.8)';
+      ctx.font='bold 3px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('WANTED', px, ceilH+148);
+      ctx.fillText('ALIEN', px, ceilH+154);
+    } else if(isJungleTemple){
+      // Stone column wrapped in vines
+      ctx.fillStyle='#5a6a4a';
+      ctx.fillRect(px-18, ceilH+100, 36, floorTop-ceilH-100);
+      // Moss patches
+      ctx.fillStyle='rgba(40,120,40,0.5)';
+      for(let _ms=ceilH+110; _ms<floorTop-8; _ms+=22){
+        ctx.fillRect(px-18, _ms, 36, 6);
+      }
+      // Carved bands
+      ctx.fillStyle='#3a4a2a';
+      ctx.fillRect(px-22, ceilH+104, 44, 6);
+      ctx.fillRect(px-22, floorTop-14, 44, 6);
+      // Glyph band
+      ctx.fillStyle='rgba(200,170,80,0.45)';
+      ctx.font='bold 9px serif'; ctx.textAlign='center';
+      ctx.fillText('\u25C8\u2600\u25C8', px, ceilH+140);
+      ctx.fillText('\u2654', px, ceilH+180);
+      ctx.fillText('\u263C', px, ceilH+220);
+      // Vine wraps
+      ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=2;
+      for(let _vw=0; _vw<4; _vw++){
+        const _vy=ceilH+120+_vw*30;
+        const _sw=Math.sin(t*0.7+_vw)*3;
+        ctx.beginPath();
+        ctx.moveTo(px-18, _vy);
+        ctx.quadraticCurveTo(px+_sw, _vy+8, px+18, _vy+16);
+        ctx.stroke();
+      }
+    } else if(isRadar){
+      // Server rack column
+      ctx.fillStyle='#1a2028';
+      ctx.fillRect(px-25, ceilH+100, 50, floorTop-ceilH-100);
+      // Rack rails
+      ctx.fillStyle='#2a3640';
+      ctx.fillRect(px-25, ceilH+100, 50, 6);
+      ctx.fillRect(px-25, floorTop-6, 50, 6);
+      // Server units with status LEDs
+      for(let sh=ceilH+112; sh<floorTop-12; sh+=18){
+        ctx.fillStyle='#0a0e12';
+        ctx.fillRect(px-22, sh, 44, 14);
+        // LEDs
+        const ledCol=((sh+px)%3===0)?'rgba(80,255,120,':(Math.sin(t*3+sh)>0?'rgba(255,200,80,':'rgba(255,80,80,');
+        ctx.fillStyle=ledCol+'0.9)';
+        ctx.fillRect(px-18, sh+5, 2, 2);
+        ctx.fillStyle='rgba(80,200,255,0.8)';
+        ctx.fillRect(px-14, sh+5, 2, 2);
+        // Vent slots
+        ctx.strokeStyle='rgba(60,80,100,0.5)'; ctx.lineWidth=1;
+        for(let vv=px+2; vv<px+20; vv+=3){
+          ctx.beginPath(); ctx.moveTo(vv, sh+4); ctx.lineTo(vv, sh+10); ctx.stroke();
+        }
+      }
+      ctx.strokeStyle='rgba(20,10,4,0.6)'; ctx.lineWidth=1;
+      ctx.strokeRect(px-25, ceilH+100, 50, floorTop-ceilH-100);
+    } else if(isObservatory){
+      // Wooden bookshelf
+      ctx.fillStyle='#3a2612';
+      ctx.fillRect(px-30, ceilH+100, 60, floorTop-ceilH-100);
+      // Shelf rails
+      ctx.fillStyle='#5a3c1a';
+      for(let sh=ceilH+130; sh<floorTop-4; sh+=34){
+        ctx.fillRect(px-30, sh, 60, 3);
+      }
+      // Books — varied spines
+      const bkColors=['#7a1a1a','#1a3a7a','#4a2a6a','#1a5a2a','#8a5a10','#3a3a5a'];
+      for(let sh=ceilH+134; sh<floorTop-4; sh+=34){
+        for(let bx=px-28; bx<px+28; bx+=7){
+          const bh=22+((bx*7+sh)%8);
+          ctx.fillStyle=bkColors[((bx+sh)>>1)%bkColors.length];
+          ctx.fillRect(bx, sh, 5, bh);
+        }
+      }
+      // Shelf frame accent
+      ctx.strokeStyle='rgba(20,10,4,0.6)'; ctx.lineWidth=1;
+      ctx.strokeRect(px-30, ceilH+100, 60, floorTop-ceilH-100);
+    } else if(isCave){
       // Giant crystal cluster
       const crystalCols=['#4fd0ff','#9f7cff','#5affc8','#ff9fe0'];
       const col=crystalCols[(px/360|0)%crystalCols.length];
@@ -5095,9 +6348,153 @@ function drawPyramidInterior(){
     }
   }
 
-  // Light sources — torches vs bioluminescent mushrooms
+  // Light sources — torches vs bioluminescent mushrooms vs brass lanterns
   for(let tx=140; tx<pi.worldW; tx+=240){
-    if(isCave){
+    if(isMuseum){
+      // Wall-mounted brass sconce with soft warm glow
+      const flick=0.85+Math.sin(t*1.8+tx)*0.05;
+      ctx.fillStyle='#8a6a2a';
+      ctx.fillRect(tx-3, ceilH+110, 6, 8);
+      ctx.fillStyle='#c9a84a';
+      ctx.beginPath(); ctx.arc(tx, ceilH+108, 5, 0, Math.PI*2); ctx.fill();
+      // Candle flame
+      ctx.fillStyle=`rgba(255,210,140,${flick})`;
+      ctx.beginPath(); ctx.ellipse(tx, ceilH+100, 3, 7, 0, 0, Math.PI*2); ctx.fill();
+      const _mg=ctx.createRadialGradient(tx, ceilH+104, 2, tx, ceilH+104, 120);
+      _mg.addColorStop(0, `rgba(255,220,160,${0.3*flick})`);
+      _mg.addColorStop(1, 'transparent');
+      ctx.fillStyle=_mg;
+      ctx.fillRect(tx-120, ceilH+40, 240, 200);
+    } else if(isBasement){
+      // Harsh hanging bare bulb, pendulum-sway
+      const _sw=Math.sin(t*0.9+tx*0.02)*3;
+      const _flick=Math.sin(t*14+tx)<-0.85?0.25:0.9;
+      // Cord
+      ctx.strokeStyle='#1a1008'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx, ceilH); ctx.lineTo(tx+_sw, ceilH+40); ctx.stroke();
+      // Metal cap
+      ctx.fillStyle='#4a3020';
+      ctx.fillRect(tx+_sw-4, ceilH+40, 8, 4);
+      // Bulb
+      ctx.fillStyle=`rgba(255,230,170,${_flick})`;
+      ctx.beginPath(); ctx.arc(tx+_sw, ceilH+50, 6, 0, Math.PI*2); ctx.fill();
+      // Harsh halo
+      const _bg=ctx.createRadialGradient(tx+_sw, ceilH+52, 2, tx+_sw, ceilH+52, 140);
+      _bg.addColorStop(0, `rgba(255,220,150,${0.4*_flick})`);
+      _bg.addColorStop(0.5, `rgba(200,160,90,${0.15*_flick})`);
+      _bg.addColorStop(1, 'transparent');
+      ctx.fillStyle=_bg;
+      ctx.fillRect(tx+_sw-140, ceilH+10, 280, 220);
+    } else if(isCellar){
+      // Old oil lantern hanging from roots
+      const _flick=0.7+Math.sin(t*6+tx)*0.22;
+      // Chain
+      ctx.strokeStyle='#3a2818'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx, ceilH); ctx.lineTo(tx, ceilH+38); ctx.stroke();
+      // Lantern cage
+      ctx.fillStyle='#4a3424';
+      ctx.fillRect(tx-6, ceilH+38, 12, 14);
+      ctx.fillStyle='rgba(255,160,80,'+_flick+')';
+      ctx.fillRect(tx-4, ceilH+40, 8, 10);
+      // Cage bars
+      ctx.strokeStyle='#2a1a0a'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx-4, ceilH+38); ctx.lineTo(tx-4, ceilH+52); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(tx, ceilH+38); ctx.lineTo(tx, ceilH+52); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(tx+4, ceilH+38); ctx.lineTo(tx+4, ceilH+52); ctx.stroke();
+      // Warm amber glow
+      const _lg=ctx.createRadialGradient(tx, ceilH+46, 2, tx, ceilH+46, 100);
+      _lg.addColorStop(0, `rgba(255,180,90,${0.35*_flick})`);
+      _lg.addColorStop(1, 'transparent');
+      ctx.fillStyle=_lg;
+      ctx.fillRect(tx-100, ceilH+10, 200, 180);
+    } else if(isSubway){
+      // Fluorescent tube with faulty flicker
+      const flick = Math.sin(t*18+tx)<-0.8 ? 0.2 : 0.95;
+      // Housing
+      ctx.fillStyle='#1a1a22';
+      ctx.fillRect(tx-24, ceilH+80, 48, 8);
+      // Tube
+      ctx.fillStyle=`rgba(220,230,240,${flick*0.9})`;
+      ctx.fillRect(tx-22, ceilH+82, 44, 4);
+      // Harsh glow
+      const fg=ctx.createRadialGradient(tx, ceilH+86, 2, tx, ceilH+86, 120);
+      fg.addColorStop(0, `rgba(210,230,250,${0.45*flick})`);
+      fg.addColorStop(0.5, `rgba(150,180,220,${0.15*flick})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-120, ceilH+40, 240, 180);
+    } else if(isJungleTemple){
+      // Green glowing ritual torch
+      const flick=0.75+Math.sin(t*9+tx)*0.2;
+      // Stone wall sconce
+      ctx.fillStyle='#5a5a3a';
+      ctx.fillRect(tx-5, ceilH+110, 10, 10);
+      // Green flame
+      ctx.fillStyle=`rgba(120,255,150,${0.85*flick})`;
+      ctx.beginPath();
+      ctx.ellipse(tx, ceilH+100, 5, 10*flick, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle=`rgba(200,255,200,${0.6*flick})`;
+      ctx.beginPath();
+      ctx.ellipse(tx, ceilH+102, 3, 6*flick, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Green haze glow
+      const fg=ctx.createRadialGradient(tx, ceilH+100, 2, tx, ceilH+100, 100*flick);
+      fg.addColorStop(0, `rgba(120,255,160,${0.55*flick})`);
+      fg.addColorStop(0.5, `rgba(60,200,120,${0.18*flick})`);
+      fg.addColorStop(1,'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-110, ceilH+40, 220, 180);
+    } else if(isRadar){
+      // Industrial cage lamp — amber
+      const flick=0.8+Math.sin(t*10+tx)*0.2;
+      // Mount
+      ctx.fillStyle='#3a4a56';
+      ctx.fillRect(tx-4, ceilH+70, 8, 10);
+      // Cage lamp
+      ctx.fillStyle='#5a5a62';
+      ctx.beginPath(); ctx.arc(tx, ceilH+92, 10, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle=`rgba(255,180,80,${0.85*flick})`;
+      ctx.beginPath(); ctx.arc(tx, ceilH+92, 6, 0, Math.PI*2); ctx.fill();
+      // Cage bars
+      ctx.strokeStyle='rgba(40,40,50,0.8)'; ctx.lineWidth=1;
+      for(let bi=0;bi<4;bi++){
+        const ang=bi*Math.PI/4;
+        ctx.beginPath();
+        ctx.moveTo(tx+Math.cos(ang)*10, ceilH+92+Math.sin(ang)*10);
+        ctx.lineTo(tx-Math.cos(ang)*10, ceilH+92-Math.sin(ang)*10);
+        ctx.stroke();
+      }
+      // Glow
+      const fg=ctx.createRadialGradient(tx, ceilH+92, 2, tx, ceilH+92, 100*flick);
+      fg.addColorStop(0, `rgba(255,190,90,${0.45*flick})`);
+      fg.addColorStop(0.5, `rgba(240,150,60,${0.15*flick})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-110, ceilH+40, 220, 180);
+    } else if(isObservatory){
+      // Hanging brass lantern
+      const flick=0.85+Math.sin(t*8+tx)*0.15;
+      // Chain
+      ctx.strokeStyle='#6a5a3a'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx, ceilH+50); ctx.lineTo(tx, ceilH+98); ctx.stroke();
+      // Lantern body (brass)
+      ctx.fillStyle='#a68040';
+      ctx.fillRect(tx-7, ceilH+100, 14, 18);
+      ctx.fillStyle='#c8a060';
+      ctx.fillRect(tx-7, ceilH+100, 14, 3);
+      ctx.fillRect(tx-7, ceilH+115, 14, 3);
+      // Glass with flame
+      ctx.fillStyle=`rgba(255,200,120,${0.8*flick})`;
+      ctx.fillRect(tx-5, ceilH+103, 10, 12);
+      // Glow
+      const fg=ctx.createRadialGradient(tx, ceilH+110, 2, tx, ceilH+110, 90*flick);
+      fg.addColorStop(0, `rgba(255,210,130,${0.55*flick})`);
+      fg.addColorStop(0.5, `rgba(240,160,60,${0.18*flick})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle=fg;
+      ctx.fillRect(tx-100, ceilH+50, 200, 180);
+    } else if(isCave){
       // Glowing mushroom cluster on wall
       const pulse=0.7+Math.sin(t*2+tx)*0.2;
       const mcol=['rgba(120,220,255,','rgba(180,130,255,','rgba(120,255,200,'][((tx/240)|0)%3];
@@ -5190,14 +6587,14 @@ function drawPyramidInterior(){
   const sarcX=pi.worldW-320, sarcY=floorTop-48;
   // Target sequence tablet above (the "hint")
   const tabX=sarcX+90, tabY=ceilH+120;
-  // Stone tablet
-  ctx.fillStyle=isCave?'#0c1820':'#3a2614';
+  // Stone tablet / star chart panel / access code terminal / glyph carving / route board
+  ctx.fillStyle=isMuseum?'#3a2a14':isBasement?'#1a1410':isCellar?'#1a1408':isSubway?'#141820':isJungleTemple?'#1a2818':isRadar?'#0c1418':isObservatory?'#141428':isCave?'#0c1820':'#3a2614';
   ctx.fillRect(tabX-90, tabY-18, 180, 56);
-  ctx.strokeStyle=isCave?'rgba(120,220,255,0.55)':'rgba(200,160,80,0.5)'; ctx.lineWidth=2;
+  ctx.strokeStyle=isMuseum?'rgba(220,180,90,0.7)':isBasement?'rgba(220,80,60,0.7)':isCellar?'rgba(120,220,140,0.65)':isSubway?'rgba(200,210,220,0.6)':isJungleTemple?'rgba(200,170,80,0.7)':isRadar?'rgba(80,220,140,0.6)':isObservatory?'rgba(200,180,120,0.6)':isCave?'rgba(120,220,255,0.55)':'rgba(200,160,80,0.5)'; ctx.lineWidth=2;
   ctx.strokeRect(tabX-90, tabY-18, 180, 56);
-  ctx.fillStyle=isCave?'rgba(160,230,255,0.7)':'rgba(200,160,80,0.5)';
+  ctx.fillStyle=isMuseum?'rgba(255,220,140,0.9)':isBasement?'rgba(255,120,80,0.9)':isCellar?'rgba(180,255,180,0.8)':isSubway?'rgba(220,230,240,0.85)':isJungleTemple?'rgba(220,190,100,0.85)':isRadar?'rgba(120,240,160,0.85)':isObservatory?'rgba(220,200,140,0.75)':isCave?'rgba(160,230,255,0.7)':'rgba(200,160,80,0.5)';
   ctx.font='bold 10px monospace'; ctx.textAlign='center';
-  ctx.fillText(isCave?'DEEP RUNES':'TOMB SEAL', tabX, tabY-5);
+  ctx.fillText(isMuseum?'EXHIBIT KEY':isBasement?'EVIDENCE BOARD':isCellar?'WITCH GRIMOIRE':isSubway?'ROUTE MAP':isJungleTemple?'ANCIENT RITE':isRadar?'ACCESS CODE':isObservatory?'STAR CHART':isCave?'DEEP RUNES':'TOMB SEAL', tabX, tabY-5);
   // Target sequence glyphs — green if already stepped, yellow if current, faded if future
   const plateDefs=pz.plates;
   ctx.font='bold 24px serif';
@@ -5228,10 +6625,436 @@ function drawPyramidInterior(){
     ctx.fillRect(tabX-90, tabY-18, 180, 56);
   }
 
-  // Sarcophagus body / Ancient chest
+  // Sarcophagus body / Ancient chest / Grand telescope
   const isOpen=pz.solved;
   const openT=Math.min(1, pz.revealT/60);
-  if(isCave){
+  if(isMuseum){
+    // Glass display case with ancient artifact
+    const cX = sarcX+90, cY = sarcY-4;
+    // Velvet pedestal
+    ctx.fillStyle='#5a1a2a';
+    ctx.fillRect(sarcX+20, sarcY+20, 140, 32);
+    ctx.fillStyle='#4a1020';
+    ctx.fillRect(sarcX+16, sarcY+48, 148, 6);
+    // Gold trim
+    ctx.fillStyle='#c9a84a';
+    ctx.fillRect(sarcX+20, sarcY+18, 140, 3);
+    ctx.fillRect(sarcX+20, sarcY+50, 140, 2);
+    // Brass frame for glass case
+    ctx.fillStyle='#8a6a2a';
+    ctx.fillRect(sarcX+30, sarcY-36, 120, 4);
+    ctx.fillRect(sarcX+30, sarcY+16, 120, 4);
+    ctx.fillRect(sarcX+30, sarcY-36, 4, 56);
+    ctx.fillRect(sarcX+146, sarcY-36, 4, 56);
+    // Glass (semi-transparent; cracks if open)
+    ctx.fillStyle='rgba(200,220,240,0.15)';
+    ctx.fillRect(sarcX+34, sarcY-32, 116, 48);
+    ctx.strokeStyle='rgba(220,240,255,0.4)'; ctx.lineWidth=1;
+    ctx.strokeRect(sarcX+34, sarcY-32, 116, 48);
+    // Artifact — alien crystal skull
+    const bob = Math.sin(t*1.2)*2*openT;
+    if(isOpen){
+      const aura=ctx.createRadialGradient(cX, sarcY-6+bob, 2, cX, sarcY-6+bob, 50);
+      aura.addColorStop(0, `rgba(120,220,255,${0.5*openT})`);
+      aura.addColorStop(1, 'transparent');
+      ctx.fillStyle=aura;
+      ctx.beginPath(); ctx.arc(cX, sarcY-6+bob, 50, 0, Math.PI*2); ctx.fill();
+    }
+    // Skull dome
+    ctx.fillStyle=isOpen?'rgba(180,230,255,0.85)':'rgba(200,220,235,0.6)';
+    ctx.beginPath(); ctx.ellipse(cX, sarcY-10+bob, 16, 13, 0, Math.PI, 0); ctx.fill();
+    // Skull jaw
+    ctx.fillStyle=isOpen?'rgba(160,220,250,0.85)':'rgba(190,210,225,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(cX-12, sarcY-10+bob);
+    ctx.lineTo(cX-10, sarcY+6+bob);
+    ctx.lineTo(cX+10, sarcY+6+bob);
+    ctx.lineTo(cX+12, sarcY-10+bob);
+    ctx.closePath(); ctx.fill();
+    // Eye sockets (glow when unlocked)
+    ctx.fillStyle = isOpen ? `rgba(120,220,255,${0.8+Math.sin(t*3)*0.2})` : '#1a1014';
+    ctx.beginPath(); ctx.arc(cX-5, sarcY-12+bob, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cX+5, sarcY-12+bob, 3, 0, Math.PI*2); ctx.fill();
+    // Nose
+    ctx.fillStyle='rgba(40,60,80,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(cX, sarcY-8+bob); ctx.lineTo(cX-2, sarcY-4+bob); ctx.lineTo(cX+2, sarcY-4+bob);
+    ctx.closePath(); ctx.fill();
+    // Teeth
+    ctx.fillStyle='rgba(220,240,255,0.7)';
+    for(let _th=0;_th<5;_th++) ctx.fillRect(cX-8+_th*4, sarcY-2+bob, 2, 3);
+    // Glass cracks when open
+    if(isOpen){
+      ctx.strokeStyle='rgba(240,250,255,0.6)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(sarcX+60, sarcY-20); ctx.lineTo(sarcX+80, sarcY-4); ctx.lineTo(sarcX+74, sarcY+10);
+      ctx.moveTo(sarcX+80, sarcY-4); ctx.lineTo(sarcX+100, sarcY-18);
+      ctx.stroke();
+    }
+    // Plaque
+    ctx.fillStyle='#8a6a2a';
+    ctx.fillRect(sarcX+60, sarcY+56, 60, 10);
+    ctx.fillStyle='rgba(20,10,4,0.8)';
+    ctx.font='bold 6px serif'; ctx.textAlign='center';
+    ctx.fillText('UNKNOWN ORIGIN', sarcX+90, sarcY+63);
+  } else if(isBasement){
+    // Corkboard with red strings + classified file cabinet
+    const bX = sarcX+90, bY = sarcY-30;
+    // Corkboard frame
+    ctx.fillStyle='#4a3a24';
+    ctx.fillRect(sarcX+14, sarcY-40, 152, 70);
+    ctx.fillStyle='#b8956a';
+    ctx.fillRect(sarcX+20, sarcY-34, 140, 58);
+    // Grid of evidence photos
+    const photos=[];
+    for(let _ei=0;_ei<8;_ei++){
+      const ex = sarcX+28 + (_ei%4)*32;
+      const ey = sarcY-26 + ((_ei/4)|0)*28;
+      photos.push([ex+12, ey+12]);
+      ctx.fillStyle='#e8e0c8';
+      ctx.fillRect(ex, ey, 24, 22);
+      ctx.fillStyle='rgba(40,50,70,0.7)';
+      ctx.fillRect(ex+2, ey+2, 20, 16);
+      // Subject silhouette
+      if(_ei%3===0){
+        ctx.fillStyle='rgba(180,240,220,0.7)';
+        ctx.beginPath(); ctx.ellipse(ex+12, ey+10, 8, 3, 0, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle='rgba(180,200,220,0.6)';
+        ctx.fillRect(ex+9, ey+5, 6, 10);
+      }
+      ctx.fillStyle='#ff3030';
+      ctx.beginPath(); ctx.arc(ex+12, ey+3, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+    // Red strings tying photos together
+    ctx.strokeStyle=isOpen?`rgba(255,40,40,${0.9})`:'rgba(220,60,60,0.7)'; ctx.lineWidth=1;
+    for(let _si=0;_si<photos.length;_si++){
+      const a=photos[_si], b=photos[(_si+3)%photos.length];
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+    }
+    // Central blurry photo highlighted
+    if(isOpen){
+      const aura=ctx.createRadialGradient(bX, bY, 2, bX, bY, 60);
+      aura.addColorStop(0, `rgba(255,80,80,${0.45*openT})`);
+      aura.addColorStop(1, 'transparent');
+      ctx.fillStyle=aura;
+      ctx.beginPath(); ctx.arc(bX, bY, 60, 0, Math.PI*2); ctx.fill();
+    }
+    // File cabinet below
+    ctx.fillStyle='#3a4048';
+    ctx.fillRect(sarcX+40, sarcY+30, 100, 24);
+    ctx.fillStyle='#2a2e36';
+    ctx.fillRect(sarcX+40, sarcY+42, 100, 2);
+    // Drawer handles
+    ctx.fillStyle='#6a7078';
+    ctx.fillRect(sarcX+82, sarcY+35, 16, 3);
+    ctx.fillRect(sarcX+82, sarcY+47, 16, 3);
+    // CLASSIFIED label
+    ctx.fillStyle='#c02020';
+    ctx.fillRect(sarcX+48, sarcY+56, 84, 10);
+    ctx.fillStyle='#fff';
+    ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText('CLASSIFIED', sarcX+90, sarcY+64);
+  } else if(isCellar){
+    // Witch's bubbling cauldron on stone hearth
+    const kX = sarcX+90, kY = sarcY+10;
+    // Stone hearth
+    ctx.fillStyle='#3a2a1a';
+    ctx.fillRect(sarcX+20, sarcY+40, 140, 14);
+    ctx.fillStyle='#2a1a0a';
+    for(let _sb=0;_sb<5;_sb++){
+      ctx.strokeStyle='rgba(20,14,8,0.7)'; ctx.lineWidth=1;
+      ctx.strokeRect(sarcX+20+_sb*28, sarcY+40, 28, 14);
+    }
+    // Firewood logs
+    ctx.fillStyle='#2a1408';
+    ctx.fillRect(sarcX+50, sarcY+28, 80, 8);
+    // Fire under cauldron
+    const _fflick=0.7+Math.sin(t*12)*0.25;
+    ctx.fillStyle=`rgba(255,120,40,${_fflick})`;
+    for(let _fi=0;_fi<6;_fi++){
+      const _fx=sarcX+60+_fi*14;
+      ctx.beginPath(); ctx.ellipse(_fx, sarcY+28, 5, 8*_fflick, 0, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle=`rgba(255,220,100,${_fflick*0.8})`;
+    for(let _fi=0;_fi<6;_fi++){
+      const _fx=sarcX+60+_fi*14;
+      ctx.beginPath(); ctx.ellipse(_fx, sarcY+30, 3, 4*_fflick, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // Cauldron
+    ctx.fillStyle='#1a1a1a';
+    ctx.beginPath();
+    ctx.moveTo(sarcX+50, sarcY+8);
+    ctx.lineTo(sarcX+130, sarcY+8);
+    ctx.quadraticCurveTo(sarcX+150, sarcY+24, sarcX+140, sarcY+36);
+    ctx.lineTo(sarcX+40, sarcY+36);
+    ctx.quadraticCurveTo(sarcX+30, sarcY+24, sarcX+50, sarcY+8);
+    ctx.closePath(); ctx.fill();
+    // Rim
+    ctx.fillStyle='#2a2a2a';
+    ctx.fillRect(sarcX+50, sarcY+4, 80, 6);
+    ctx.strokeStyle='#0a0a0a'; ctx.lineWidth=1;
+    ctx.strokeRect(sarcX+50, sarcY+4, 80, 6);
+    // Brew (green, pulsing)
+    const _bpulse=isOpen?1:0.55;
+    const _btop = sarcY+8;
+    ctx.fillStyle=`rgba(120,${isOpen?'255':'200'},140,${0.85*_bpulse})`;
+    ctx.fillRect(sarcX+52, _btop, 76, 6);
+    // Bubbles
+    for(let _bi=0;_bi<5;_bi++){
+      const _bx=sarcX+58+((_bi*17+(t*30|0))%72);
+      const _by=_btop-2-Math.abs(Math.sin(t*2+_bi))*3;
+      ctx.fillStyle=`rgba(180,255,180,${0.7*_bpulse})`;
+      ctx.beginPath(); ctx.arc(_bx, _by, 2, 0, Math.PI*2); ctx.fill();
+    }
+    // Green glow when open
+    if(isOpen){
+      const aura=ctx.createRadialGradient(kX, _btop-2, 2, kX, _btop-2, 80);
+      aura.addColorStop(0, `rgba(120,255,150,${0.5*openT})`);
+      aura.addColorStop(1, 'transparent');
+      ctx.fillStyle=aura;
+      ctx.beginPath(); ctx.arc(kX, _btop-2, 80, 0, Math.PI*2); ctx.fill();
+      // Floating spirit orbs
+      for(let _oi=0;_oi<3;_oi++){
+        const _oy=_btop-20-Math.sin(t*1.5+_oi*2)*8;
+        const _ox=kX-16+_oi*16;
+        ctx.fillStyle='rgba(180,255,200,0.7)';
+        ctx.beginPath(); ctx.arc(_ox, _oy, 2.5, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    // Hanging pot hook/arm
+    ctx.strokeStyle='#3a2818'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(sarcX+20, sarcY-10); ctx.lineTo(sarcX+20, sarcY+6); ctx.lineTo(sarcX+50, sarcY+6); ctx.stroke();
+    // Spellbook on side
+    ctx.fillStyle='#3a1010';
+    ctx.fillRect(sarcX+150, sarcY+20, 24, 18);
+    ctx.fillStyle='#c9a84a';
+    ctx.fillRect(sarcX+152, sarcY+22, 20, 14);
+    ctx.fillStyle='rgba(20,10,4,0.8)';
+    ctx.font='bold 5px serif'; ctx.textAlign='center';
+    ctx.fillText('GRIMOIRE', sarcX+162, sarcY+30);
+  } else if(isSubway){
+    // Abandoned subway car at the far end of platform
+    const carX = sarcX-20, carY = sarcY-24;
+    const carW = 220, carH = 74;
+    // Body
+    ctx.fillStyle='#a82a2a';
+    ctx.fillRect(carX, carY, carW, carH);
+    // Lower skirt
+    ctx.fillStyle='#4a1010';
+    ctx.fillRect(carX, carY+carH-10, carW, 10);
+    // White upper stripe
+    ctx.fillStyle='#e8d8d0';
+    ctx.fillRect(carX, carY+16, carW, 26);
+    // Windows (dark, one broken/cracked)
+    for(let wi=0; wi<4; wi++){
+      const wxp = carX+18+wi*52;
+      ctx.fillStyle='#0a0a0c';
+      ctx.fillRect(wxp, carY+20, 40, 18);
+      ctx.strokeStyle='rgba(80,80,90,0.7)'; ctx.lineWidth=1;
+      ctx.strokeRect(wxp, carY+20, 40, 18);
+      if(wi===2){
+        // Cracked glass
+        ctx.strokeStyle='rgba(220,220,230,0.6)';
+        ctx.beginPath();
+        ctx.moveTo(wxp+4, carY+22); ctx.lineTo(wxp+22, carY+30); ctx.lineTo(wxp+16, carY+36); ctx.moveTo(wxp+22, carY+30); ctx.lineTo(wxp+38, carY+26);
+        ctx.stroke();
+      }
+    }
+    // Door (center, opens with solve)
+    const doorGap = openT*10;
+    ctx.fillStyle='#2a0a0a';
+    ctx.fillRect(carX+carW/2-18, carY+16, 18-doorGap, 44);
+    ctx.fillRect(carX+carW/2+doorGap, carY+16, 18-doorGap, 44);
+    // Interior when door open
+    if(openT>0.1){
+      ctx.fillStyle='rgba(255,220,120,0.3)';
+      ctx.fillRect(carX+carW/2-18+doorGap, carY+20, 36-2*doorGap, 40);
+    }
+    // Route number on front
+    ctx.fillStyle='#ffd020';
+    ctx.beginPath(); ctx.arc(carX+carW-16, carY+10, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1a1a1a';
+    ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('7', carX+carW-16, carY+14);
+    // Coupler stub
+    ctx.fillStyle='#3a3a42';
+    ctx.fillRect(carX+carW, carY+carH-14, 14, 6);
+    // Rails underneath
+    ctx.strokeStyle='#6a5a3a'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(carX-20, carY+carH+8); ctx.lineTo(carX+carW+40, carY+carH+8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(carX-20, carY+carH+14); ctx.lineTo(carX+carW+40, carY+carH+14); ctx.stroke();
+    // Ties
+    ctx.strokeStyle='#3a2614'; ctx.lineWidth=3;
+    for(let tx2=carX-20; tx2<carX+carW+40; tx2+=16){
+      ctx.beginPath(); ctx.moveTo(tx2, carY+carH+6); ctx.lineTo(tx2, carY+carH+16); ctx.stroke();
+    }
+    // Plaque
+    ctx.fillStyle='rgba(220,220,230,0.6)';
+    ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText('CAR 77', carX+carW/2, carY-4);
+  } else if(isJungleTemple){
+    // Massive golden idol altar
+    const idX = sarcX+90, idY = sarcY+4;
+    // Stone altar base
+    ctx.fillStyle='#5a6a4a';
+    ctx.fillRect(sarcX, sarcY+12, 180, 40);
+    ctx.fillStyle='#4a5a3a';
+    ctx.fillRect(sarcX-4, sarcY+46, 188, 6);
+    ctx.strokeStyle='rgba(20,30,10,0.6)'; ctx.lineWidth=1;
+    ctx.strokeRect(sarcX, sarcY+12, 180, 40);
+    // Carved runes on altar
+    ctx.fillStyle='rgba(200,170,80,0.5)';
+    ctx.font='bold 10px serif'; ctx.textAlign='center';
+    ctx.fillText('\u2600 \u25C8 \u263C \u25C8 \u2600', idX, sarcY+40);
+    // Idol head (golden jaguar/sun)
+    const bob = Math.sin(t*1.5)*2*openT;
+    ctx.save();
+    ctx.translate(idX, idY-14+bob);
+    // Head glow when open
+    if(isOpen){
+      const hg=ctx.createRadialGradient(0, 0, 2, 0, 0, 70);
+      hg.addColorStop(0, `rgba(255,220,120,${0.55*openT})`);
+      hg.addColorStop(1, 'transparent');
+      ctx.fillStyle=hg;
+      ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI*2); ctx.fill();
+    }
+    // Face
+    ctx.fillStyle='#d8b050';
+    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill();
+    // Ear triangles
+    ctx.beginPath(); ctx.moveTo(-10, -14); ctx.lineTo(-6, -22); ctx.lineTo(-2, -14); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(10, -14); ctx.lineTo(6, -22); ctx.lineTo(2, -14); ctx.closePath(); ctx.fill();
+    // Eyes (glow when open)
+    ctx.fillStyle = isOpen ? `rgba(120,255,160,${0.8+Math.sin(t*3)*0.2})` : '#3a2a0a';
+    ctx.fillRect(-6, -4, 4, 3);
+    ctx.fillRect(2, -4, 4, 3);
+    // Nose + mouth
+    ctx.fillStyle='#5a3a10';
+    ctx.fillRect(-2, 2, 4, 2);
+    ctx.fillRect(-5, 7, 10, 1.5);
+    // Fangs
+    ctx.fillStyle='#f0e8d0';
+    ctx.fillRect(-3, 8, 1.5, 3);
+    ctx.fillRect(1.5, 8, 1.5, 3);
+    // Rays around head
+    ctx.strokeStyle='#c8a040'; ctx.lineWidth=1;
+    for(let _rr=0;_rr<10;_rr++){
+      const _ra=_rr*Math.PI/5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(_ra)*17, Math.sin(_ra)*17);
+      ctx.lineTo(Math.cos(_ra)*23, Math.sin(_ra)*23);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if(isRadar){
+    // Central radar console / mainframe
+    const consX = sarcX+90, consY = sarcY+24;
+    // Base cabinet
+    ctx.fillStyle='#1a2028';
+    ctx.fillRect(sarcX, sarcY, 180, 48);
+    // Top angled control panel
+    ctx.fillStyle='#2a3238';
+    ctx.beginPath();
+    ctx.moveTo(sarcX, sarcY);
+    ctx.lineTo(sarcX+180, sarcY);
+    ctx.lineTo(sarcX+170, sarcY-16);
+    ctx.lineTo(sarcX+10, sarcY-16);
+    ctx.closePath(); ctx.fill();
+    // Main PPI radar scope (circular)
+    const scopeR=18;
+    const scopeY=sarcY-8;
+    ctx.fillStyle='#0a1418';
+    ctx.beginPath(); ctx.arc(consX, scopeY, scopeR, 0, Math.PI*2); ctx.fill();
+    // Concentric rings
+    ctx.strokeStyle='rgba(80,220,140,0.35)'; ctx.lineWidth=1;
+    for(let rr=4; rr<=scopeR; rr+=5){
+      ctx.beginPath(); ctx.arc(consX, scopeY, rr, 0, Math.PI*2); ctx.stroke();
+    }
+    // Crosshairs
+    ctx.beginPath(); ctx.moveTo(consX-scopeR, scopeY); ctx.lineTo(consX+scopeR, scopeY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(consX, scopeY-scopeR); ctx.lineTo(consX, scopeY+scopeR); ctx.stroke();
+    // Sweep beam
+    const swAng = t*2;
+    const swG = ctx.createRadialGradient(consX, scopeY, 1, consX, scopeY, scopeR);
+    swG.addColorStop(0, 'rgba(120,255,160,0.8)');
+    swG.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.beginPath(); ctx.arc(consX, scopeY, scopeR, 0, Math.PI*2); ctx.clip();
+    ctx.fillStyle=swG;
+    ctx.beginPath();
+    ctx.moveTo(consX, scopeY);
+    ctx.arc(consX, scopeY, scopeR, swAng-0.6, swAng);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Ring
+    ctx.strokeStyle='#5a6a76'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(consX, scopeY, scopeR, 0, Math.PI*2); ctx.stroke();
+    // Side panels with LEDs
+    for(let li=0; li<2; li++){
+      const pxP = sarcX+20 + li*130;
+      ctx.fillStyle='#0a0e12';
+      ctx.fillRect(pxP, sarcY-12, 30, 10);
+      // LED row
+      for(let kk=0; kk<4; kk++){
+        const on = (Math.sin(t*3+kk+li*2) > -0.3);
+        ctx.fillStyle = on ? (kk===2?'rgba(255,80,80,0.9)':kk===0?'rgba(80,255,120,0.9)':'rgba(255,200,80,0.9)') : 'rgba(40,40,50,0.9)';
+        ctx.fillRect(pxP+3+kk*6, sarcY-8, 3, 3);
+      }
+    }
+    // Keyboard slot
+    ctx.fillStyle='#2a3240';
+    ctx.fillRect(sarcX+30, sarcY+16, 120, 10);
+    // Keys
+    for(let kx=sarcX+34; kx<sarcX+148; kx+=10){
+      ctx.fillStyle='#4a525a';
+      ctx.fillRect(kx, sarcY+18, 8, 6);
+    }
+    // Ventilation grill (bottom)
+    ctx.strokeStyle='rgba(20,25,30,0.8)'; ctx.lineWidth=1;
+    for(let vy=sarcY+34; vy<sarcY+46; vy+=3){
+      ctx.beginPath(); ctx.moveTo(sarcX+8, vy); ctx.lineTo(sarcX+172, vy); ctx.stroke();
+    }
+    // Plaque
+    ctx.fillStyle='rgba(200,220,230,0.55)';
+    ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText('MAINFRAME-7', consX, sarcY+6);
+  } else if(isObservatory){
+    // Brass equatorial mount telescope on tripod
+    const mountX = sarcX+90, mountY = sarcY+24;
+    // Tripod legs
+    ctx.strokeStyle='#5a4020'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(mountX-30, floorTop-2); ctx.lineTo(mountX, mountY+8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mountX+30, floorTop-2); ctx.lineTo(mountX, mountY+8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mountX, floorTop-2); ctx.lineTo(mountX, mountY+8); ctx.stroke();
+    // Mount hub
+    ctx.fillStyle='#a68040';
+    ctx.beginPath(); ctx.arc(mountX, mountY+4, 10, 0, Math.PI*2); ctx.fill();
+    // Telescope barrel (tilts up when unlocked)
+    const tAng = -0.25 - openT*0.4;
+    ctx.save();
+    ctx.translate(mountX, mountY);
+    ctx.rotate(tAng);
+    ctx.fillStyle='#8a6a30';
+    ctx.fillRect(-8, -60, 16, 70);
+    ctx.fillStyle='#c8a050';
+    ctx.fillRect(-8, -60, 16, 6);
+    ctx.fillRect(-8, 4, 16, 6);
+    // Eyepiece
+    ctx.fillStyle='#5a4020';
+    ctx.fillRect(-4, 10, 8, 10);
+    // Lens glint
+    ctx.fillStyle='rgba(200,220,255,0.8)';
+    ctx.beginPath(); ctx.ellipse(0,-58,6,2,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Base plate / plaque
+    ctx.fillStyle='#3a2a1a';
+    ctx.fillRect(sarcX, floorTop-6, 180, 6);
+    ctx.fillStyle='rgba(200,170,100,0.5)';
+    ctx.font='bold 9px monospace'; ctx.textAlign='center';
+    ctx.fillText('THE GRAND LENS', mountX, floorTop-10);
+  } else if(isCave){
     // Barnacle-encrusted ancient chest
     ctx.fillStyle='#4a3a28';
     ctx.fillRect(sarcX, sarcY, 180, 48);
@@ -5275,43 +7098,492 @@ function drawPyramidInterior(){
 
   // Open tomb reveal — golden glow + treasure inside
   if(isOpen){
-    const inX=sarcX+120-openT*10, inY=sarcY-4;
-    // Gold glow bursting out
-    const sg=ctx.createRadialGradient(sarcX+90, sarcY-20, 2, sarcX+90, sarcY-20, 140);
-    sg.addColorStop(0,`rgba(255,230,140,${0.6*openT})`);
-    sg.addColorStop(0.5,`rgba(255,180,60,${0.25*openT})`);
-    sg.addColorStop(1,'transparent');
-    ctx.fillStyle=sg;
-    ctx.beginPath(); ctx.arc(sarcX+90, sarcY-20, 140, 0, Math.PI*2); ctx.fill();
-    // Treasure pile inside
-    ctx.fillStyle='#ffd060';
-    ctx.fillRect(sarcX+12, sarcY+4, 60, 6);
-    ctx.fillRect(sarcX+20, sarcY-2, 40, 6);
-    ctx.fillStyle='#fff2a0';
-    for(let ti=0;ti<8;ti++){
-      const tx=sarcX+14+ti*8, ty=sarcY+6-((ti*37)%5);
-      ctx.beginPath(); ctx.arc(tx, ty, 3, 0, Math.PI*2); ctx.fill();
-    }
-    // Sparkles
-    for(let si=0;si<12;si++){
-      const phase=(t*2+si*0.7)%1;
-      const sx2=sarcX+20+((si*27)%140);
-      const sy2=sarcY-10-phase*30;
-      ctx.fillStyle=`rgba(255,240,180,${1-phase})`;
-      ctx.fillRect(sx2, sy2, 2, 2);
-    }
-    // Interact prompt
-    if(!pz.rewardGiven && Math.abs(a.x-(sarcX+90))<120){
-      ctx.fillStyle='#ffd880';
-      ctx.font='bold 12px monospace'; ctx.textAlign='center';
-      ctx.fillText('[E] claim treasure', sarcX+90, sarcY-46);
+    if(isMuseum){
+      // Crystal skull awakens — cold blue radiance + floating artifacts
+      const hX=sarcX+90, hY=sarcY-14;
+      const sg=ctx.createRadialGradient(hX, hY, 2, hX, hY, 140);
+      sg.addColorStop(0,`rgba(160,230,255,${0.55*openT})`);
+      sg.addColorStop(0.5,`rgba(200,220,255,${0.2*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(hX, hY, 140, 0, Math.PI*2); ctx.fill();
+      // Floating gold coins + artifact fragments
+      for(let _fi=0;_fi<8;_fi++){
+        const _phase=(t*1.1+_fi*0.5)%1;
+        const _fx=hX-50+((_fi*31)%100);
+        const _fy=hY+10-_phase*30;
+        ctx.fillStyle=`rgba(255,220,120,${(1-_phase)*0.9})`;
+        ctx.beginPath(); ctx.ellipse(_fx, _fy, 3, 2, t+_fi, 0, Math.PI*2); ctx.fill();
+      }
+      // Light rays from skull eyes
+      ctx.strokeStyle=`rgba(140,220,255,${0.5*openT})`; ctx.lineWidth=2;
+      for(let _ri=0;_ri<4;_ri++){
+        const _ra=_ri*0.5-0.75;
+        ctx.beginPath();
+        ctx.moveTo(hX, hY);
+        ctx.lineTo(hX+Math.cos(_ra)*120, hY+Math.sin(_ra)*120);
+        ctx.stroke();
+      }
+      if(!pz.rewardGiven && Math.abs(a.x-hX)<120){
+        ctx.fillStyle='#c0e8ff';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] steal the artifact', hX, hY-46);
+      }
+    } else if(isBasement){
+      // Red string pattern resolves — a map/location glows
+      const hX=sarcX+90, hY=sarcY-20;
+      const sg=ctx.createRadialGradient(hX, hY, 2, hX, hY, 120);
+      sg.addColorStop(0,`rgba(255,80,80,${0.45*openT})`);
+      sg.addColorStop(0.5,`rgba(240,120,60,${0.2*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(hX, hY, 120, 0, Math.PI*2); ctx.fill();
+      // Glowing map pinned at center
+      ctx.fillStyle=`rgba(240,230,200,${0.9*openT})`;
+      ctx.fillRect(hX-30, hY-14, 60, 28);
+      ctx.strokeStyle='rgba(20,10,4,0.7)'; ctx.lineWidth=1;
+      ctx.strokeRect(hX-30, hY-14, 60, 28);
+      // Map lines
+      ctx.strokeStyle='rgba(80,60,40,0.6)';
+      ctx.beginPath(); ctx.moveTo(hX-24, hY-6); ctx.lineTo(hX+24, hY-8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hX-20, hY+2); ctx.lineTo(hX+22, hY+6); ctx.stroke();
+      // Red X marks the spot
+      ctx.strokeStyle='#ff3030'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(hX-4, hY-2); ctx.lineTo(hX+4, hY+6); ctx.moveTo(hX+4, hY-2); ctx.lineTo(hX-4, hY+6); ctx.stroke();
+      // USB/thumbdrive spinning
+      const _ur=t*1.2;
+      ctx.save();
+      ctx.translate(hX, hY+26); ctx.rotate(_ur);
+      ctx.fillStyle='#2a2a30'; ctx.fillRect(-8, -3, 16, 6);
+      ctx.fillStyle='#8a8a92'; ctx.fillRect(-12, -2, 4, 4);
+      ctx.restore();
+      if(!pz.rewardGiven && Math.abs(a.x-hX)<120){
+        ctx.fillStyle='#ff8080';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] take the dossier', hX, hY-40);
+      }
+    } else if(isCellar){
+      // Brew awakens — green spirit burst + potion vials
+      const hX=sarcX+90, hY=sarcY+2;
+      const sg=ctx.createRadialGradient(hX, hY, 2, hX, hY, 140);
+      sg.addColorStop(0,`rgba(120,255,140,${0.5*openT})`);
+      sg.addColorStop(0.5,`rgba(80,200,100,${0.22*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(hX, hY, 140, 0, Math.PI*2); ctx.fill();
+      // Floating potion vials
+      for(let _vi=0;_vi<5;_vi++){
+        const _phase=(t*0.9+_vi*0.4)%1;
+        const _vx=hX-40+_vi*20;
+        const _vy=hY-20-Math.sin(t*1.5+_vi)*6;
+        const _vc=[[120,255,140],[220,120,220],[120,180,255],[255,200,80],[255,120,120]][_vi];
+        ctx.fillStyle=`rgba(${_vc[0]},${_vc[1]},${_vc[2]},0.8)`;
+        ctx.fillRect(_vx-3, _vy-6, 6, 10);
+        ctx.fillStyle='rgba(60,50,40,0.8)';
+        ctx.fillRect(_vx-2, _vy-8, 4, 3);
+        // Trail sparks
+        ctx.fillStyle=`rgba(${_vc[0]},${_vc[1]},${_vc[2]},${(1-_phase)*0.6})`;
+        ctx.fillRect(_vx-1, _vy+4+_phase*10, 2, 2);
+      }
+      // Rising spirit wisps
+      for(let _si=0;_si<10;_si++){
+        const _phase=(t*1.4+_si*0.3)%1;
+        const _sx=hX-40+((_si*19)%80);
+        const _sy=hY-18-_phase*40;
+        ctx.fillStyle=`rgba(160,255,180,${(1-_phase)*0.7})`;
+        ctx.beginPath(); ctx.arc(_sx, _sy, 2, 0, Math.PI*2); ctx.fill();
+      }
+      if(!pz.rewardGiven && Math.abs(a.x-hX)<120){
+        ctx.fillStyle='#b0ffb0';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] bottle the brew', hX, hY-40);
+      }
+    } else if(isSubway){
+      // Stack of cash/tokens spills from open car
+      const hX=sarcX+90, hY=sarcY-10;
+      const sg=ctx.createRadialGradient(hX, hY, 2, hX, hY, 100);
+      sg.addColorStop(0,`rgba(255,220,120,${0.45*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(hX, hY, 100, 0, Math.PI*2); ctx.fill();
+      // Pile of tokens
+      ctx.fillStyle='#c8a040';
+      for(let pi2=0; pi2<14; pi2++){
+        const _ppx=hX-30+((pi2*9)%60);
+        const _ppy=hY+18-((pi2*3)%6);
+        ctx.beginPath(); ctx.arc(_ppx, _ppy, 3, 0, Math.PI*2); ctx.fill();
+      }
+      // Duffel bag of cash
+      ctx.fillStyle='#3a3a28';
+      ctx.fillRect(hX-18, hY+8, 36, 14);
+      ctx.fillStyle='#1a1a10';
+      ctx.fillRect(hX-2, hY+4, 4, 4); // bag handle hole
+      // Cash bundles peeking out
+      ctx.fillStyle='#5a7a4a';
+      ctx.fillRect(hX-14, hY+4, 8, 6);
+      ctx.fillRect(hX+6, hY+4, 8, 6);
+      ctx.fillStyle='#8aa070';
+      ctx.fillRect(hX-14, hY+5, 8, 1);
+      ctx.fillRect(hX+6, hY+5, 8, 1);
+      if(!pz.rewardGiven && Math.abs(a.x-hX)<120){
+        ctx.fillStyle='#ffd880';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] grab the stash', hX, hY-32);
+      }
+    } else if(isJungleTemple){
+      // Golden burst + sacred offerings
+      const iX=sarcX+90, iY=sarcY-10;
+      const sg=ctx.createRadialGradient(iX, iY, 2, iX, iY, 150);
+      sg.addColorStop(0,`rgba(120,255,160,${0.4*openT})`);
+      sg.addColorStop(0.4,`rgba(200,170,80,${0.3*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(iX, iY, 150, 0, Math.PI*2); ctx.fill();
+      // Gold offerings
+      ctx.fillStyle='#d8a040';
+      ctx.fillRect(iX-40, iY+14, 28, 6);
+      ctx.fillRect(iX+12, iY+14, 28, 6);
+      ctx.fillStyle='#f0c860';
+      for(let gi=0;gi<10;gi++){
+        const _gx=iX-38+gi*8, _gy=iY+16-((gi*13)%4);
+        ctx.beginPath(); ctx.arc(_gx, _gy, 3, 0, Math.PI*2); ctx.fill();
+      }
+      // Rising green spirits (floating orbs)
+      for(let si=0;si<8;si++){
+        const phase=(t*1.4+si*0.6)%1;
+        const sx2=iX-40+((si*23)%80);
+        const sy2=iY-10-phase*40;
+        ctx.fillStyle=`rgba(140,255,160,${(1-phase)*0.8})`;
+        ctx.beginPath(); ctx.arc(sx2, sy2, 2, 0, Math.PI*2); ctx.fill();
+      }
+      if(!pz.rewardGiven && Math.abs(a.x-iX)<120){
+        ctx.fillStyle='#d4ffa0';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] take the sacred gold', iX, iY-40);
+      }
+    } else if(isRadar){
+      // Classified intel pops up — hologram-style green projection
+      const hX=sarcX+90, hY=sarcY-42;
+      const sg=ctx.createRadialGradient(hX, hY, 2, hX, hY, 130);
+      sg.addColorStop(0,`rgba(120,255,160,${0.5*openT})`);
+      sg.addColorStop(0.5,`rgba(60,200,120,${0.2*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(hX, hY, 130, 0, Math.PI*2); ctx.fill();
+      // Holo panel
+      ctx.fillStyle=`rgba(40,200,120,${0.18*openT})`;
+      ctx.fillRect(hX-60, hY-24, 120, 48);
+      ctx.strokeStyle=`rgba(120,255,180,${0.75*openT})`; ctx.lineWidth=1;
+      ctx.strokeRect(hX-60, hY-24, 120, 48);
+      // Scanlines on holo
+      for(let sl=hY-22; sl<hY+22; sl+=3){
+        ctx.strokeStyle=`rgba(120,255,180,${0.12*openT})`;
+        ctx.beginPath(); ctx.moveTo(hX-58, sl); ctx.lineTo(hX+58, sl); ctx.stroke();
+      }
+      // Text lines
+      ctx.fillStyle=`rgba(160,255,200,${0.95*openT})`;
+      ctx.font='bold 8px monospace'; ctx.textAlign='left';
+      ctx.fillText('CLASSIFIED INTEL', hX-50, hY-12);
+      ctx.font='7px monospace';
+      ctx.fillText('> SECTOR 7 BREACH', hX-50, hY-2);
+      ctx.fillText('> TGT: UNKNOWN CRAFT', hX-50, hY+8);
+      ctx.fillText('> LAT: 47.3N LON: 14.2W', hX-50, hY+18);
+      // Rising data blips
+      for(let si=0;si<10;si++){
+        const phase=(t*1.8+si*0.5)%1;
+        const sx2=hX-55+((si*21)%110);
+        const sy2=hY-28-phase*26;
+        ctx.fillStyle=`rgba(180,255,200,${1-phase})`;
+        ctx.fillRect(sx2, sy2, 2, 2);
+      }
+      if(!pz.rewardGiven && Math.abs(a.x-hX)<120){
+        ctx.fillStyle='#b0ffc8';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] download intel', hX, hY-44);
+      }
+    } else if(isObservatory){
+      // Celestial map unfurls above the telescope with a burst of starlight
+      const cmX=sarcX+90, cmY=sarcY-30;
+      const sg=ctx.createRadialGradient(cmX, cmY, 2, cmX, cmY, 160);
+      sg.addColorStop(0,`rgba(200,220,255,${0.55*openT})`);
+      sg.addColorStop(0.5,`rgba(120,150,220,${0.22*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(cmX, cmY, 160, 0, Math.PI*2); ctx.fill();
+      // Scroll / parchment
+      ctx.fillStyle=`rgba(220,200,150,${0.85*openT})`;
+      ctx.fillRect(cmX-50, cmY-18, 100, 34);
+      ctx.strokeStyle='rgba(80,50,10,0.6)'; ctx.lineWidth=1;
+      ctx.strokeRect(cmX-50, cmY-18, 100, 34);
+      // Constellation on scroll
+      const cpts=[[-32,-4],[-14,-10],[0,6],[18,-4],[28,8]];
+      ctx.fillStyle='rgba(60,40,10,0.8)';
+      for(let k=0;k<cpts.length;k++){
+        ctx.beginPath(); ctx.arc(cmX+cpts[k][0], cmY+cpts[k][1], 1.5, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.strokeStyle='rgba(60,40,10,0.5)';
+      ctx.beginPath(); ctx.moveTo(cmX+cpts[0][0], cmY+cpts[0][1]);
+      for(let k=1;k<cpts.length;k++) ctx.lineTo(cmX+cpts[k][0], cmY+cpts[k][1]);
+      ctx.stroke();
+      // Sparkling stars rising
+      for(let si=0;si<14;si++){
+        const phase=(t*1.5+si*0.6)%1;
+        const sx2=cmX-60+((si*27)%120);
+        const sy2=cmY-10-phase*40;
+        ctx.fillStyle=`rgba(220,230,255,${1-phase})`;
+        ctx.fillRect(sx2, sy2, 2, 2);
+      }
+      if(!pz.rewardGiven && Math.abs(a.x-cmX)<120){
+        ctx.fillStyle='#d8e4ff';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] take the star chart', cmX, cmY-40);
+      }
+    } else {
+      const inX=sarcX+120-openT*10, inY=sarcY-4;
+      // Gold glow bursting out
+      const sg=ctx.createRadialGradient(sarcX+90, sarcY-20, 2, sarcX+90, sarcY-20, 140);
+      sg.addColorStop(0,`rgba(255,230,140,${0.6*openT})`);
+      sg.addColorStop(0.5,`rgba(255,180,60,${0.25*openT})`);
+      sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg;
+      ctx.beginPath(); ctx.arc(sarcX+90, sarcY-20, 140, 0, Math.PI*2); ctx.fill();
+      // Treasure pile inside
+      ctx.fillStyle='#ffd060';
+      ctx.fillRect(sarcX+12, sarcY+4, 60, 6);
+      ctx.fillRect(sarcX+20, sarcY-2, 40, 6);
+      ctx.fillStyle='#fff2a0';
+      for(let ti=0;ti<8;ti++){
+        const tx=sarcX+14+ti*8, ty=sarcY+6-((ti*37)%5);
+        ctx.beginPath(); ctx.arc(tx, ty, 3, 0, Math.PI*2); ctx.fill();
+      }
+      // Sparkles
+      for(let si=0;si<12;si++){
+        const phase=(t*2+si*0.7)%1;
+        const sx2=sarcX+20+((si*27)%140);
+        const sy2=sarcY-10-phase*30;
+        ctx.fillStyle=`rgba(255,240,180,${1-phase})`;
+        ctx.fillRect(sx2, sy2, 2, 2);
+      }
+      // Interact prompt
+      if(!pz.rewardGiven && Math.abs(a.x-(sarcX+90))<120){
+        ctx.fillStyle='#ffd880';
+        ctx.font='bold 12px monospace'; ctx.textAlign='center';
+        ctx.fillText('[E] claim treasure', sarcX+90, sarcY-46);
+      }
     }
   }
 
   // Doorway back to outside
   const dX=60, dW=44, dH=80;
   const dY=floorTop-dH;
-  if(isCave){
+  if(isMuseum){
+    // Grand brass double doors back to museum lobby
+    ctx.fillStyle='#2a1a0a';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Warm lobby spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(255,220,160,0.45)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Brass door leaves
+    ctx.fillStyle='#8a6a2a';
+    ctx.fillRect(dX+2, dY+2, (dW-4)/2, dH-4);
+    ctx.fillRect(dX+dW/2, dY+2, (dW-4)/2, dH-4);
+    // Inset panels
+    ctx.strokeStyle='#c9a84a'; ctx.lineWidth=1;
+    ctx.strokeRect(dX+5, dY+8, (dW-4)/2-6, dH-16);
+    ctx.strokeRect(dX+dW/2+3, dY+8, (dW-4)/2-6, dH-16);
+    // Brass handles
+    ctx.fillStyle='#c9a84a';
+    ctx.beginPath(); ctx.arc(dX+dW/2-4, dY+dH/2, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(dX+dW/2+4, dY+dH/2, 2, 0, Math.PI*2); ctx.fill();
+    // Pediment above
+    ctx.fillStyle='#d8cfb8';
+    ctx.beginPath();
+    ctx.moveTo(dX-8, dY); ctx.lineTo(dX+dW+8, dY); ctx.lineTo(dX+dW/2, dY-14); ctx.closePath(); ctx.fill();
+  } else if(isBasement){
+    // Wooden cellar door / stairs up back into the conspiracy house
+    ctx.fillStyle='#05080a';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Dim spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+140,dY);
+    spill.addColorStop(0,'rgba(200,170,120,0.3)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 140, dH);
+    // Stairs going up
+    ctx.fillStyle='#3a2818';
+    for(let _ss=0; _ss<7; _ss++){
+      ctx.fillRect(dX, dY+_ss*(dH/7), dW, 4);
+    }
+    // Rickety handrail
+    ctx.fillStyle='#5a3a20';
+    ctx.fillRect(dX+dW-3, dY-3, 3, dH+3);
+    // Hanging wiring
+    ctx.strokeStyle='#1a1008'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(dX+4, dY-6); ctx.lineTo(dX+dW-4, dY-6); ctx.stroke();
+  } else if(isCellar){
+    // Slanted wooden hatch back up to the farmhouse yard
+    ctx.fillStyle='#05080a';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Pale green exterior spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(180,220,160,0.4)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Slanted stair up
+    ctx.fillStyle='#3a2410';
+    ctx.beginPath();
+    ctx.moveTo(dX, dY+dH);
+    ctx.lineTo(dX, dY+10);
+    ctx.lineTo(dX+dW, dY-10);
+    ctx.lineTo(dX+dW, dY+dH);
+    ctx.closePath(); ctx.fill();
+    // Plank edges
+    ctx.strokeStyle='#1a0e04'; ctx.lineWidth=1;
+    for(let _pe=0;_pe<4;_pe++){
+      ctx.beginPath();
+      const _py = dY+10 + _pe*((dH-10)/4) - _pe*5;
+      ctx.moveTo(dX, _py);
+      ctx.lineTo(dX+dW, _py-10);
+      ctx.stroke();
+    }
+    // Roots dangling around opening
+    ctx.strokeStyle='#3a2a14'; ctx.lineWidth=2;
+    for(let _rr=0;_rr<4;_rr++){
+      const _rx=dX+6+_rr*((dW-12)/3);
+      const _rs=Math.sin(t*0.5+_rr)*2;
+      ctx.beginPath();
+      ctx.moveTo(_rx, dY-2);
+      ctx.lineTo(_rx+_rs, dY+12+((_rr*5)%6));
+      ctx.stroke();
+    }
+  } else if(isSubway){
+    // Stairs leading back up to city daylight
+    ctx.fillStyle='#05080a';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Daylight spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(255,240,200,0.5)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Stair steps going up
+    ctx.fillStyle='#3a3a42';
+    for(let _ss=0; _ss<6; _ss++){
+      ctx.fillRect(dX, dY+_ss*(dH/6), dW, 4);
+    }
+    // Steel railings
+    ctx.fillStyle='#8a8a92';
+    ctx.fillRect(dX-3, dY-3, 3, dH+3);
+    ctx.fillRect(dX+dW, dY-3, 3, dH+3);
+    ctx.fillRect(dX-3, dY-3, dW+6, 4);
+    // EXIT sign
+    ctx.fillStyle='#c82020';
+    ctx.fillRect(dX-4, dY-14, dW+8, 10);
+    ctx.fillStyle='#fff';
+    ctx.font='bold 8px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('EXIT', dX+dW/2, dY-6);
+  } else if(isJungleTemple){
+    // Overgrown stone archway back to jungle
+    ctx.fillStyle='#050a05';
+    // Arched opening
+    ctx.beginPath();
+    ctx.moveTo(dX, dY+dH);
+    ctx.lineTo(dX, dY+10);
+    ctx.quadraticCurveTo(dX+dW/2, dY-6, dX+dW, dY+10);
+    ctx.lineTo(dX+dW, dY+dH);
+    ctx.closePath(); ctx.fill();
+    // Jungle light spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(150,220,120,0.45)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Stone frame
+    ctx.strokeStyle='#5a6a4a'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(dX, dY+dH);
+    ctx.lineTo(dX, dY+10);
+    ctx.quadraticCurveTo(dX+dW/2, dY-6, dX+dW, dY+10);
+    ctx.lineTo(dX+dW, dY+dH);
+    ctx.stroke();
+    // Hanging vines over opening
+    ctx.strokeStyle='#1a5a1a'; ctx.lineWidth=2;
+    for(let _vn=0; _vn<5; _vn++){
+      const _vx=dX+6+_vn*((dW-12)/4);
+      const _sw=Math.sin(t*0.8+_vn)*2;
+      ctx.beginPath();
+      ctx.moveTo(_vx, dY-2);
+      ctx.lineTo(_vx+_sw, dY+14+((_vn*7)%10));
+      ctx.stroke();
+    }
+  } else if(isRadar){
+    // Steel blast door to snowy exterior
+    ctx.fillStyle='#060a0e';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Cold blue spill with snow backdrop
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(200,220,240,0.4)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Blast door metal frame
+    ctx.fillStyle='#3a4a56';
+    ctx.fillRect(dX-5, dY-5, 5, dH+5);
+    ctx.fillRect(dX+dW, dY-5, 5, dH+5);
+    ctx.fillRect(dX-5, dY-5, dW+10, 6);
+    // Door panel with rivets
+    ctx.fillStyle='#2a3640';
+    ctx.fillRect(dX+2, dY+2, dW-4, dH-4);
+    ctx.fillStyle='rgba(120,140,160,0.7)';
+    for(let rvx=dX+6; rvx<dX+dW-4; rvx+=10){
+      for(let rvy=dY+8; rvy<dY+dH-6; rvy+=20){
+        ctx.beginPath(); ctx.arc(rvx, rvy, 1.2, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    // Hazard stripes across middle
+    ctx.fillStyle='#d4a020';
+    ctx.fillRect(dX+4, dY+dH/2-3, dW-8, 6);
+    ctx.fillStyle='#1a1e24';
+    for(let sx=dX+4; sx<dX+dW-4; sx+=6){
+      ctx.fillRect(sx, dY+dH/2-3, 3, 6);
+    }
+    // Snow drift spilling in
+    ctx.fillStyle='rgba(240,248,255,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(dX+dW, floorTop-4);
+    ctx.lineTo(dX+dW+60, floorTop);
+    ctx.lineTo(dX+dW, floorTop);
+    ctx.closePath(); ctx.fill();
+  } else if(isObservatory){
+    // Wooden plank door to mountain evening air
+    ctx.fillStyle='#050608';
+    ctx.fillRect(dX, dY, dW, dH);
+    // Moonlit / twilight spill
+    const spill=ctx.createLinearGradient(dX,dY,dX+160,dY);
+    spill.addColorStop(0,'rgba(150,180,230,0.35)');
+    spill.addColorStop(1,'transparent');
+    ctx.fillStyle=spill;
+    ctx.fillRect(dX+dW, dY, 160, dH);
+    // Door frame
+    ctx.fillStyle='#4a3420';
+    ctx.fillRect(dX-4, dY-4, 4, dH+4);
+    ctx.fillRect(dX+dW, dY-4, 4, dH+4);
+    ctx.fillRect(dX-4, dY-4, dW+8, 5);
+    // Door planks
+    ctx.fillStyle='#3a2614';
+    ctx.fillRect(dX+2, dY+2, dW-4, dH-4);
+    ctx.strokeStyle='rgba(20,10,4,0.7)'; ctx.lineWidth=1;
+    for(let py=dY+14; py<dY+dH; py+=16){
+      ctx.beginPath(); ctx.moveTo(dX+2,py); ctx.lineTo(dX+dW-2,py); ctx.stroke();
+    }
+    // Brass handle
+    ctx.fillStyle='#a68040';
+    ctx.beginPath(); ctx.arc(dX+dW-8, dY+dH/2, 2, 0, Math.PI*2); ctx.fill();
+  } else if(isCave){
     // Cave mouth leading back to water — irregular opening
     ctx.fillStyle='#02060a';
     ctx.beginPath();
@@ -5384,42 +7656,49 @@ function drawPyramidInterior(){
   ctx.fillStyle=vg; ctx.fillRect(0,0,cw,ch);
 
   // HUD
-  ctx.fillStyle=isCave?'#aef0ff':'#ffd880';
+  const hudTitleCol = isMuseum?'#ffdc90':isBasement?'#ff9090':isCellar?'#b0ffb0':isSubway?'#ffd080':isJungleTemple?'#d4ffa0':isRadar?'#b0ffc8':isObservatory?'#d8e4ff':isCave?'#aef0ff':'#ffd880';
+  const titleText = isMuseum?'MUSEUM VAULT':isBasement?'CONSPIRACY BASEMENT':isCellar?'HAUNTED ROOT CELLAR':isSubway?'ABANDONED SUBWAY':isJungleTemple?'JUNGLE TEMPLE':isRadar?'ARCTIC RADAR BASE':isObservatory?'MOUNTAIN OBSERVATORY':isCave?'DEEP CAVE':'TOMB INTERIOR';
+  ctx.fillStyle=hudTitleCol;
   ctx.font='bold 16px monospace'; ctx.textAlign='left';
-  ctx.fillText(isCave?'DEEP CAVE':'TOMB INTERIOR', 20, 28);
+  ctx.fillText(titleText, 20, 28);
   ctx.fillStyle='#aaa';
   ctx.font='12px monospace';
   ctx.fillText('A/D move  SPACE jump  ESC leave', 20, 46);
   // Puzzle hint line
   const pz2=pi.puzzle;
-  const hintCol=isCave?'rgba(160,230,255,0.9)':'rgba(255,220,140,0.85)';
+  const hintCol=isMuseum?'rgba(255,220,140,0.9)':isBasement?'rgba(255,140,100,0.9)':isCellar?'rgba(180,255,200,0.9)':isSubway?'rgba(255,210,130,0.9)':isJungleTemple?'rgba(200,255,180,0.9)':isRadar?'rgba(160,255,200,0.9)':isObservatory?'rgba(200,220,255,0.9)':isCave?'rgba(160,230,255,0.9)':'rgba(255,220,140,0.85)';
+  const hintTarget = isMuseum?'exhibit key plaque':isBasement?'evidence board':isCellar?'witch grimoire':isSubway?'route map':isJungleTemple?'ancient carving':isRadar?'access-code terminal':isObservatory?'star chart panel':isCave?'runes above the chest':'seal above the tomb';
   if(!pz2.solved){
     ctx.fillStyle=hintCol;
     ctx.font='12px monospace';
-    ctx.fillText(`Step on the glyphs in the order shown on the ${isCave?'runes above the chest':'seal above the tomb'}  [${pz2.progress}/${pz2.targetSeq.length}]`, 20, 64);
+    ctx.fillText(`Step on the glyphs in the order shown on the ${hintTarget}  [${pz2.progress}/${pz2.targetSeq.length}]`, 20, 64);
   } else if(!pz2.rewardGiven){
-    ctx.fillStyle=isCave?'rgba(160,240,255,0.95)':'rgba(255,230,140,0.95)';
+    ctx.fillStyle=hintCol;
     ctx.font='bold 13px monospace';
-    ctx.fillText(isCave?'CHEST UNLOCKED — approach the chest':'TOMB OPENED — approach the sarcophagus', 20, 64);
+    const solvedMsg = isMuseum?'GLASS CASE UNLOCKS — approach the display':isBasement?'THE PATTERN CLICKS — approach the evidence':isCellar?'THE BREW CHURNS — approach the cauldron':isSubway?'TRAIN DOORS OPEN — check the car':isJungleTemple?'THE IDOL AWAKENS — approach the altar':isRadar?'MAINFRAME ONLINE — approach the console':isObservatory?'THE GRAND LENS UNLOCKS — approach the telescope':isCave?'CHEST UNLOCKED — approach the chest':'TOMB OPENED — approach the sarcophagus';
+    ctx.fillText(solvedMsg, 20, 64);
   } else {
     ctx.fillStyle='rgba(140,220,160,0.8)';
     ctx.font='12px monospace';
-    ctx.fillText('Treasure claimed.', 20, 64);
+    const doneMsg = isMuseum?'Artifact secured.':isBasement?'Dossier pocketed.':isCellar?'Brew bottled.':isSubway?'Stash claimed.':isJungleTemple?'Sacred gold taken.':isRadar?'Intel downloaded.':isObservatory?'Star chart claimed.':'Treasure claimed.';
+    ctx.fillText(doneMsg, 20, 64);
   }
 
   // Celebration banner briefly after solving
   if(pz2.solveAnim>120){
     const a2=(pz2.solveAnim-120)/80;
-    ctx.fillStyle=isCave?`rgba(160,230,255,${a2*0.9})`:`rgba(255,220,120,${a2*0.9})`;
+    ctx.fillStyle=`rgba(${isMuseum?'255,220,140':isBasement?'255,120,80':isCellar?'140,255,160':isSubway?'255,210,130':isJungleTemple?'200,255,180':isRadar?'160,255,200':isObservatory?'200,220,255':isCave?'160,230,255':'255,220,120'},${a2*0.9})`;
     ctx.font='bold 32px serif'; ctx.textAlign='center';
-    ctx.fillText(isCave?'THE RUNES GLOW':'THE SEAL IS BROKEN', cw/2, ch/2);
+    const banner = isMuseum?'THE ARTIFACT SPEAKS':isBasement?'THE PATTERN IS CLEAR':isCellar?'THE COVEN CALLS':isSubway?'LINE 7 RUNS AGAIN':isJungleTemple?'THE IDOL AWAKENS':isRadar?'ACCESS GRANTED':isObservatory?'THE LENS FOCUSES':isCave?'THE RUNES GLOW':'THE SEAL IS BROKEN';
+    ctx.fillText(banner, cw/2, ch/2);
   }
 
   // Prompt near door
   if(a.x<140){
-    ctx.fillStyle=isCave?'#aef0ff':'#ffd880';
+    ctx.fillStyle=hudTitleCol;
     ctx.font='bold 14px monospace'; ctx.textAlign='center';
-    ctx.fillText(isCave?'[E] exit cave':'[E] exit tomb', cw/2, ch-40);
+    const exitText = isMuseum?'[E] exit museum':isBasement?'[E] exit basement':isCellar?'[E] exit cellar':isSubway?'[E] exit subway':isJungleTemple?'[E] exit temple':isRadar?'[E] exit base':isObservatory?'[E] exit observatory':isCave?'[E] exit cave':'[E] exit tomb';
+    ctx.fillText(exitText, cw/2, ch-40);
   }
 }
 
@@ -10462,6 +12741,14 @@ function updatePlanetShared(){
     // Spread to nearby blocks (more aggressive)
     if(Math.random()>0.9)blocks.forEach(b=>{if(!b.dead&&Math.abs(f.x-b.x-b.w/2)<45&&Math.abs(f.y-b.y-b.h/2)<45){b.health-=1.2;maybeEvictFromDamage(b);b.cracked=true;b.onFire=true;}});
   });
+  // Dying fires on ground leave scorch scars
+  for(let fi=0; fi<fires.length; fi++){
+    const f = fires[fi];
+    if(f.life<=0 && f.stuck && Math.abs(f.y-GROUND_LEVEL)<8 && !f._scarLeft){
+      f._scarLeft = true;
+      ashPiles.push({x:f.x, y:GROUND_LEVEL-1, life:600, maxLife:600, scorch:true, size:Math.min(20, f.size*1.5)});
+    }
+  }
   fires=fires.filter(f=>f.life>0);if(fires.length>50)fires.splice(0,fires.length-50);
 
   // Ash piles fade out
@@ -11005,9 +13292,61 @@ function updatePlanetShared(){
   // --- WEATHER ---
   const wp=currentPlanet;
   if(wp){
-    if(wp.id==='earth'&&Math.random()>0.88){
-      // Rain
-      weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y-10,vx:0.5,vy:8+Math.random()*4,life:80,type:'rain'});
+    if(wp.id==='earth'){
+      // Storm system — slow oscillating intensity. Peaks over jungle+ocean biomes.
+      if(window._stormPhase===undefined) window._stormPhase = Math.random()*Math.PI*2;
+      window._stormPhase += 0.00045;
+      // Baseline + slow swell → 0 (clear) to ~1 (heavy downpour)
+      const stormBase = 0.15 + Math.sin(window._stormPhase)*0.55 + Math.sin(window._stormPhase*0.33+1.1)*0.35;
+      // Biome modulation: stormy over jungle/ocean, dry over desert.
+      const _bx = camera.x + canvas.width/2;
+      const _biomeNow = (typeof getEarthBiome==='function') ? getEarthBiome(_bx) : null;
+      let biomeMod = 1;
+      if(_biomeNow){
+        if(_biomeNow.isOcean || _biomeNow.id==='ocean') biomeMod = 1.2;
+        else if(_biomeNow.id==='jungle') biomeMod = 1.25;
+        else if(_biomeNow.id==='desert') biomeMod = 0;
+        else if(_biomeNow.id==='snow') biomeMod = 0.6;
+      }
+      const stormK = Math.max(0, Math.min(1, stormBase * biomeMod));
+      window._stormK = stormK;
+      // Rain scales with storm intensity; heavy rain pours during peak storms.
+      const rainRate = 0.12 + stormK*0.7;
+      if(Math.random() < rainRate){
+        const drops = 1 + (stormK>0.5 ? Math.floor(Math.random()*2) : 0);
+        for(let di=0; di<drops; di++){
+          weather.push({x:camera.x+Math.random()*canvas.width,y:camera.y-10,vx:0.5+stormK*1.2,vy:8+Math.random()*4+stormK*6,life:80,type:'rain'});
+        }
+      }
+      // Lightning: rare during heavy storms. Stores flash life on window for draw pass.
+      if(window._lightningFlash===undefined) window._lightningFlash = 0;
+      if(window._lightningFlash>0) window._lightningFlash--;
+      if(stormK > 0.55 && Math.random() < 0.003 + (stormK-0.55)*0.02){
+        window._lightningFlash = 10 + Math.floor(Math.random()*6);
+        // Thunder-direction jitter on camera (subtle)
+        screenShake.intensity = Math.max(screenShake.intensity, 2 + stormK*3);
+      }
+      // Desert sandstorm — independent of storms; happens in desert biome only.
+      if(_biomeNow && _biomeNow.id==='desert'){
+        if(window._sandstormPhase===undefined) window._sandstormPhase = Math.random()*Math.PI*2;
+        window._sandstormPhase += 0.0006;
+        const sandK = Math.max(0, Math.sin(window._sandstormPhase)*0.9 - 0.2); // 0..~0.7, many calm periods
+        window._sandK = sandK;
+        if(sandK > 0.05 && Math.random() < 0.2 + sandK*0.5){
+          weather.push({x:camera.x + (Math.random()<0.5 ? -20 : canvas.width+20), y:camera.y+Math.random()*canvas.height, vx:(sandK*5+2)*(Math.random()<0.5?1:-1), vy:(Math.random()-0.5)*0.6, life:60, type:'sand'});
+        }
+        if(sandK > 0.5 && particles.length < 140 && Math.random() < 0.4){
+          particles.push({x:camera.x+Math.random()*canvas.width,y:camera.y+Math.random()*canvas.height,vx:3+sandK*3,vy:(Math.random()-0.5)*0.3,life:40,color:`rgba(220,180,120,${0.2+sandK*0.25})`,size:2+Math.random()*2});
+        }
+      } else {
+        window._sandK = 0;
+      }
+      // Seagulls — circle over ocean during day
+      if(_biomeNow && _biomeNow.isOcean && dayNightBrightness>0.3 && (window._seagulls||[]).length<6 && Math.random()<0.01){
+        if(!window._seagulls) window._seagulls = [];
+        const gx = camera.x + Math.random()*canvas.width;
+        window._seagulls.push({x:gx, y:camera.y+60+Math.random()*120, vx:(Math.random()<0.5?-1:1)*(1+Math.random()*0.6), phase:Math.random()*Math.PI*2, life:900+Math.random()*400});
+      }
     }
     // Ambient biome life on Earth (cheap atmosphere particles, near camera only)
     if(wp.id==='earth'&&particles.length<140&&typeof getEarthBiome==='function'){
@@ -11071,6 +13410,17 @@ function updatePlanetShared(){
   }
   weather.forEach(w=>{w.x+=w.vx;w.y+=w.vy;w.life--;});
   weather=weather.filter(w=>w.life>0);if(weather.length>100)weather.splice(0,weather.length-100);
+
+  // --- SEAGULLS ---
+  if(window._seagulls && window._seagulls.length){
+    for(let gi=window._seagulls.length-1; gi>=0; gi--){
+      const g = window._seagulls[gi];
+      g.x += g.vx;
+      g.y += Math.sin(frameT*1.5 + g.phase)*0.4;
+      g.life--;
+      if(g.life<=0 || g.x<camera.x-400 || g.x>camera.x+canvas.width+400) window._seagulls.splice(gi,1);
+    }
+  }
 
   // --- VEHICLES ---
   vehicles.forEach(v=>{
@@ -11610,6 +13960,195 @@ function updateAlienOnFoot(){
       if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){
         b._doorHint=1;
       }
+    }
+  }
+
+  // Farmland root cellar entry
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='cellarHatch')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<30 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='cellar';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You pry open the hatch and descend...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
+    }
+  }
+
+  // Suburban conspiracy-house basement entry
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='conspiracyHouse')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<20 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='basement';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You slip past the "NO VISITORS" sign and step inside...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
+    }
+  }
+
+  // Museum entry
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='museum')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<25 && Math.abs(alien.y-doorY)<55 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='museum';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You slip into the silent museum after hours...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
+    }
+  }
+
+  // Jungle temple entry (Earth jungle biome — walk to door + E/Enter)
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='jungleTemple')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<20 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='jungleTemple';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You push aside the vines and enter the temple...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
+    }
+  }
+
+  // Subway entrance (Earth city biome — walk to stairwell + E/Enter)
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='subwayEntrance')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<30 && Math.abs(alien.y-doorY)<40 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='subway';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You descend into the abandoned subway...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<60 && Math.abs(alien.y-doorY)<50){ b._doorHint=1; }
+    }
+  }
+
+  // Arctic radar base entry (Earth snow biome — walk to door + E/Enter)
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='radarBase')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<20 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='radar';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You slip into the abandoned radar base...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
+    }
+  }
+
+  // Mountain observatory entry (Earth mountains biome — walk to door + E/Enter)
+  if(p.id==='earth'){
+    for(let bi=0;bi<blocks.length;bi++){
+      const b=blocks[bi];
+      if(b.dead||b.buildingType!=='mountainObservatory')continue;
+      const doorX=b.x+b.w/2;
+      const doorY=b.y+b.h;
+      if(Math.abs(alien.x-doorX)<20 && Math.abs(alien.y-doorY)<50 && (keys['enter']||keys['e'])){
+        keys['enter']=false; keys['e']=false;
+        pyramidInteriorMode=true;
+        pyramidInterior.theme='observatory';
+        pyramidInterior.exitX=alien.x;
+        pyramidInterior.exitY=alien.y;
+        pyramidInterior.alien.x=220;
+        pyramidInterior.alien.y=canvas.height-72;
+        pyramidInterior.alien.vx=0;
+        pyramidInterior.alien.vy=0;
+        pyramidInterior.alien.facing=1;
+        pyramidInterior.enterCD=20;
+        initPyramidPuzzle();
+        showMessage('You climb into the ancient observatory...');
+        break;
+      }
+      if(Math.abs(alien.x-doorX)<50 && Math.abs(alien.y-doorY)<60){ b._doorHint=1; }
     }
   }
 
@@ -12641,8 +15180,8 @@ function drawPlanet(){
       const hueB = p.id==='earth' ? (160+band*40) : (260+band*20);
       const ribbonGrad = ctx.createLinearGradient(0, baseY+band*20, 0, baseY+band*20+140);
       ribbonGrad.addColorStop(0, `hsla(${hueA},90%,55%,0)`);
-      ribbonGrad.addColorStop(0.4, `hsla(${hueA},90%,55%,${0.35*auroraAlpha})`);
-      ribbonGrad.addColorStop(0.7, `hsla(${hueB},80%,50%,${0.25*auroraAlpha})`);
+      ribbonGrad.addColorStop(0.4, `hsla(${hueA},90%,55%,${0.04*auroraAlpha})`);
+      ribbonGrad.addColorStop(0.7, `hsla(${hueB},80%,50%,${0.03*auroraAlpha})`);
       ribbonGrad.addColorStop(1, `hsla(${hueB},80%,40%,0)`);
       ctx.fillStyle=ribbonGrad;
       ctx.beginPath();
@@ -13019,6 +15558,8 @@ function drawPlanet(){
     if(underwaterObjects.length > 0 && _plyY > GROUND_LEVEL + 50) {
       const camL = camera.x - 100, camR = camera.x + canvas.width + 100;
       const camT = camera.y - 50, camB = camera.y + canvas.height + 50;
+      // Bioluminescence strength — brightest at night, off during day.
+      const _bioK = Math.max(0, 1 - dayNightBrightness*1.5);
       underwaterObjects.forEach(obj => {
         if(obj.x < camL - 200 || obj.x > camR + 200) return;
 
@@ -13034,6 +15575,13 @@ function drawPlanet(){
             const lx = obj.x + sway * (0.3 + i * 0.25) + (i % 2 === 0 ? 6 : -6);
             ctx.fillStyle = obj.color; ctx.beginPath();
             ctx.ellipse(lx, ly, 5, 3, (i % 2 === 0 ? 0.3 : -0.3), 0, Math.PI * 2); ctx.fill();
+          }
+          // Bioluminescent tip glow at night
+          if(_bioK > 0.2){
+            const tx = obj.x + sway * 1.5, ty = obj.y - obj.height;
+            const pulse = 0.6 + Math.sin(_t*2 + obj.phase)*0.4;
+            ctx.fillStyle = `rgba(120,255,200,${_bioK*pulse*0.7})`;
+            ctx.beginPath(); ctx.arc(tx, ty, 4, 0, Math.PI*2); ctx.fill();
           }
         }
 
@@ -13068,6 +15616,12 @@ function drawPlanet(){
               ctx.fillStyle = obj.color; ctx.beginPath();
               ctx.arc(bx + (i - 2) * 3, obj.y - bh, 3, 0, Math.PI * 2); ctx.fill();
             }
+          }
+          // Bioluminescent halo on coral at night
+          if(_bioK > 0.2){
+            const pulse = 0.5 + Math.sin(_t*1.3 + (obj.x*0.05))*0.5;
+            ctx.fillStyle = `rgba(255,150,220,${_bioK*pulse*0.3})`;
+            ctx.beginPath(); ctx.arc(obj.x, obj.y - obj.height*0.5, obj.width*0.7, 0, Math.PI*2); ctx.fill();
           }
         }
 
@@ -13555,9 +16109,18 @@ function drawPlanet(){
         }
 
         else if(obj.type === 'seabedCave') {
-          // Organic rock mouth carved into seabed — irregular silhouette + glow inside
+          // Crystal Depths gate — crystal columns frame the entrance, deep blue glow within
           const cx0 = obj.x, cy0 = obj.y, w = obj.w, h = obj.h;
           const glow = 0.55 + Math.sin(_t*2 + obj.glowPhase)*0.15;
+          // Outer crystal glow halo (night-amplified)
+          {
+            const haloG = ctx.createRadialGradient(cx0, cy0-h*0.4, 8, cx0, cy0-h*0.4, w*1.6);
+            haloG.addColorStop(0, `rgba(120,220,255,${0.35*glow})`);
+            haloG.addColorStop(0.6, `rgba(80,160,230,${0.15*glow})`);
+            haloG.addColorStop(1, 'transparent');
+            ctx.fillStyle = haloG;
+            ctx.beginPath(); ctx.arc(cx0, cy0-h*0.4, w*1.6, 0, Math.PI*2); ctx.fill();
+          }
           // Outer rocky lip (dark mass around the mouth)
           ctx.fillStyle = '#1a1208';
           ctx.beginPath();
@@ -13611,6 +16174,52 @@ function drawPlanet(){
             ctx.beginPath(); ctx.moveTo(kx, cy0);
             ctx.quadraticCurveTo(kx+sway, cy0-8, kx+sway*1.2, cy0-16);
             ctx.stroke();
+          }
+          // Crystal columns flanking the entrance — tall, faceted, pulsing blue
+          const cols = [{sx:-1, base:-w*0.85}, {sx:1, base:w*0.85}, {sx:-1, base:-w*1.05, tall:true}, {sx:1, base:w*1.05, tall:true}];
+          cols.forEach((col, ci) => {
+            const baseX = cx0 + col.base;
+            const ch = col.tall ? h*1.1 : h*0.85;
+            const cw = col.tall ? 8 : 11;
+            const pulse = 0.5 + Math.sin(_t*1.5 + ci*0.9 + obj.glowPhase)*0.3;
+            // Body
+            const grad = ctx.createLinearGradient(baseX-cw, cy0, baseX+cw, cy0-ch);
+            grad.addColorStop(0, `rgba(40,120,180,${0.7+pulse*0.2})`);
+            grad.addColorStop(0.5, `rgba(120,220,255,${0.85+pulse*0.15})`);
+            grad.addColorStop(1, `rgba(60,160,220,0.8)`);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(baseX - cw*0.7, cy0);
+            ctx.lineTo(baseX - cw, cy0 - ch*0.35);
+            ctx.lineTo(baseX - cw*0.5, cy0 - ch*0.75);
+            ctx.lineTo(baseX, cy0 - ch);
+            ctx.lineTo(baseX + cw*0.5, cy0 - ch*0.75);
+            ctx.lineTo(baseX + cw, cy0 - ch*0.35);
+            ctx.lineTo(baseX + cw*0.7, cy0);
+            ctx.closePath();
+            ctx.fill();
+            // Specular highlight edge
+            ctx.strokeStyle = `rgba(220,240,255,${0.3+pulse*0.3})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(baseX - cw*0.3, cy0 - ch*0.1);
+            ctx.lineTo(baseX - cw*0.2, cy0 - ch*0.6);
+            ctx.lineTo(baseX + cw*0.1, cy0 - ch*0.95);
+            ctx.stroke();
+          });
+          // Floating crystal shards inside the mouth (parallax with player)
+          for(let si=0; si<4; si++){
+            const sp = ((_t*0.15 + obj.motePhase + si*0.37) % 1);
+            const spx = cx0 + Math.sin(si*1.7 + _t*0.4)*w*0.25;
+            const spy = cy0 - h*0.2 - sp*h*0.5;
+            const rot = _t*0.8 + si*1.3;
+            ctx.save();
+            ctx.translate(spx, spy); ctx.rotate(rot);
+            ctx.fillStyle = `rgba(180,230,255,${(1-sp)*0.8*glow})`;
+            ctx.beginPath();
+            ctx.moveTo(0, -3); ctx.lineTo(2, 0); ctx.lineTo(0, 4); ctx.lineTo(-2, 0);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
           }
           // Interact hint when alien is near and underwater
           if(playerMode==='onfoot' && alien.underwater){
@@ -14473,10 +17082,19 @@ function drawPlanet(){
       ctx.fillText('[E] BREACH BUNKER',hx+hw/2,hy-hh-10);
     }
   });
-  // Ash piles (fade out mound)
+  // Ash piles (fade out mound) + scorch scars
   ashPiles.forEach(a=>{
-    if(a.x<camera.x-20||a.x>camera.x+canvas.width+20)return;
+    if(a.x<camera.x-30||a.x>camera.x+canvas.width+30)return;
     const af=a.life/a.maxLife;
+    if(a.scorch){
+      // Wide flat scorch mark — black ring fading to brown
+      const sr = a.size || 14;
+      ctx.fillStyle=`rgba(20,16,12,${0.55*af})`;
+      ctx.beginPath();ctx.ellipse(a.x, a.y, sr, sr*0.35, 0, 0, Math.PI*2);ctx.fill();
+      ctx.fillStyle=`rgba(60,40,25,${0.4*af})`;
+      ctx.beginPath();ctx.ellipse(a.x, a.y, sr*0.7, sr*0.22, 0, 0, Math.PI*2);ctx.fill();
+      return;
+    }
     ctx.fillStyle=`rgba(40,38,36,${0.75*af})`;
     ctx.beginPath();ctx.ellipse(a.x,a.y,9,3,0,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=`rgba(80,70,60,${0.55*af})`;
@@ -14943,9 +17561,112 @@ function drawPlanet(){
     } // end non-driving render block
   }
 
+  // Volcanic island — visual set-piece in deep ocean
+  if(currentPlanet && currentPlanet.id==='earth'){
+    const islX = 47000;
+    const islScreenX = islX - camera.x;
+    if(islScreenX > -400 && islScreenX < canvas.width + 400){
+      const gy = GROUND_LEVEL;
+      const beachW = 260;
+      // Eruption phase
+      if(window._volcPhase===undefined) window._volcPhase = 0;
+      window._volcPhase += 0.002;
+      const erupt = Math.max(0, Math.sin(window._volcPhase)*1.2 - 0.3); // 0 most of the time, spikes
+      // Beach/shore (sand under water surface visible as light band)
+      ctx.fillStyle = 'rgba(220,200,150,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(islX, gy, beachW*0.7, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Island body (above water) — conic cross-section
+      const peakY = gy - 160;
+      const grad = ctx.createLinearGradient(islX, gy, islX, peakY);
+      grad.addColorStop(0, '#6a5a4a');
+      grad.addColorStop(0.6, '#4a3a2a');
+      grad.addColorStop(1, '#2a1a10');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(islX - beachW*0.8, gy);
+      ctx.lineTo(islX - beachW*0.25, gy - 100);
+      ctx.lineTo(islX - 30, peakY);
+      ctx.lineTo(islX - 12, peakY + 10);
+      ctx.lineTo(islX + 12, peakY + 10);
+      ctx.lineTo(islX + 30, peakY);
+      ctx.lineTo(islX + beachW*0.25, gy - 100);
+      ctx.lineTo(islX + beachW*0.8, gy);
+      ctx.closePath();
+      ctx.fill();
+      // Crater rim
+      ctx.fillStyle = '#1a0a05';
+      ctx.beginPath();
+      ctx.ellipse(islX, peakY + 10, 24, 6, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Lava glow in crater (always faint, bright during eruption)
+      const lavaA = 0.35 + erupt*0.65;
+      const lavaG = ctx.createRadialGradient(islX, peakY + 8, 2, islX, peakY + 8, 30 + erupt*20);
+      lavaG.addColorStop(0, `rgba(255,180,80,${lavaA})`);
+      lavaG.addColorStop(0.4, `rgba(255,100,40,${lavaA*0.6})`);
+      lavaG.addColorStop(1, 'transparent');
+      ctx.fillStyle = lavaG;
+      ctx.beginPath(); ctx.arc(islX, peakY + 8, 30 + erupt*20, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(255,200,100,${lavaA})`;
+      ctx.beginPath(); ctx.ellipse(islX, peakY + 10, 14, 3, 0, 0, Math.PI*2); ctx.fill();
+      // Smoke plume
+      const puffs = 6;
+      for(let pi=0; pi<puffs; pi++){
+        const py = peakY - 20 - pi*30 - (frameT*10 + pi*8) % 30;
+        const drift = Math.sin(frameT*0.5 + pi)*10 + pi*3;
+        const r = 10 + pi*3 + erupt*6;
+        const smokeA = Math.max(0, 0.4 - pi*0.05) * (0.6 + erupt*0.4);
+        ctx.fillStyle = `rgba(60,50,50,${smokeA})`;
+        ctx.beginPath(); ctx.arc(islX + drift, py, r, 0, Math.PI*2); ctx.fill();
+      }
+      // Eruption particles
+      if(erupt > 0.2 && particles.length < 180 && Math.random() < 0.4){
+        particles.push({x:islX + (Math.random()-0.5)*20, y:peakY+5, vx:(Math.random()-0.5)*3, vy:-2-Math.random()*4-erupt*3, life:80, color:['#f80','#f40','#fa4'][Math.floor(Math.random()*3)], size:2+Math.random()*2});
+      }
+      // Palm trees on island slopes (decorative)
+      for(let pt=0; pt<4; pt++){
+        const tx = islX - beachW*0.5 + pt*(beachW*0.33);
+        const ty = gy - 20 - Math.abs(Math.sin(pt*1.7))*30;
+        // Trunk
+        ctx.strokeStyle = '#4a2a10'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(tx, ty + 20);
+        ctx.quadraticCurveTo(tx + Math.sin(pt)*4, ty + 5, tx + Math.sin(pt)*6, ty - 12);
+        ctx.stroke();
+        // Fronds
+        ctx.strokeStyle = '#2a6a2a'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        for(let fi=0; fi<5; fi++){
+          const fa = Math.PI + fi*0.5 + Math.sin(frameT*0.5+pt)*0.1;
+          const fx1 = tx + Math.sin(pt)*6, fy1 = ty - 12;
+          ctx.beginPath(); ctx.moveTo(fx1, fy1);
+          ctx.quadraticCurveTo(fx1 + Math.cos(fa)*10, fy1 + Math.sin(fa)*10, fx1 + Math.cos(fa)*16, fy1 + Math.sin(fa)*18);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
   // Boss
   drawBoss();
-  // Ship
+  // Ship surface reflection — mirrored, dimmed ghost on ocean surface below ship
+  if(currentPlanet && currentPlanet.id==='earth' && typeof isOverOcean==='function' && isOverOcean(ship.x) && ship.y < GROUND_LEVEL - 30){
+    const surfY = GROUND_LEVEL;
+    const refY = surfY + (surfY - ship.y);
+    const heightAbove = surfY - ship.y;
+    // Fade reflection as ship climbs away (gone above 500 px)
+    const fade = Math.max(0, Math.min(0.5, (500 - heightAbove)/500 * 0.5));
+    if(fade > 0.02){
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.translate(ship.x, refY);
+      ctx.scale(1, -1);
+      ctx.translate(-ship.x, -ship.y);
+      // Slight wobble
+      ctx.translate(Math.sin(frameT*2+ship.x*0.01)*1.5, 0);
+      drawShip();
+      ctx.restore();
+    }
+  }
   drawShip();
   // Particles
   particles.forEach(pt=>{const sx=pt.x-camera.x,sy=pt.y-camera.y;if(sx<-20||sx>canvas.width+20||sy<-20||sy>canvas.height+20)return;ctx.globalAlpha=pt.life/30;ctx.fillStyle=pt.color;if(pt.size<3){ctx.fillRect(pt.x-pt.size/2,pt.y-pt.size/2,pt.size,pt.size);}else{ctx.beginPath();ctx.arc(pt.x,pt.y,pt.size,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;});
@@ -14973,10 +17694,111 @@ function drawPlanet(){
       ctx.strokeStyle='rgba(180,220,255,0.5)';ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(w.x,w.y);ctx.lineTo(w.x-w.vx*2.5,w.y);ctx.stroke();
     }
+    else if(w.type==='sand'){
+      // Earth desert sandstorm — horizontal tan streak.
+      ctx.strokeStyle='rgba(215,175,120,0.5)';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(w.x,w.y);ctx.lineTo(w.x-w.vx*2,w.y);ctx.stroke();
+    }
     ctx.globalAlpha=1;
   });
 
+  // --- SEAGULLS (world space, over ocean) ---
+  if(window._seagulls && window._seagulls.length && currentPlanet && currentPlanet.id==='earth'){
+    const dayA = Math.max(0.3, Math.min(1, dayNightBrightness));
+    for(let gi=0; gi<window._seagulls.length; gi++){
+      const g = window._seagulls[gi];
+      const sx = g.x - camera.x, sy = g.y - camera.y;
+      if(sx<-40 || sx>canvas.width+40) continue;
+      const flap = Math.sin(frameT*6 + g.phase);
+      const dir = g.vx>=0 ? 1 : -1;
+      const wingUp = flap > 0;
+      ctx.save(); ctx.translate(g.x, g.y); ctx.scale(dir, 1);
+      ctx.strokeStyle=`rgba(240,240,245,${dayA})`; ctx.lineWidth=1.6; ctx.lineCap='round';
+      // Two-stroke "M" seagull silhouette
+      const yOff = wingUp ? -2 : 2;
+      ctx.beginPath();
+      ctx.moveTo(-7, yOff);
+      ctx.quadraticCurveTo(-3, -4, 0, 0);
+      ctx.quadraticCurveTo(3, -4, 7, yOff);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   ctx.restore();
+
+  // --- STORM OVERLAY (screen space, drawn after world) ---
+  if(currentPlanet && currentPlanet.id==='earth'){
+    const sK = window._stormK || 0;
+    if(sK > 0.25){
+      ctx.fillStyle = `rgba(30,40,60,${(sK-0.25)*0.5})`;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+    // Lightning flash
+    if(window._lightningFlash && window._lightningFlash>0){
+      const lf = window._lightningFlash;
+      const alpha = Math.min(0.85, lf/12);
+      ctx.fillStyle = `rgba(230,240,255,${alpha})`;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      // Jagged bolt (screen-space, one per flash start)
+      if(lf > 8){
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if(!window._boltPath){
+          const bx = Math.random()*canvas.width;
+          const segs = [[bx, 0]];
+          let cy = 0, cx = bx;
+          while(cy < canvas.height*0.6){
+            cy += 20 + Math.random()*30;
+            cx += (Math.random()-0.5)*40;
+            segs.push([cx, cy]);
+          }
+          window._boltPath = segs;
+        }
+        const pts = window._boltPath;
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.stroke();
+      } else {
+        window._boltPath = null;
+      }
+    }
+    // Desert heat shimmer — noon only, within desert biome
+    const _hx = camera.x + canvas.width/2;
+    const _hb = (typeof getEarthBiome==='function') ? getEarthBiome(_hx) : null;
+    const isNoon = dayNightBrightness > 0.7;
+    if(_hb && _hb.id==='desert' && isNoon && !window._perfMode){
+      const sK2 = window._sandK || 0;
+      // Don't shimmer during peak sandstorm (dust dominates); shimmer fades as sand rises.
+      const shimmerA = 0.06 * (1 - sK2);
+      if(shimmerA > 0.005){
+        const gy = GROUND_LEVEL - camera.y;
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        for(let bi=0; bi<3; bi++){
+          const by = gy - 20 - bi*18;
+          ctx.fillStyle=`rgba(255,220,160,${shimmerA + bi*0.01})`;
+          ctx.beginPath();
+          ctx.moveTo(0, by);
+          for(let x=0; x<=canvas.width; x+=30){
+            const wob = Math.sin(x*0.04 + frameT*2 + bi)*3 + Math.sin(x*0.09 + frameT)*2;
+            ctx.lineTo(x, by + wob);
+          }
+          ctx.lineTo(canvas.width, by+8);
+          ctx.lineTo(0, by+8);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // Sandstorm haze
+    const sk2 = window._sandK || 0;
+    if(sk2 > 0.3){
+      ctx.fillStyle = `rgba(210,170,115,${(sk2-0.3)*0.35})`;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+  }
 
   // --- SHIP ARROW INDICATOR (screen space, on-foot only) ---
   if(playerMode==='onfoot'){

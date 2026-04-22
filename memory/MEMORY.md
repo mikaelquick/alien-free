@@ -16,6 +16,7 @@
 - [Project: Game Systems](project_systems.md) — Skins, save/load, menus, cave system, vehicles
 - [Project: Pending Work](project_pending.md) — Outstanding feature requests not yet done
 - [Project: Recent Changes](project_recent_changes.md) — 2026-04-16 session: rename, biomes, ocean, Sun, ship types
+- [Project: Reality Improvements 2026-04-22](project_reality_improvements_2026-04-22.md) — storms, lightning, bioluminescence, seagulls, crystal gate, reflections, volcanic island, fire scars
 - [Project: Level system](project_level_system.md) — linear planet unlock, roguelike upgrade reset
 - [Project: Perf + resilience](project_perf_and_resilience.md) — sim radius cull, stuck detection, frame/gradient caches
 - [Project: On-foot weapons](project_onfoot_weapons.md) — race-specific loadout, chainsaw slot 0, V-cloak, HUD
