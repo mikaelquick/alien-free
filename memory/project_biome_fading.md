@@ -1,28 +1,32 @@
 ---
 name: Earth biome fading
-description: Wide smooth biome transitions on Earth — ground, weather, population all blend
+description: Earth biomes use continuous weighted multi-biome blending — every world x is a mix of all biomes
 type: project
 ---
 
-Earth biomes fade into each other via `earthTransitions` zones (src/main.js ~line 996). Each
-transition defines a `{from, to, biomeA, biomeB}` range — inside it, `getEarthBiome(x)` returns a
-blended biome (`id:'transition'`, `fromId`, `toId`, `blend`, lerp'd groundColor/grass/trees).
+Earth uses **continuous multi-biome blending** (src/main.js ~line 1000). The old
+`earthTransitions` range system is gone.
 
-2026-04-22b widening:
-- Transitions now ~4000–5500 px wide (previously 2500–3000). Each zone spans well past the biome
-  junction so the player sees a long gradient (e.g. snow↔mountains: 2500→7500 covers half of snow
-  and half of mountains).
-- `getBiomeIntensity(x, biomeId)` — returns 0..1 for a single biome id; particles, weather, sand
-  haze, snow weather all use it so atmospheric effects fade together with visuals.
-- **Populator fix**: `generateBuilding` (line ~1466) and `generatePrehistoricFlora` (line ~1616)
-  now stochastically pick one of the two transition biomes (weighted by blend) so in transition
-  zones you get a gradual mix of biomeA and biomeB units. Before the fix, transition biomes fell
-  through the biome.id branches and defaulted to city buildings everywhere.
+- `_biomeWeights(wx)` returns normalized weights (sum to 1) for every biome at position `wx`,
+  using a Gaussian kernel centered on each biome's range. Kernel sigma is `halfWidth * 1.6` so
+  neighbouring biomes overlap heavily — there is no pure-biome region anywhere in the world.
+- `getEarthBiome(x)` returns a blended biome object with weighted-rgb `groundColor`, `grassColor`,
+  `grassHeight`, `treeDensity`, `treeCanopyColor`, plus the dominant biome's `id`/flags/landmarks.
+  Results are cached in `_biomeCache` by a 30-px quantized key.
+- `getBiomeIntensity(x, biomeId)` returns that biome's weight at x (0..1). Used by ambient
+  particles and weather.
+- `_getBiomeGroundGrad(biome)` caches gradients keyed on the actual blended groundColor hex
+  triple, so every unique blend gets its own gradient.
 
-**Why:** User complaint "snow just started, same with desert — I want the environment to fade
-together, not jungle → desert". The narrow transitions felt like hard cuts.
+Populators (`generateBuilding`, `generatePrehistoricFlora`) stochastically pick a biome at each
+slot using the weight array, so unit types mix across overlap regions instead of cutting at the
+dominant-biome boundary.
 
-**How to apply:** To make a specific biome blend even more gradually, widen its transition entry
-in `earthTransitions`. Don't let the transition extend past the biome's own `from`/`to`, or the
-blend will overshoot. The biome list starts with snow (wraps at EARTH_WORLD_WIDTH) — there's no
-transition across the wrap point, so the ocean→snow junction is still a hard cut.
+**Why:** User wanted "smooth smooth" biome fading. Discrete transition ranges always produced a
+visible edge where transition met pure-biome. Continuous weighted blending guarantees zero hard
+edges since every pixel is a weighted combination.
+
+**How to apply:** To make fades even wider, bump the `1.6` halfW multiplier. To add a new biome,
+just extend the `earthBiomes` array — blending is automatic. Landmark generation (observatory,
+radar base, jungle temple, etc.) uses the dominant biome id so fixed landmarks still appear in
+their expected ranges.

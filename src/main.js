@@ -992,59 +992,90 @@ const earthBiomes = [
   {id:'desert',    from:34500, to:42000, groundColor:['#c0a060','#a08040','#806020'], grassColor:'#c0a060', grassHeight:0, treeDensity:0.02, treeCanopyColor:'#5a7a2a'},
   {id:'ocean',     from:42000, to:52000, groundColor:['#0a3a6a','#082a4a','#041a2a'], grassColor:'#0a3a6a', grassHeight:0, treeDensity:0, treeCanopyColor:'#0a3a6a', isOcean:true},
 ];
-// Transition zones between biomes (wide smooth ground color blend — overlap biome boundaries)
-// Widened 2026-04-22b: each zone now ~2x wider so biome visuals (snow, sand, foliage) fade
-// gradually instead of popping in.
-const earthTransitions = [
-  {from:2500,  to:7500,  biomeA:'snow',      biomeB:'mountains'},
-  {from:7500,  to:12500, biomeA:'mountains', biomeB:'farmland'},
-  {from:12500, to:17500, biomeA:'farmland',  biomeB:'suburbs'},
-  {from:17500, to:21500, biomeA:'suburbs',   biomeB:'city'},
-  {from:21500, to:25500, biomeA:'city',      biomeB:'landmarks'},
-  {from:25500, to:30500, biomeA:'landmarks', biomeB:'jungle'},
-  {from:31000, to:36500, biomeA:'jungle',    biomeB:'desert'},
-  {from:38500, to:43500, biomeA:'desert',    biomeB:'ocean'},
-];
+// --- Continuous multi-biome blending ---
+// Every world x is a weighted mix of ALL Earth biomes. Each biome contributes a gaussian-shaped
+// weight centered on its own range, with a falloff wide enough that neighbouring biomes overlap
+// significantly. Normalized weights sum to 1, so colours/heights/densities are smooth at every
+// pixel — there is no "pure biome" region anywhere in the world, just the dominant biome + soft
+// influence from neighbours.
+function _biomeWeights(wx){
+  const ww=EARTH_WORLD_WIDTH;
+  const weights=[];
+  let total=0;
+  for(const b of earthBiomes){
+    const center=(b.from+b.to)/2;
+    const halfW=(b.to-b.from)/2;
+    // Wrap-aware signed distance from biome center
+    let d=wx-center;
+    if(d>ww/2) d-=ww; else if(d<-ww/2) d+=ww;
+    d=Math.abs(d);
+    // Kernel width: ~1.6x the biome's own halfwidth — ensures heavy overlap so blending never
+    // "starts" or "ends" abruptly. The gaussian falls off smoothly to 0 at infinity.
+    const sigma=halfW*1.6;
+    const t=d/sigma;
+    const w=Math.exp(-t*t);
+    weights.push(w);
+    total+=w;
+  }
+  // Normalize
+  if(total>1e-9) for(let i=0;i<weights.length;i++) weights[i]/=total;
+  return weights;
+}
+// Cache results by quantized wx — biome properties don't need to change every pixel
+const _biomeCache={};
 function getEarthBiome(x){
   const ww=EARTH_WORLD_WIDTH;
   const wx=((x%ww)+ww)%ww;
-  // Check transitions first (smoothstep easing for natural blend)
-  for(const tr of earthTransitions){
-    if(wx>=tr.from&&wx<tr.to){
-      let t2=(wx-tr.from)/(tr.to-tr.from);
-      t2=t2*t2*(3-2*t2); // smoothstep
-      const a=earthBiomes.find(b=>b.id===tr.biomeA)||earthBiomes[0];
-      const b=earthBiomes.find(b2=>b2.id===tr.biomeB)||earthBiomes[0];
-      return {id:'transition',fromId:tr.biomeA,toId:tr.biomeB,blend:t2,
-        groundColor:a.groundColor.map((c,i)=>lerpColor(c,b.groundColor[i],t2)),
-        grassColor:lerpColor(a.grassColor,b.grassColor,t2),
-        grassHeight:a.grassHeight*(1-t2)+b.grassHeight*t2,
-        treeDensity:a.treeDensity*(1-t2)+b.treeDensity*t2,
-        treeCanopyColor:lerpColor(a.treeCanopyColor,b.treeCanopyColor,t2),
-        isMountain:(a.isMountain&&t2<0.5)||(b.isMountain&&t2>=0.5)||false,
-        isSnow:(a.isSnow&&t2<0.5)||(b.isSnow&&t2>=0.5)||false,
-        isOcean:(a.isOcean&&t2<0.5)||(b.isOcean&&t2>=0.5)||false,
-        isFarm:(a.isFarm&&t2<0.5)||(b.isFarm&&t2>=0.5)||false};
+  // Quantize to 30 px buckets → one lookup per ~ground column, bounded cache
+  const key=Math.round(wx/30);
+  if(_biomeCache[key]) return _biomeCache[key];
+  const weights=_biomeWeights(wx);
+  // Weighted rgb blend of 3-stop ground gradient + grass/canopy colors
+  const blendHex=(idx)=>{
+    let r=0,g=0,bl=0;
+    for(let i=0;i<earthBiomes.length;i++){
+      const hex=earthBiomes[i].groundColor[idx];
+      r+=parseInt(hex.slice(1,3),16)*weights[i];
+      g+=parseInt(hex.slice(3,5),16)*weights[i];
+      bl+=parseInt(hex.slice(5,7),16)*weights[i];
     }
-  }
-  return earthBiomes.find(b=>wx>=b.from&&wx<b.to)||earthBiomes[0];
+    return '#'+Math.round(r).toString(16).padStart(2,'0')+Math.round(g).toString(16).padStart(2,'0')+Math.round(bl).toString(16).padStart(2,'0');
+  };
+  const blendCol=(prop)=>{
+    let r=0,g=0,bl=0;
+    for(let i=0;i<earthBiomes.length;i++){
+      const hex=earthBiomes[i][prop];
+      r+=parseInt(hex.slice(1,3),16)*weights[i];
+      g+=parseInt(hex.slice(3,5),16)*weights[i];
+      bl+=parseInt(hex.slice(5,7),16)*weights[i];
+    }
+    return '#'+Math.round(r).toString(16).padStart(2,'0')+Math.round(g).toString(16).padStart(2,'0')+Math.round(bl).toString(16).padStart(2,'0');
+  };
+  // Dominant biome (for id + boolean flags + landmark generation)
+  let domI=0;
+  for(let i=1;i<weights.length;i++) if(weights[i]>weights[domI]) domI=i;
+  const dom=earthBiomes[domI];
+  const result={
+    id:dom.id,
+    groundColor:[blendHex(0),blendHex(1),blendHex(2)],
+    grassColor:blendCol('grassColor'),
+    grassHeight:earthBiomes.reduce((s,b,i)=>s+(b.grassHeight||0)*weights[i],0),
+    treeDensity:earthBiomes.reduce((s,b,i)=>s+(b.treeDensity||0)*weights[i],0),
+    treeCanopyColor:blendCol('treeCanopyColor'),
+    from:dom.from,to:dom.to,
+    isMountain:!!dom.isMountain,isSnow:!!dom.isSnow,isOcean:!!dom.isOcean,isFarm:!!dom.isFarm,
+    _weights:weights,
+  };
+  _biomeCache[key]=result;
+  return result;
 }
-// Returns 0..1 intensity of a specific biome at world x — fades smoothly through transition zones.
-// Also blends a small margin past each biome's hard edge so visuals don't pop on/off.
+// Returns 0..1 intensity of a specific biome at world x.
 function getBiomeIntensity(x, biomeId){
   const ww=EARTH_WORLD_WIDTH;
   const wx=((x%ww)+ww)%ww;
-  for(const tr of earthTransitions){
-    if(wx>=tr.from&&wx<tr.to){
-      let t2=(wx-tr.from)/(tr.to-tr.from);
-      t2=t2*t2*(3-2*t2);
-      if(tr.biomeA===biomeId) return 1-t2;
-      if(tr.biomeB===biomeId) return t2;
-      return 0;
-    }
-  }
-  const b=earthBiomes.find(bb=>wx>=bb.from&&wx<bb.to);
-  return b && b.id===biomeId ? 1 : 0;
+  const weights=_biomeWeights(wx);
+  const idx=earthBiomes.findIndex(b=>b.id===biomeId);
+  return idx<0?0:weights[idx];
 }
 
 // --- PLANET DEFINITIONS ---
@@ -1465,13 +1496,16 @@ function generateBuilding(x) {
 
   if(p.id==='earth'){
     let biome=getEarthBiome(x);
-    // In transition zones, stochastically treat this slot as one of the two biomes, weighted by
-    // blend. This produces a gradual mix of biomeA and biomeB units (e.g. pines + igloos fading
-    // into rocky mountain trees) instead of falling through to the default city branch.
-    if(biome.id==='transition'){
-      const _pickB = Math.random() < biome.blend;
-      const _picked = earthBiomes.find(b=>b.id === (_pickB ? biome.toId : biome.fromId));
-      if(_picked) biome = _picked;
+    // Stochastic biome pick by weight — so at every x the unit type is chosen proportional to
+    // each biome's influence. This gives a gradual mix of biome A and biome B units across the
+    // overlap region, not a hard cut at the dominant-biome boundary.
+    if(biome._weights){
+      const r=Math.random();
+      let acc=0;
+      for(let i=0;i<earthBiomes.length;i++){
+        acc+=biome._weights[i];
+        if(r<acc){ biome=earthBiomes[i]; break; }
+      }
     }
     if(biome.id==='jungle'){
       // Fixed landmark: Jungle Temple at wx~31000
@@ -1614,10 +1648,13 @@ function generatePrehistoricFlora() {
   let x = 200;
   while (x < worldWidth - 200) {
     let biome = getEarthBiome(x);
-    if (biome.id==='transition'){
-      const _pickB = Math.random() < biome.blend;
-      const _picked = earthBiomes.find(b=>b.id === (_pickB ? biome.toId : biome.fromId));
-      if(_picked) biome = _picked;
+    if (biome._weights){
+      const r=Math.random();
+      let acc=0;
+      for(let i=0;i<earthBiomes.length;i++){
+        acc+=biome._weights[i];
+        if(r<acc){ biome=earthBiomes[i]; break; }
+      }
     }
     if (biome.isOcean || isOverOcean(x)) { x += 200; continue; }
     let placed = false;
@@ -14726,7 +14763,21 @@ function _getOceanWaterGrad(){if(!_oceanWaterGrad){const g=ctx.createLinearGradi
 function _getOceanSeabedGrad(){if(!_oceanSeabedGrad){const g=ctx.createLinearGradient(0,SEABED_Y,0,SEABED_Y+120);g.addColorStop(0,'#c8a868');g.addColorStop(0.3,'#a88848');g.addColorStop(1,'#5a4020');_oceanSeabedGrad=g;}return _oceanSeabedGrad;}
 function _getMountainFarGrad(){if(!_mountainFarGrad){const g=ctx.createLinearGradient(0,GROUND_LEVEL-200,0,GROUND_LEVEL);g.addColorStop(0,'#8894a4');g.addColorStop(0.5,'#6a7686');g.addColorStop(1,'#4c5868');_mountainFarGrad=g;}return _mountainFarGrad;}
 function _getMountainMidGrad(){if(!_mountainMidGrad){const g=ctx.createLinearGradient(0,GROUND_LEVEL-360,0,GROUND_LEVEL);g.addColorStop(0,'#a8aeb4');g.addColorStop(0.12,'#807870');g.addColorStop(0.38,'#5e564c');g.addColorStop(0.7,'#463c30');g.addColorStop(1,'#2c2418');_mountainMidGrad=g;}return _mountainMidGrad;}
-function _getBiomeGroundGrad(biome){let g=_biomeGroundGradCache[biome.id];if(!g){g=ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);g.addColorStop(0,biome.groundColor[0]);g.addColorStop(0.3,biome.groundColor[1]);g.addColorStop(1,biome.groundColor[2]);_biomeGroundGradCache[biome.id]=g;}return g;}
+function _getBiomeGroundGrad(biome){
+  // Earth now uses per-position weighted multi-biome blending, so groundColor is already smoothly
+  // interpolated. Key the cache by the actual blended colors so every unique blend gets its own
+  // gradient and the underground strata fades seamlessly across the world.
+  const key=biome.groundColor[0]+biome.groundColor[1]+biome.groundColor[2];
+  let g=_biomeGroundGradCache[key];
+  if(!g){
+    g=ctx.createLinearGradient(0,GROUND_LEVEL,0,GROUND_LEVEL+200);
+    g.addColorStop(0,biome.groundColor[0]);
+    g.addColorStop(0.3,biome.groundColor[1]);
+    g.addColorStop(1,biome.groundColor[2]);
+    _biomeGroundGradCache[key]=g;
+  }
+  return g;
+}
 function draw(){
   frameNow = Date.now();
   frameT = frameNow * 0.001;
