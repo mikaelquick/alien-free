@@ -183,6 +183,7 @@ function saveGame(){
       gameStats:{...gameStats},
       msDeadCrew:[...msDeadCrew],
       msDeadOps:[...msDeadOps],
+      destroyedPlanets:{...destroyedPlanets},
       // Location snapshot — so Continue returns to where you saved
       location:{
         mode: gameMode,                     // 'planet' | 'space'
@@ -217,6 +218,9 @@ function loadGame(){
     if(d.gameStats) Object.assign(gameStats,d.gameStats);
     msDeadCrew = new Set(d.msDeadCrew||[]);
     msDeadOps  = new Set(d.msDeadOps||[]);
+    destroyedPlanets = d.destroyedPlanets||{};
+    // Mark destroyed planets on the live planet objects too (saves don't store planets).
+    if(planets && planets.length){planets.forEach(p=>{if(destroyedPlanets[p.id])p.destroyed=true;});}
     _pendingSavedLocation = d.location || null;
     document.getElementById('score').textContent=score;
     return true;
@@ -341,7 +345,7 @@ let msDeadOps  = new Set(); // comms operator numeric IDs (0..N-1)
 let alarmPulse = 0;
 let cows = []; // wacky cows on planets
 let milkScore = 0; // milk collected in mothership
-let gameStats = { totalAbductions:0, buildingsDestroyed:0, militaryKilled:0, cowsCollected:0, planetsConquered:0, missionsCompleted:0, bossesDefeated:0, timePlayedFrames:0 };
+let gameStats = { totalAbductions:0, buildingsDestroyed:0, militaryKilled:0, cowsCollected:0, planetsConquered:0, planetsDestroyed:0, missionsCompleted:0, bossesDefeated:0, timePlayedFrames:0 };
 let leaderRelations = {}; // planetId -> number (-10 hostile to +10 ally)
 let shipPaint = JSON.parse(localStorage.getItem('sadabduction_shippaint')||'null') || { color:'#bbb', accent:'#888', trail:'#0f0', name:'default' };
 
@@ -972,6 +976,10 @@ let planets = [];
 let spaceWidth = 8000;
 let spaceHeight = 6000;
 let transition = { active:false, type:null, timer:0, duration:60, planet:null, zoom:1 };
+// Death Ray — planet-busting super-weapon. Unlocked from the start.
+// Phases: 'idle' | 'charge' (360 frames, can cancel until lock) | 'fire' (hold the beam) | 'aftermath'
+let deathRay = { active:false, phase:'idle', charge:0, chargeMax:360, target:null, locked:false, flash:0, shake:0, _yCool:0 };
+let destroyedPlanets = {}; // planetId -> true
 function easeInOut(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 function easeIn(t){return t*t*t;}
 function easeOut(t){return 1-Math.pow(1-t,3);}
@@ -8315,11 +8323,14 @@ function updateMothership(){
       cw2.nearScreen=best;
       mi.selectedItem = best>=0 ? best : mi.selectedItem;
     } else if(avail.length>0){
-      // In a transmission — A/D still cycles between leaders if multiple
-      if(keys['a']||keys['arrowleft']){if(!mi._lrCool){mi._lrCool=12;mi.selectedItem=Math.max(0,mi.selectedItem-1);mi.commsReading=null;}}
-      else if(keys['d']||keys['arrowright']){if(!mi._lrCool){mi._lrCool=12;mi.selectedItem=(mi.selectedItem+1)%avail.length;mi.commsReading=null;}}
-      else mi._lrCool=0;
-      if(mi._lrCool>0)mi._lrCool--;
+      // In a transmission — W/S or Up/Down navigates dialogue options
+      const reading = mi.commsReading;
+      if(reading && reading.options && reading.options.length){
+        if(keys['w']||keys['arrowup']){if(!mi._udCool){mi._udCool=10;reading.optionIdx=(reading.optionIdx-1+reading.options.length)%reading.options.length;}}
+        else if(keys['s']||keys['arrowdown']){if(!mi._udCool){mi._udCool=10;reading.optionIdx=(reading.optionIdx+1)%reading.options.length;}}
+        else mi._udCool=0;
+        if(mi._udCool>0)mi._udCool--;
+      }
     }
     if(mi.commsTalkAnim>0)mi.commsTalkAnim--;
   }
@@ -8334,8 +8345,10 @@ function updateMothership(){
     else{mi.screen='menu';mi.selectedItem=0;mi.zooAction=null;mi.zooDetailView=null;mi.zooInsideCell=null;}
   }
 
-  // E = select (in zoo and comms, SPACE is reserved for jumping, so only E interacts)
-  const _spaceSelectOK = mi.screen!=='zoo' && mi.screen!=='comms';
+  // E = select. In the zoo SPACE is reserved. In comms SPACE is reserved for jumping
+  // while walking between terminals, but is allowed as confirm inside a transmission.
+  const _inCommsReading = mi.screen==='comms' && mi.commsReading;
+  const _spaceSelectOK = mi.screen!=='zoo' && (mi.screen!=='comms' || _inCommsReading);
   const _mmSelectKey = _spaceSelectOK ? (keys['e']||keys[' ']) : keys['e'];
   if(_mmSelectKey&&!mi._eCool){
     mi._eCool=12;keys['e']=false; if(_spaceSelectOK) keys[' ']=false;
@@ -8383,33 +8396,75 @@ function updateMothership(){
     }else if(mi.screen==='comms'){
       const available=planetLeaders.filter(l=>unlockedPlanets.includes(l.planetId));
       if(available.length>0){
-        if(mi.commsReading&&mi.commsReading.pendingMission){
-          // Accept the mission
-          const m=mi.commsReading.pendingMission;
-          currentMission={type:m.type,desc:m.desc,target:m.target,progress:0,reward:m.reward,planetId:mi.commsReading.leader.planetId,fromLeader:true};
-          missionComplete=false;missionTimer=0;
-          mi.dialogText='Mission accepted: '+m.desc+' (Reward: '+m.reward+' pts)';mi.dialogTimer=180;
-          mi.commsReading=null;mi.commsTalkAnim=0;
-          playSound('collect');
-        }else if(mi.commsReading){
-          mi.commsReading=null;mi.commsTalkAnim=0;
+        if(mi.commsReading){
+          const reading=mi.commsReading;
+          // If options are gone, the NPC already responded — E closes the channel.
+          if(!reading.options || !reading.options.length){
+            mi.commsReading=null;mi.commsTalkAnim=0;
+          }else{
+            // Confirm the selected dialogue option → NPC responds in speech bubble
+            const opt=reading.options[reading.optionIdx||0]||{kind:'close',rel:0};
+            const leader=reading.leader;
+            if(opt.rel){
+              leaderRelations[leader.planetId]=Math.max(-10,Math.min(10,(leaderRelations[leader.planetId]||0)+opt.rel));
+            }
+            if(opt.kind==='accept' && reading.pendingMission){
+              const m=reading.pendingMission;
+              currentMission={type:m.type,desc:m.desc,target:m.target,progress:0,reward:m.reward,planetId:leader.planetId,fromLeader:true};
+              missionComplete=false;missionTimer=0;
+              playSound('collect');
+            }
+            // Leader's spoken reply (per option kind)
+            const replies={
+              accept:    ["Good. The deed must be done.","Excellent — go now, invader.","We shall see if your word holds."],
+              decline:   ["Coward. You will regret this.","A pity. The offer will not stand long.","Fine. We will find another way."],
+              threaten:  ["You dare threaten ME?","Bold words from a worm in the sky!","Your arrogance will be your end."],
+              diplomatic:["Your civility is noted.","Perhaps there is reason in you yet.","An unexpected grace from a raider."],
+              silent:    ["...so be it. Silence answers all.","Speak or leave — my patience thins.","Your silence is louder than any threat."],
+              taunt:     ["LAUGH while you can, vermin!","You mock gods you do not understand.","Your tongue will be the first thing we take."],
+              close:     ["Until next time, invader.","Go. We have nothing more to say.","The channel is closed."],
+            };
+            const pool=replies[opt.kind]||replies.close;
+            reading.msg={text:pool[Math.floor(Math.random()*pool.length)],type:'reply'};
+            reading.options=[];
+            reading.pendingMission=null;
+            mi.commsTalkAnim=140;
+          }
         }else if(mi.commsWalk && mi.commsWalk.nearScreen>=0){
           const leader=available[mi.commsWalk.nearScreen%available.length];
+          let reading;
           // If no active mission, chance to offer a demand/mission
           if(!currentMission&&leader.demands&&leader.demands.length>0&&Math.random()<0.5){
             const demand=leader.demands[Math.floor(Math.random()*leader.demands.length)];
-            mi.commsReading={leader,msg:{text:demand.text,type:'mission'},pendingMission:demand.mission};
+            reading={leader,msg:{text:demand.text,type:'mission'},pendingMission:demand.mission};
             mi.commsTalkAnim=200;
             mi.dialogText=leader.name+': '+demand.text;mi.dialogTimer=250;
           }else{
             const rel=leaderRelations[leader.planetId]||0;
-            // Filter messages by relationship
             const pool=rel>=5?leader.messages.filter(m=>m.type==='negotiate'||m.type==='plea'):
               rel<=-5?leader.messages.filter(m=>m.type==='threat'||m.type==='demand'||m.type==='taunt'):leader.messages;
             const msg=(pool.length?pool:leader.messages)[Math.floor(Math.random()*(pool.length||leader.messages.length))];
-            mi.commsReading={leader,msg};mi.commsTalkAnim=180;
+            reading={leader,msg};
+            mi.commsTalkAnim=180;
             mi.dialogText=leader.name+': '+msg.text;mi.dialogTimer=200;
           }
+          // Build dialogue options for the player
+          if(reading.pendingMission){
+            reading.options=[
+              {label:'Accept the mission',  kind:'accept',    rel:+1},
+              {label:'Decline politely',    kind:'decline',   rel:-1},
+              {label:'Threaten them',       kind:'threaten',  rel:-3},
+            ];
+          }else{
+            reading.options=[
+              {label:'Reply diplomatically',kind:'diplomatic',rel:+1},
+              {label:'Stay silent',         kind:'silent',    rel: 0},
+              {label:'Taunt them',          kind:'taunt',     rel:-2},
+              {label:'End transmission',    kind:'close',     rel: 0},
+            ];
+          }
+          reading.optionIdx=0;
+          mi.commsReading=reading;
         }
       }
     }else if(mi.screen==='zoo'){
@@ -8778,8 +8833,9 @@ function drawNPCPortrait(npc,px,py,size,t,talking){
 }
 
 // Leader portrait for comms screen (same size/style as NPC portraits)
-function drawLeaderPortrait(leader,px,py,size,t,talking){
+function drawLeaderPortrait(leader,px,py,size,t,talking,anger){
   const s=size,id=leader.portrait;
+  const _ang = anger||0; // 0 calm, 1 hostile, 2 enraged
   if(id==='human'){
     // Human president — suit, tie, human skin, neat hair
     // Shoulders/suit
@@ -8910,10 +8966,35 @@ function drawLeaderPortrait(leader,px,py,size,t,talking){
       ctx.fillStyle=`rgba(255,150,0,${0.3+mo*0.4})`;ctx.beginPath();ctx.ellipse(px,my,s*0.06,s*0.01+s*0.02*mo,0,0,Math.PI*2);ctx.fill();
     }else{ctx.strokeStyle='rgba(200,80,20,0.4)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(px-s*0.06,my);ctx.lineTo(px+s*0.06,my);ctx.stroke();}
   }
-  // Name and title
-  ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font=`bold ${s*0.07|0}px monospace`;ctx.textAlign='center';ctx.fillText(leader.name,px,py+s*0.8);
-  ctx.fillStyle='rgba(255,150,130,0.4)';ctx.font=`${s*0.055|0}px monospace`;
-  ctx.fillText(leader.planetId.toUpperCase()+' LEADER',px,py+s*0.88);
+  // --- Anger overlay (shared across all portrait types) ---
+  if(_ang>0){
+    const headY = py - s*0.3;
+    const pulse = _ang>=2 ? (0.6+Math.sin(t*7)*0.35) : (0.35+Math.sin(t*4)*0.2);
+    // Red face tint
+    ctx.save();
+    ctx.globalCompositeOperation='source-atop';
+    ctx.fillStyle=`rgba(255,${_ang>=2?20:80},${_ang>=2?10:40},${_ang>=2?0.22+pulse*0.12:0.12+pulse*0.06})`;
+    ctx.beginPath();ctx.ellipse(px,headY,s*0.3,s*0.34,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+    // Furrowed / angry eyebrows
+    const ey2 = headY + s*0.02;
+    ctx.strokeStyle=`rgba(${_ang>=2?255:220},${_ang>=2?40:80},${_ang>=2?20:40},${0.85+pulse*0.15})`;
+    ctx.lineWidth=_ang>=2?3.2:2.4;
+    ctx.beginPath();ctx.moveTo(px-s*0.16,ey2-s*0.11);ctx.lineTo(px-s*0.03,ey2-s*0.06);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(px+s*0.03,ey2-s*0.06);ctx.lineTo(px+s*0.16,ey2-s*0.11);ctx.stroke();
+    // Enraged: steam puffs from head
+    if(_ang>=2){
+      for(let i=0;i<2;i++){
+        const px2 = px + (i?1:-1)*s*0.22;
+        const py2 = headY - s*0.32 - ((t*40+i*30)%40)*0.8;
+        const al = 0.45 - ((t*40+i*30)%40)/80;
+        if(al>0){
+          ctx.fillStyle=`rgba(255,120,80,${al})`;
+          ctx.beginPath();ctx.arc(px2,py2,s*0.04,0,Math.PI*2);ctx.fill();
+        }
+      }
+    }
+  }
 }
 
 function drawMothershipOnFootHUD(mi, h){
@@ -10937,11 +11018,18 @@ function drawMothership(){
         if(sx<-120||sx>cw+120)return;
         const scrX=sx-scrW/2, scrY=deskY-scrH-80;  // a bit above the original spot, still clearly visible
         const near=(cwk.nearScreen===i);
-        // Wall halo glow behind screen (stronger when near)
-        const haloA = near ? 0.28 : 0.14;
-        const haloG = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, 4, scrX+scrW/2, scrY+scrH/2, scrW*1.1);
-        haloG.addColorStop(0, `rgba(255,120,100,${haloA})`);
-        haloG.addColorStop(1, 'rgba(255,120,100,0)');
+        // Per-leader anger state — each screen reflects how angry THAT leader is.
+        const _lrelW = leaderRelations[leader.planetId]||0;
+        const _enragedW = _lrelW <= -5;
+        const _hostileW = _lrelW < 0 && !_enragedW;
+        const _angLvlW = _enragedW ? 2 : _hostileW ? 1 : 0;
+        const _pulseW = _enragedW ? (0.55+Math.sin(t*6+i)*0.35) : _hostileW ? (0.28+Math.sin(t*4+i)*0.18) : 0;
+        // Wall halo glow behind screen — red-hot when the leader is enraged, duller when calm.
+        const haloA = (near ? 0.28 : 0.14) + _pulseW*0.25;
+        const haloR = _enragedW ? 255 : 255, haloGc = _enragedW ? 40 : _hostileW ? 90 : 120, haloBc = _enragedW ? 20 : _hostileW ? 70 : 100;
+        const haloG = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, 4, scrX+scrW/2, scrY+scrH/2, scrW*(1.1+_pulseW*0.2));
+        haloG.addColorStop(0, `rgba(${haloR},${haloGc},${haloBc},${haloA})`);
+        haloG.addColorStop(1, `rgba(${haloR},${haloGc},${haloBc},0)`);
         ctx.fillStyle=haloG;
         ctx.fillRect(scrX-scrW/2, scrY-scrH/2, scrW*2, scrH*2);
         // Wall-mount bracket arms (short, anchored to wall plate just above the screen)
@@ -10957,8 +11045,14 @@ function drawMothership(){
         ctx.fillStyle='#1a1214';ctx.fillRect(scrX-8,scrY-8,scrW+16,scrH+16);
         // Inner dark bezel
         ctx.fillStyle='#0a0606'; ctx.fillRect(scrX-4,scrY-4,scrW+8,scrH+8);
-        ctx.strokeStyle=near?`rgba(255,140,120,${0.7+Math.sin(t*4)*0.25})`:'rgba(180,80,60,0.3)';
-        ctx.lineWidth=near?2.2:1.2;
+        // Bezel stroke — red-hot when enraged, orange when hostile.
+        if(_angLvlW>0){
+          ctx.strokeStyle=`rgba(255,${_enragedW?30:120},${_enragedW?20:80},${(near?0.8:0.5)+_pulseW*0.35})`;
+          ctx.lineWidth=near?(_enragedW?2.8:2.4):(_enragedW?1.8:1.4);
+        }else{
+          ctx.strokeStyle=near?`rgba(255,140,120,${0.7+Math.sin(t*4)*0.25})`:'rgba(180,80,60,0.3)';
+          ctx.lineWidth=near?2.2:1.2;
+        }
         ctx.strokeRect(scrX-8,scrY-8,scrW+16,scrH+16);
         // Status LEDs along the top of the bezel
         for(let li=0; li<4; li++){
@@ -10968,15 +11062,19 @@ function drawMothership(){
           ctx.fillStyle=col;
           ctx.beginPath(); ctx.arc(lx, scrY-5, 1.1, 0, Math.PI*2); ctx.fill();
         }
-        // Screen background
-        ctx.fillStyle='rgba(18,4,4,0.95)';ctx.fillRect(scrX,scrY,scrW,scrH);
-        // Static scan lines
+        // Screen background — deeper red tint when enraged
+        ctx.fillStyle = _enragedW ? 'rgba(40,6,4,0.95)' : 'rgba(18,4,4,0.95)';
+        ctx.fillRect(scrX,scrY,scrW,scrH);
+        // Static scan lines — hotter when leader is angry
+        const _scanW = _enragedW ? 0.06 : _hostileW ? 0.035 : 0.02;
         for(let ssy=scrY;ssy<scrY+scrH;ssy+=3){
-          ctx.strokeStyle=`rgba(255,100,100,${0.02+Math.sin(t*6+ssy*0.3)*0.015})`;ctx.lineWidth=1;
+          ctx.strokeStyle=`rgba(255,${_enragedW?40:100},${_enragedW?30:100},${_scanW+Math.sin(t*6+ssy*0.3)*0.015})`;ctx.lineWidth=1;
           ctx.beginPath();ctx.moveTo(scrX,ssy);ctx.lineTo(scrX+scrW,ssy);ctx.stroke();
         }
-        // Draw a small leader portrait on the screen
-        drawLeaderPortrait(leader, scrX+scrW/2, scrY+scrH*0.55, scrH*0.75, t, near?mi.commsTalkAnim:0);
+        // Draw a small leader portrait on the screen, with anger overlay when hostile/enraged
+        let _pShx=0,_pShy=0;
+        if(_enragedW){_pShx=(Math.random()-0.5)*1.4; _pShy=(Math.random()-0.5)*1.4;}
+        drawLeaderPortrait(leader, scrX+scrW/2+_pShx, scrY+scrH*0.55+_pShy, scrH*0.75, t, near?mi.commsTalkAnim:0, _angLvlW);
         // Vignette corners inside screen (TV feel)
         const vg = ctx.createRadialGradient(scrX+scrW/2, scrY+scrH/2, scrH*0.3, scrX+scrW/2, scrY+scrH/2, scrW*0.6);
         vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
@@ -11001,6 +11099,20 @@ function drawMothership(){
         ctx.beginPath();ctx.arc(scrX+scrW-8,scrY+8,3,0,Math.PI*2);ctx.fill();
         ctx.strokeStyle=`rgba(255,80,80,${blink*0.6})`; ctx.lineWidth=1;
         ctx.beginPath();ctx.arc(scrX+scrW-8,scrY+8,5,0,Math.PI*2);ctx.stroke();
+        // Anger badge on the screen (ENRAGED / HOSTILE)
+        if(_angLvlW>0){
+          const bTxt = _enragedW ? 'ENRAGED' : 'HOSTILE';
+          const bCol = _enragedW ? `rgba(255,${40+Math.sin(t*8+i)*30},30,${0.9+_pulseW*0.1})` : `rgba(255,140,60,0.85)`;
+          ctx.save();
+          ctx.font='bold 8px monospace';
+          const bw3 = ctx.measureText(bTxt).width + 10;
+          const bx3 = scrX+4, by3 = scrY+4;
+          ctx.fillStyle='rgba(30,4,2,0.92)';ctx.fillRect(bx3,by3,bw3,11);
+          ctx.strokeStyle=bCol;ctx.lineWidth=0.8;ctx.strokeRect(bx3,by3,bw3,11);
+          ctx.fillStyle=bCol;ctx.textAlign='left';
+          ctx.fillText(bTxt, bx3+5, by3+8);
+          ctx.restore();
+        }
         // Interact prompt when near — now points at the HIGHER screen
         if(near){
           ctx.fillStyle=`rgba(255,220,180,${0.7+Math.sin(t*4)*0.3})`;ctx.font='bold 11px monospace';
@@ -11138,18 +11250,38 @@ function drawMothership(){
       // === BIG SCREEN / TRANSMISSION VIEW ===
       const selLeader=mi.commsReading.leader;
       const talking=mi.commsTalkAnim>0?mi.commsTalkAnim:0;
+      const _lrel = leaderRelations[selLeader.planetId]||0;
+      const _enraged = _lrel <= -5;
+      const _hostile = _lrel < 0 && !_enraged;
+      const _angryPulse = _enraged ? (0.55+Math.sin(t*6)*0.35) : _hostile ? (0.28+Math.sin(t*4)*0.18) : 0;
       // Dim room behind
       ctx.fillStyle='rgba(8,2,4,0.85)';ctx.fillRect(0,40,cw,ch-40);
+      // Red rage tint on the whole comms room when enraged
+      if(_enraged){
+        ctx.fillStyle=`rgba(180,20,10,${0.08+_angryPulse*0.08})`;ctx.fillRect(0,40,cw,ch-40);
+      }
       // Big screen frame
       const bsW=Math.min(cw*0.7,700), bsH=Math.min(ch*0.55,360);
       const bsX=cw/2-bsW/2, bsY=ch*0.12;
       ctx.fillStyle='#1a1214';ctx.fillRect(bsX-10,bsY-10,bsW+20,bsH+20);
-      ctx.strokeStyle=`rgba(255,120,100,${0.5+Math.sin(t*3)*0.2})`;ctx.lineWidth=2;
-      ctx.strokeRect(bsX-10,bsY-10,bsW+20,bsH+20);
+      // Angry screen border glow
+      if(_angryPulse>0){
+        ctx.save();
+        ctx.shadowColor=`rgba(255,${_enraged?40:120},${_enraged?20:80},${0.5+_angryPulse*0.4})`;
+        ctx.shadowBlur=_enraged?28:14;
+        ctx.strokeStyle=`rgba(255,${_enraged?30:110},${_enraged?20:80},${0.65+_angryPulse*0.35})`;
+        ctx.lineWidth=_enraged?3:2.2;
+        ctx.strokeRect(bsX-10,bsY-10,bsW+20,bsH+20);
+        ctx.restore();
+      }else{
+        ctx.strokeStyle=`rgba(255,120,100,${0.5+Math.sin(t*3)*0.2})`;ctx.lineWidth=2;
+        ctx.strokeRect(bsX-10,bsY-10,bsW+20,bsH+20);
+      }
       ctx.fillStyle='rgba(18,4,4,0.98)';ctx.fillRect(bsX,bsY,bsW,bsH);
-      // Static scan lines
+      // Static scan lines (more aggressive red when enraged)
+      const _scanBase = _enraged ? 0.08 : _hostile ? 0.05 : 0.03;
       for(let ssy=bsY;ssy<bsY+bsH;ssy+=4){
-        ctx.strokeStyle=`rgba(255,100,100,${0.03+Math.sin(t*6+ssy*0.2)*0.02})`;ctx.lineWidth=1;
+        ctx.strokeStyle=`rgba(255,${_enraged?40:100},${_enraged?30:100},${_scanBase+Math.sin(t*6+ssy*0.2)*0.02})`;ctx.lineWidth=1;
         ctx.beginPath();ctx.moveTo(bsX,ssy);ctx.lineTo(bsX+bsW,ssy);ctx.stroke();
       }
       // Planet name above the big screen
@@ -11157,8 +11289,10 @@ function drawMothership(){
       const planetName=((pDefBig&&pDefBig.name)||selLeader.planetId).toUpperCase();
       ctx.fillStyle='rgba(255,220,180,0.95)';ctx.font='bold 16px monospace';ctx.textAlign='center';
       ctx.fillText(planetName,cw/2,bsY-18);
-      // Leader portrait
-      drawLeaderPortrait(selLeader, cw/2, bsY+bsH*0.55, bsH*0.8, t, talking);
+      // Leader portrait — shake a bit when enraged
+      let _shx=0,_shy=0;
+      if(_enraged){_shx=(Math.random()-0.5)*2.2;_shy=(Math.random()-0.5)*2.2;}
+      drawLeaderPortrait(selLeader, cw/2+_shx, bsY+bsH*0.55+_shy, bsH*0.8, t, talking, _enraged?2:_hostile?1:0);
       // Recording dot
       const blink=Math.sin(t*5)>0?0.8:0.25;
       ctx.fillStyle=`rgba(255,50,50,${blink})`;ctx.beginPath();ctx.arc(bsX+bsW-18,bsY+18,5,0,Math.PI*2);ctx.fill();
@@ -11168,32 +11302,70 @@ function drawMothership(){
       ctx.fillStyle='rgba(20,5,5,0.85)';ctx.fillRect(bsX+12,bsY+bsH-28,140,22);
       ctx.fillStyle='rgba(255,200,180,0.9)';ctx.font='bold 11px monospace';ctx.textAlign='left';
       ctx.fillText(selLeader.name,bsX+20,bsY+bsH-13);
+      // Anger status badge (top-left of big screen)
+      if(_enraged || _hostile){
+        const badgeTxt = _enraged ? 'ENRAGED' : 'HOSTILE';
+        const bcol = _enraged ? `rgba(255,${40+Math.sin(t*8)*30},30,${0.85+_angryPulse*0.15})` : `rgba(255,140,60,0.85)`;
+        ctx.save();
+        ctx.font='bold 13px monospace';
+        const bw2 = ctx.measureText(badgeTxt).width + 22;
+        const bxA = bsX+12, byA = bsY+12;
+        ctx.fillStyle='rgba(30,4,2,0.9)';roundRect(ctx,bxA,byA,bw2,22,4);ctx.fill();
+        ctx.strokeStyle=bcol;ctx.lineWidth=1.5;roundRect(ctx,bxA,byA,bw2,22,4);ctx.stroke();
+        // Pulse dot
+        ctx.fillStyle=bcol;ctx.beginPath();ctx.arc(bxA+10,byA+11,3.5,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=bcol;ctx.textAlign='left';
+        ctx.fillText(badgeTxt, bxA+18, byA+15);
+        ctx.restore();
+      }
 
       // Speech bubble below big screen
-      const txt=mi.commsReading.msg.text;ctx.font='11px monospace';
-      const maxBW=Math.min(500,cw*0.6);
+      const txt=mi.commsReading.msg.text;ctx.font='14px monospace';
+      const maxBW=Math.min(620,cw*0.7);
       const words=txt.split(' ');let lines2=[],ln='';
-      words.forEach(w=>{const test=ln?ln+' '+w:w;if(ctx.measureText(test).width>maxBW-24){lines2.push(ln);ln=w;}else ln=test;});
+      words.forEach(w=>{const test=ln?ln+' '+w:w;if(ctx.measureText(test).width>maxBW-28){lines2.push(ln);ln=w;}else ln=test;});
       if(ln)lines2.push(ln);
-      const bh=lines2.length*16+14,bw=maxBW,bx=cw/2-bw/2,by=bsY+bsH+24;
+      const bh=lines2.length*20+18,bw=maxBW,bx=cw/2-bw/2,by=bsY+bsH+24;
       const ba=Math.min(1,(180-mi.commsTalkAnim+30)/30);ctx.globalAlpha=Math.min(1,ba);
-      ctx.fillStyle='rgba(20,5,0,0.92)';roundRect(ctx,bx,by,bw,bh,8);ctx.fill();
-      ctx.strokeStyle='rgba(255,100,80,0.35)';ctx.lineWidth=1;roundRect(ctx,bx,by,bw,bh,8);ctx.stroke();
-      ctx.fillStyle='rgba(255,200,180,0.88)';ctx.font='11px monospace';ctx.textAlign='center';
-      lines2.forEach((l,li)=>ctx.fillText(l,cw/2,by+14+li*16));
-      if(mi.commsReading.pendingMission){
-        const m=mi.commsReading.pendingMission;
-        const ay2=by+bh+8;
-        ctx.fillStyle='rgba(0,20,0,0.9)';roundRect(ctx,cw/2-180,ay2,360,36,6);ctx.fill();
-        ctx.strokeStyle=`rgba(0,255,100,${0.4+Math.sin(t*4)*0.2})`;ctx.lineWidth=1;roundRect(ctx,cw/2-180,ay2,360,36,6);ctx.stroke();
-        ctx.fillStyle='#0f0';ctx.font='bold 11px monospace';ctx.textAlign='center';
-        ctx.fillText(`[E] Accept: ${m.desc} (+${m.reward}pts)`,cw/2,ay2+22);
-      }
+      ctx.fillStyle='rgba(20,5,0,0.92)';roundRect(ctx,bx,by,bw,bh,10);ctx.fill();
+      ctx.strokeStyle='rgba(255,100,80,0.35)';ctx.lineWidth=1;roundRect(ctx,bx,by,bw,bh,10);ctx.stroke();
+      ctx.fillStyle='rgba(255,220,200,0.95)';ctx.font='14px monospace';ctx.textAlign='center';
+      lines2.forEach((l,li)=>ctx.fillText(l,cw/2,by+18+li*20));
       ctx.globalAlpha=1;
 
-      ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='9px monospace';ctx.textAlign='center';
-      const commsHint=mi.commsReading.pendingMission?'E: Accept mission   |   ESC: Decline':'E: Reply / close   |   ESC: Back';
-      ctx.fillText(commsHint,cw/2,ch-12);
+      // --- DIALOGUE OPTIONS (vertical list under the speech bubble) ---
+      const opts = mi.commsReading.options || [];
+      if(opts.length){
+        const rowH = 32, rowW = Math.min(560, cw*0.68);
+        const listX = cw/2 - rowW/2;
+        let listY = by + bh + 16;
+        const selIdx = mi.commsReading.optionIdx || 0;
+        // Pending-mission reward tag
+        const pendM = mi.commsReading.pendingMission;
+        opts.forEach((op, i)=>{
+          const sel = i===selIdx;
+          // Row background
+          ctx.fillStyle = sel ? 'rgba(46,18,16,0.95)' : 'rgba(20,8,6,0.78)';
+          roundRect(ctx, listX, listY, rowW, rowH-5, 6); ctx.fill();
+          ctx.strokeStyle = sel ? `rgba(255,200,160,${0.75+Math.sin(t*4)*0.2})` : 'rgba(255,140,120,0.25)';
+          ctx.lineWidth = sel ? 1.8 : 1;
+          roundRect(ctx, listX, listY, rowW, rowH-5, 6); ctx.stroke();
+          // Selection caret
+          ctx.fillStyle = sel ? 'rgba(255,220,180,0.98)' : 'rgba(255,180,150,0.4)';
+          ctx.font = 'bold 14px monospace'; ctx.textAlign = 'left';
+          ctx.fillText(sel?'\u25B6':' ', listX+12, listY+19);
+          // Label
+          ctx.fillStyle = sel ? 'rgba(255,235,210,1)' : 'rgba(230,190,170,0.8)';
+          ctx.font = (sel?'bold ':'')+'13px monospace';
+          let lbl = op.label;
+          if(op.kind==='accept' && pendM) lbl += '  \u2014  +'+pendM.reward+' pts';
+          ctx.fillText(lbl, listX+30, listY+19);
+          listY += rowH;
+        });
+      }
+
+      ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='11px monospace';ctx.textAlign='center';
+      ctx.fillText('W/S or \u2191\u2193: Select   |   E / SPACE: Confirm   |   ESC: Close',cw/2,ch-14);
     }
 
   // ================================================================
@@ -11324,6 +11496,7 @@ function initWorld() {
   wantedLevel=0;shipHealth=100;
   boss=null;bossIntro=null;bossKillTimer=0;bossLockdown=false;bossDefeated={};bossDefeatOverlay=null;
   genocideCount=0;respawnTimer=0;initialPopulation=30;
+  destroyedPlanets={}; deathRay={active:false,phase:'idle',charge:0,chargeMax:360,target:null,locked:false,flash:0,shake:0,_yCool:0};
   initPlanetProgress();
   initSpacePlanets(); generateDeepStars();
   loadPlanet(planets[0]);
@@ -11619,8 +11792,11 @@ function registerKill(victim){
   killCombo++;
   killComboTimer=60; // 1s window for combo
   killFlashT=8;
+  // Tiny hit-pause — scales a little with combo (cap 4 frames so it never feels laggy)
+  triggerHitStop(Math.min(4, 2 + Math.floor(killCombo/3)));
   if(killCombo>=5 && slowmoTimer<=0){
     slowmoTimer=22;
+    triggerHitStop(6); // extra chunky freeze when slow-mo kicks in
   }
   // Witness panic propagation — people who see the kill go berserk
   if(victim && victim.bodyX!=null){
@@ -12952,6 +13128,37 @@ function updateAlienWeapons(){
       m.health-=8; m.stunTimer=Math.max(m.stunTimer||0,20);
       if(m.health<=0)m.alive=false;
       for(let p=0;p<3;p++)particles.push({x:m.x,y:m.y,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:16,color:'#c22',size:1+Math.random()*2});
+    }
+    // Animals (cows, sheep, monkeys, tigers, sun-creatures, dinosaurs, etc.)
+    for(let ci=0;ci<cows.length;ci++){
+      const c=cows[ci];
+      if(c.collected) continue;
+      const dx=c.x-s.x;
+      if(dx!==0 && Math.sign(dx)!==s.dir) continue;
+      if(Math.abs(dx)>range) continue;
+      // Tolerate tall dinos — base their vertical extent on size so T-Rex etc. are reachable.
+      const vTol = width + 8 + (c.size||c.scale||1)*18;
+      if(Math.abs(c.bodyY-s.y)>vTol) continue;
+      const csz=c.size||1;
+      const tint=c.color||'#c33';
+      const dark=c.spots||'#7a1818';
+      c.collected=true;
+      score+=1;
+      // Blood + chunks
+      for(let k=0;k<14;k++) particles.push({x:c.x,y:c.bodyY,vx:s.dir*(2+Math.random()*3)+(Math.random()-0.5)*2,vy:-2-Math.random()*3,life:24+Math.random()*12,color:(Math.random()<0.5?tint:dark),size:2+Math.random()*2.5});
+      for(let k=0;k<8;k++) particles.push({x:c.x,y:c.bodyY-6,vx:s.dir*(1+Math.random()*2),vy:-1-Math.random()*2,life:28,color:'#c00020',size:1.5+Math.random()*2,gravity:0.2});
+      // Limb-like debris
+      const gy = (typeof GROUND_LEVEL !== 'undefined') ? GROUND_LEVEL : c.bodyY+30;
+      for(let k=0;k<3+Math.floor(Math.random()*2);k++){
+        gibs.push({x:c.x+(Math.random()-0.5)*6,y:c.bodyY-8+(Math.random()-0.5)*8,
+          vx:s.dir*(3+Math.random()*4),vy:-3-Math.random()*3,
+          rot:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.35,
+          size:3+Math.random()*1.5*csz,life:900,kind:['arm','leg','head'][Math.floor(Math.random()*3)],
+          color:tint,bloodC:'#7a0a0a',groundY:gy,onGround:false});
+      }
+      triggerShake(Math.min(3.5, 2 + csz*0.4));
+      planetTerror=Math.min(planetTerror+0.15,10);
+      try { if(!window._muted){ vehicleSplatSfx.currentTime=0; vehicleSplatSfx.play().catch(()=>{}); } } catch(e){}
     }
     // Blocks
     for(let bi=0;bi<blocks.length;bi++){
@@ -15257,8 +15464,9 @@ function updateAlienOnFoot(){
   // On-foot alien weapons (stun waves, plasma, gravity wells, parasites)
   updateAlienWeapons();
 
-  // Inhabitants react to alien on foot
-  humans.forEach(h=>{
+  // Inhabitants react to alien on foot — unless cloaked (they can't see you)
+  const _alienInvisible = alienCloak.active && !alien.drivingVehicle;
+  if(!_alienInvisible) humans.forEach(h=>{
     if(h.collected||h.ragdoll)return;
     const d=dist(alien.x,alien.y,h.bodyX,h.bodyY);
     if(d<200){
@@ -15657,6 +15865,11 @@ function updateSpace(){
   ship.x=Math.max(-10000,Math.min(spaceWidth+12000,ship.x));
   ship.y=Math.max(-spaceHeight-4000,Math.min(500,ship.y));
   camera.x=ship.x-canvas.width/2;camera.y=ship.y-canvas.height/2;
+  // Death-ray screen shake
+  if(deathRay.active && deathRay.shake>0){
+    camera.x += (Math.random()-0.5)*deathRay.shake*2;
+    camera.y += (Math.random()-0.5)*deathRay.shake*2;
+  }
 
   // Sun discovery: if player gets within range, discover it
   planets.forEach(p=>{
@@ -15669,10 +15882,78 @@ function updateSpace(){
     }
   });
 
+  // --- DEATH RAY (space-mode super-weapon) ---
+  if(deathRay._yCool>0) deathRay._yCool--;
+  if(!deathRay.active && !transition.active && keys['y'] && !deathRay._yCool){
+    // Find nearest valid target: unlocked, not the Sun, not the wormhole, not already destroyed.
+    let best=null, bestD=Infinity;
+    planets.forEach(p=>{
+      if(p.isSun||p.isWormhole||p.destroyed) return;
+      if(!unlockedPlanets.includes(p.id)) return;
+      const d=dist(ship.x,ship.y,p.spaceX,p.spaceY);
+      if(d<3200 && d<bestD){bestD=d; best=p;}
+    });
+    if(best){
+      deathRay.active=true; deathRay.phase='charge'; deathRay.charge=0;
+      deathRay.target=best; deathRay.locked=false; deathRay.flash=0; deathRay.shake=0;
+      deathRay._yCool=30;
+      showMessage('DEATH RAY CHARGING — TARGET: '+(best.name||best.id).toUpperCase());
+      playSound('beam');
+    }else{
+      deathRay._yCool=20;
+    }
+    keys['y']=false;
+  }
+  if(deathRay.active){
+    const dr=deathRay;
+    if(dr.phase==='charge'){
+      dr.charge++;
+      const prog=dr.charge/dr.chargeMax;
+      if(prog>0.82) dr.locked=true;
+      // Drift ship toward orbit position above the target during charge
+      if(dr.target){
+        const tx=dr.target.spaceX, ty=dr.target.spaceY - dr.target.radius - 280;
+        const pull = 0.015 + prog*0.08;
+        ship.x += (tx-ship.x)*pull;
+        ship.y += (ty-ship.y)*pull;
+        if(dr.locked){ship.vx*=0.85; ship.vy*=0.85;}
+      }
+      dr.shake = 0.4 + prog*6;
+      if(prog>=1){
+        dr.phase='fire'; dr.flash=24; dr.charge=0;
+        // Impact: destroy the planet
+        if(dr.target){
+          dr.target.destroyed=true;
+          destroyedPlanets[dr.target.id]=true;
+          // Big score bump — you are now THAT alien
+          score += 500; document.getElementById('score').textContent=score;
+          gameStats.planetsDestroyed = (gameStats.planetsDestroyed||0)+1;
+          // If the player was on that planet (shouldn't be — death ray is space-only — but
+          // be safe), bail them out.
+          if(currentPlanet && currentPlanet.id===dr.target.id){ leavePlanet(); }
+          showMessage('PLANET '+(dr.target.name||dr.target.id).toUpperCase()+' DESTROYED');
+          playSound('explosion');
+          triggerHitStop(14); // big chunky freeze as the planet shatters
+          saveGame();
+        }
+      }
+    }else if(dr.phase==='fire'){
+      dr.charge++;
+      dr.shake = 10 - dr.charge*0.2;
+      if(dr.flash>0) dr.flash--;
+      if(dr.charge>90){dr.phase='aftermath'; dr.charge=0;}
+    }else if(dr.phase==='aftermath'){
+      dr.charge++;
+      dr.shake *= 0.92;
+      if(dr.charge>60){dr.active=false; dr.phase='idle'; dr.target=null;}
+    }
+  }
+
   // Auto-land: check if ship enters a planet
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // can't land on undiscovered sun
     if(p.isWormhole) return; // wormhole has special teleport behavior, not landing
+    if(p.destroyed) return; // can't land on a planet you just blew to dust
     const d=dist(ship.x,ship.y,p.spaceX,p.spaceY);
     if(d<p.radius*0.6&&!transition.active){
       if(!unlockedPlanets.includes(p.id)){
@@ -15811,6 +16092,48 @@ function drawSpace(){
   planets.forEach(p=>{
     if(p.isSun && !p.discovered) return; // hidden until discovered
     const sx=p.spaceX,sy=p.spaceY;
+    // Destroyed planet: render as a rotating debris cloud instead of the normal body.
+    if(p.destroyed){
+      if(!p._debrisField){
+        const chunks=[];
+        const N = 140;
+        for(let i=0;i<N;i++){
+          chunks.push({
+            r: p.radius*(0.15+Math.random()*1.2),
+            a: Math.random()*Math.PI*2,
+            speed:(0.0005+Math.random()*0.0015)*(Math.random()<0.5?1:-1),
+            size:0.6+Math.random()*3.2,
+            tone:80+Math.random()*90,
+            flat:0.25+Math.random()*0.55,
+          });
+        }
+        p._debrisField = chunks;
+      }
+      // Faint glow of molten core where the planet used to be
+      const cg=ctx.createRadialGradient(sx,sy,0,sx,sy,p.radius*0.6);
+      cg.addColorStop(0,`rgba(255,110,50,${0.25+Math.sin(frameT*1.5+p.spaceX*0.001)*0.05})`);
+      cg.addColorStop(1,'transparent');
+      ctx.fillStyle=cg;ctx.beginPath();ctx.arc(sx,sy,p.radius*0.7,0,Math.PI*2);ctx.fill();
+      // Debris chunks
+      for(const ch of p._debrisField){
+        ch.a += ch.speed;
+        const dx = sx + Math.cos(ch.a)*ch.r;
+        const dy = sy + Math.sin(ch.a)*ch.r*ch.flat;
+        ctx.fillStyle=`rgba(${ch.tone|0},${(ch.tone-20)|0},${(ch.tone-40)|0},0.85)`;
+        ctx.beginPath(); ctx.arc(dx,dy,ch.size,0,Math.PI*2); ctx.fill();
+      }
+      // Label — mark it as DESTROYED
+      const dLbl=dist(ship.x,ship.y,sx,sy);
+      if(dLbl<p.radius+900){
+        const la=Math.min(1,(p.radius+900-dLbl)/500);
+        ctx.globalAlpha=la;
+        ctx.fillStyle='rgba(255,90,70,0.9)';
+        ctx.font='bold 12px monospace';ctx.textAlign='center';
+        ctx.fillText((p.name||p.id).toUpperCase()+' \u2014 DESTROYED', sx, sy+p.radius+24);
+        ctx.globalAlpha=1;
+      }
+      return; // skip the normal planet body/bands/lock logic
+    }
     // Wormhole: render as swirling anomaly instead of normal planet body
     if(p.isWormhole){
       const t2=frameT;
@@ -16054,6 +16377,66 @@ function drawSpace(){
     ctx.globalAlpha=1;
   }
 
+  // --- DEATH RAY beam & charge rings (world space) ---
+  if(deathRay.active && deathRay.target){
+    const tg = deathRay.target;
+    const tx = tg.spaceX, ty = tg.spaceY;
+    const tF = frameT;
+    if(deathRay.phase==='charge'){
+      const prog = deathRay.charge / deathRay.chargeMax;
+      // Atmosphere tints red as charge climbs
+      const atmG=ctx.createRadialGradient(tx,ty,tg.radius*0.9,tx,ty,tg.radius*2.2);
+      atmG.addColorStop(0,`rgba(255,60,30,${0.15+prog*0.3})`);
+      atmG.addColorStop(1,'transparent');
+      ctx.fillStyle=atmG;ctx.beginPath();ctx.arc(tx,ty,tg.radius*2.2,0,Math.PI*2);ctx.fill();
+      // Converging concentric rings around the target (4 rings closing in over time)
+      for(let i=0;i<4;i++){
+        const phase = (prog*4 + i*0.25) % 1;
+        const r = tg.radius*(2.4 - phase*1.8);
+        const a = 0.25 + prog*0.5 - phase*0.35;
+        if(a<=0) continue;
+        ctx.strokeStyle=`rgba(255,${80-phase*40},60,${a})`;
+        ctx.lineWidth=2+prog*3;
+        ctx.beginPath();ctx.arc(tx,ty,r,0,Math.PI*2);ctx.stroke();
+      }
+      // Thin prelim beam pulsing from ship to target in last third of charge
+      if(prog>0.55){
+        const beamA = Math.min(1,(prog-0.55)/0.45);
+        ctx.strokeStyle=`rgba(255,${200-beamA*150},${180-beamA*160},${0.25+beamA*0.45})`;
+        ctx.lineWidth = 2 + beamA*4;
+        ctx.beginPath();ctx.moveTo(ship.x,ship.y+4);ctx.lineTo(tx,ty);ctx.stroke();
+      }
+      // Ship underside charge glow
+      const uG=ctx.createRadialGradient(ship.x,ship.y+6,0,ship.x,ship.y+6,30+prog*40);
+      uG.addColorStop(0,`rgba(255,220,180,${0.5+prog*0.4})`);
+      uG.addColorStop(0.5,`rgba(255,100,60,${0.3+prog*0.3})`);
+      uG.addColorStop(1,'transparent');
+      ctx.fillStyle=uG;ctx.beginPath();ctx.arc(ship.x,ship.y+6,30+prog*40,0,Math.PI*2);ctx.fill();
+    }else if(deathRay.phase==='fire'){
+      // Huge beam + impact flash
+      const thick = 28 + Math.sin(tF*30)*6;
+      const coreThick = 12 + Math.sin(tF*40)*3;
+      // Outer glow
+      ctx.strokeStyle=`rgba(255,120,80,0.55)`;
+      ctx.lineWidth = thick*1.6;
+      ctx.beginPath();ctx.moveTo(ship.x,ship.y);ctx.lineTo(tx,ty);ctx.stroke();
+      // Mid
+      ctx.strokeStyle=`rgba(255,200,140,0.85)`;
+      ctx.lineWidth = thick;
+      ctx.beginPath();ctx.moveTo(ship.x,ship.y);ctx.lineTo(tx,ty);ctx.stroke();
+      // Core white
+      ctx.strokeStyle=`rgba(255,255,255,1)`;
+      ctx.lineWidth = coreThick;
+      ctx.beginPath();ctx.moveTo(ship.x,ship.y);ctx.lineTo(tx,ty);ctx.stroke();
+      // Impact explosion
+      const imR = tg.radius*(1.6+Math.random()*0.2);
+      const ig=ctx.createRadialGradient(tx,ty,0,tx,ty,imR);
+      ig.addColorStop(0,'rgba(255,255,255,0.95)');
+      ig.addColorStop(0.4,'rgba(255,180,80,0.7)');
+      ig.addColorStop(1,'transparent');
+      ctx.fillStyle=ig;ctx.beginPath();ctx.arc(tx,ty,imR,0,Math.PI*2);ctx.fill();
+    }
+  }
   drawShip();
   particles.forEach(pt=>{const sx=pt.x-camera.x,sy=pt.y-camera.y;if(sx<-20||sx>canvas.width+20||sy<-20||sy>canvas.height+20)return;ctx.globalAlpha=pt.life/30;ctx.fillStyle=pt.color;if(pt.size<3){ctx.fillRect(pt.x-pt.size/2,pt.y-pt.size/2,pt.size,pt.size);}else{ctx.beginPath();ctx.arc(pt.x,pt.y,pt.size,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;});
   ctx.restore();
@@ -16064,6 +16447,11 @@ function drawSpace(){
     ctx.fillText(`${tr('hud.specimens')}: ${mothership.totalCollected} | ${tr('hud.score')}: ${score}`,15,canvas.height-15);
     if(upgrades.beamWidth||upgrades.speed||upgrades.flame){
       ctx.fillText(`${tr('hud.upgrades')}: ${tr('hud.beam')} ${upgrades.beamWidth} | ${tr('hud.speed')} ${upgrades.speed} | ${tr('hud.flame')} ${upgrades.flame}`,15,canvas.height-30);
+    }
+    // Death Ray hint — the button is always available, godhood from the start.
+    if(!deathRay.active){
+      ctx.fillStyle='rgba(255,120,80,0.6)';ctx.font='10px monospace';ctx.textAlign='right';
+      ctx.fillText('Y: DEATH RAY',canvas.width-15,canvas.height-15);
     }
   }
 
@@ -16129,6 +16517,56 @@ function drawSpace(){
   }
 
   if(!transition.active)drawMinimap();
+
+  // --- DEATH RAY screen-space overlay (flash + vignette + charge HUD) ---
+  if(deathRay.active){
+    const cw=canvas.width, ch=canvas.height;
+    if(deathRay.phase==='charge'){
+      const prog = deathRay.charge / deathRay.chargeMax;
+      // Red vignette closing in as charge completes
+      const vg = ctx.createRadialGradient(cw/2,ch/2,Math.min(cw,ch)*0.25,cw/2,ch/2,Math.max(cw,ch)*0.75);
+      vg.addColorStop(0,'rgba(0,0,0,0)');
+      vg.addColorStop(1,`rgba(${120+prog*80},${10},${10},${0.3+prog*0.5})`);
+      ctx.fillStyle=vg; ctx.fillRect(0,0,cw,ch);
+      // Charge bar
+      const bw=340, bh=14, bx=cw/2-bw/2, by=ch-56;
+      ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(bx-2,by-2,bw+4,bh+4);
+      ctx.fillStyle='rgba(30,8,8,0.85)';ctx.fillRect(bx,by,bw,bh);
+      const fillW = bw*prog;
+      const bg=ctx.createLinearGradient(bx,by,bx+fillW,by);
+      bg.addColorStop(0,'#ff4020');bg.addColorStop(1,'#ffd070');
+      ctx.fillStyle=bg; ctx.fillRect(bx,by,fillW,bh);
+      ctx.strokeStyle='rgba(255,200,150,0.7)';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);
+      // Label
+      ctx.fillStyle='rgba(255,220,180,0.95)';
+      ctx.font='bold 12px monospace';ctx.textAlign='center';
+      const label = deathRay.locked ? 'TARGET LOCKED — FIRING' : 'DEATH RAY CHARGING';
+      ctx.fillText(label, cw/2, by-8);
+      ctx.fillStyle='rgba(255,180,140,0.75)';
+      ctx.font='10px monospace';
+      const tname = ((deathRay.target&&(deathRay.target.name||deathRay.target.id))||'').toUpperCase();
+      ctx.fillText('TARGET: '+tname, cw/2, by+bh+14);
+    }else if(deathRay.phase==='fire'){
+      // Screen white flash fading to red
+      if(deathRay.flash>0){
+        const a = deathRay.flash/24;
+        ctx.fillStyle=`rgba(255,${255-Math.floor((1-a)*120)},${255-Math.floor((1-a)*180)},${a*0.9})`;
+        ctx.fillRect(0,0,cw,ch);
+      }
+      // Sustained hot vignette during the beam
+      ctx.fillStyle='rgba(180,30,20,0.18)';ctx.fillRect(0,0,cw,ch);
+    }else if(deathRay.phase==='aftermath'){
+      // Dust/afterglow fades
+      const a = 1 - deathRay.charge/60;
+      ctx.fillStyle=`rgba(120,40,20,${0.22*a})`;
+      ctx.fillRect(0,0,cw,ch);
+      if(deathRay.charge<40){
+        ctx.fillStyle=`rgba(255,200,160,${0.85*a})`;
+        ctx.font='bold 22px monospace';ctx.textAlign='center';
+        ctx.fillText('A WORLD IS NO MORE', cw/2, ch/2);
+      }
+    }
+  }
 
   // --- TERROR VIGNETTE PULSE ---
   // Red screen-edge glow that pulses with planetTerror. Stronger/faster as terror rises.
@@ -19236,6 +19674,7 @@ function drawPlanet(){
       {label:'ABORT',    key:'T', active: false,                    col:[200,200,200]},
     ] : [
       {label:'SHIP',  key:'ENT', active: false,                    col:[120,200,255]},
+      {label:'CALL',  key:'R',   active: !!(ship&&ship.recalling), col:[120,200,255]},
       {label:'HIJK',  key:'B',   active: nearVeh,                   col:[255,200,80]},
       {label:'INTR',  key:'E',   active: nearWreck||nearBunker,     col:[140,255,160]},
       {label:'MIND',  key:'T',   active: mc,                        col:[200,120,255]},
@@ -22396,17 +22835,46 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
     ctx.fillStyle=_sh2(0xa0);
     ctx.beginPath();ctx.ellipse(hx2-6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.ellipse(hx2+6*s,hy2+2*s,1.2*s,2*s,0,0,Math.PI*2);ctx.fill();
-    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path)
-    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark'){
+    // Hair (top + sides) — suppressed for ghost (under sheet), astronaut (under helmet), southpark (custom head path), bald
+    if(skin.outfit!=='ghost' && skin.outfit!=='astronaut' && skin.outfit!=='southpark' && !skin.bald){
       ctx.fillStyle=skin.hair;
-      ctx.beginPath();
-      ctx.moveTo(hx2-6*s,hy2-2*s);
-      ctx.quadraticCurveTo(hx2-7*s,hy2-7*s,hx2-3*s,hy2-6*s);
-      ctx.quadraticCurveTo(hx2,hy2-8*s,hx2+3*s,hy2-6*s);
-      ctx.quadraticCurveTo(hx2+7*s,hy2-7*s,hx2+6*s,hy2-2*s);
-      ctx.quadraticCurveTo(hx2+3*s,hy2-4*s,hx2,hy2-4*s);
-      ctx.quadraticCurveTo(hx2-3*s,hy2-4*s,hx2-6*s,hy2-2*s);
-      ctx.closePath();ctx.fill();
+      if(skin.hairStyle==='long'){
+        // Shoulder-length wavy hair — wraps around sides of head and flares outward
+        ctx.beginPath();
+        ctx.moveTo(hx2-6.5*s,hy2-1*s);
+        ctx.quadraticCurveTo(hx2-8*s,hy2-8*s,hx2-3*s,hy2-7.5*s);
+        ctx.quadraticCurveTo(hx2,hy2-9*s,hx2+3*s,hy2-7.5*s);
+        ctx.quadraticCurveTo(hx2+8*s,hy2-8*s,hx2+6.5*s,hy2-1*s);
+        // flare down past jawline on both sides
+        ctx.quadraticCurveTo(hx2+8*s,hy2+5*s,hx2+6*s,hy2+7*s);
+        ctx.quadraticCurveTo(hx2+5*s,hy2+3*s,hx2+4*s,hy2-1*s);
+        ctx.quadraticCurveTo(hx2+2*s,hy2-5*s,hx2,hy2-5*s);
+        ctx.quadraticCurveTo(hx2-2*s,hy2-5*s,hx2-4*s,hy2-1*s);
+        ctx.quadraticCurveTo(hx2-5*s,hy2+3*s,hx2-6*s,hy2+7*s);
+        ctx.quadraticCurveTo(hx2-8*s,hy2+5*s,hx2-6.5*s,hy2-1*s);
+        ctx.closePath();ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(hx2-6*s,hy2-2*s);
+        ctx.quadraticCurveTo(hx2-7*s,hy2-7*s,hx2-3*s,hy2-6*s);
+        ctx.quadraticCurveTo(hx2,hy2-8*s,hx2+3*s,hy2-6*s);
+        ctx.quadraticCurveTo(hx2+7*s,hy2-7*s,hx2+6*s,hy2-2*s);
+        ctx.quadraticCurveTo(hx2+3*s,hy2-4*s,hx2,hy2-4*s);
+        ctx.quadraticCurveTo(hx2-3*s,hy2-4*s,hx2-6*s,hy2-2*s);
+        ctx.closePath();ctx.fill();
+      }
+    } else if(skin.bald){
+      // Bald scalp stubble — scattered dark dots around top/back of skull
+      ctx.fillStyle=skin.hair||'#2a1810';
+      const stubN=14;
+      for(let si=0;si<stubN;si++){
+        const sa=-Math.PI*1.05 + si*(Math.PI*1.1/(stubN-1));
+        const sr=6.3*s;
+        const sx=hx2+Math.cos(sa)*sr, sy=hy2+2*s+Math.sin(sa)*sr*0.95;
+        ctx.globalAlpha=0.55;
+        ctx.beginPath();ctx.arc(sx,sy,0.35*s,0,Math.PI*2);ctx.fill();
+      }
+      ctx.globalAlpha=1;
     }
     // --- COSTUME HEAD OVERLAYS ---
     if(skin.outfit==='clown'){
@@ -22639,13 +23107,45 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
   if(_isHuman && skin.outfit==='southpark'){
     // South Park eyes + mouth are drawn in the head block; skip default alien eyes here.
   } else if(_isHuman && skin.outfit!=='ghost' && skin.outfit!=='southpark'){
-    // Small human eyes (white with iris)
-    ctx.fillStyle='#fff';
-    ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(hx2+2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=_eyeCol2;
-    ctx.beginPath();ctx.arc(hx2-2*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(hx2+2.4*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+    // Small human eyes (white with iris) — skipped if shades cover them
+    if(!skin.shades){
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.ellipse(hx2-2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(hx2+2.2*s,hy2+0.5*s,1.4*s,1*s,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=_eyeCol2;
+      ctx.beginPath();ctx.arc(hx2-2*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(hx2+2.4*s,hy2+0.5*s,0.7*s,0,Math.PI*2);ctx.fill();
+    }
+    // Sunglasses (Wayfarer-style black shades)
+    if(skin.shades){
+      ctx.fillStyle='#0a0a0a';
+      // Left lens
+      ctx.beginPath();ctx.ellipse(hx2-2.4*s,hy2+0.7*s,2.1*s,1.6*s,0,0,Math.PI*2);ctx.fill();
+      // Right lens
+      ctx.beginPath();ctx.ellipse(hx2+2.4*s,hy2+0.7*s,2.1*s,1.6*s,0,0,Math.PI*2);ctx.fill();
+      // Bridge
+      ctx.fillRect(hx2-0.6*s,hy2+0.3*s,1.2*s,0.6*s);
+      // Shine
+      ctx.fillStyle='rgba(255,255,255,0.35)';
+      ctx.beginPath();ctx.ellipse(hx2-3*s,hy2-0.1*s,0.7*s,0.4*s,-0.4,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(hx2+1.8*s,hy2-0.1*s,0.7*s,0.4*s,-0.4,0,Math.PI*2);ctx.fill();
+      // Frame outline
+      ctx.strokeStyle='#000';ctx.lineWidth=0.35*s;
+      ctx.beginPath();ctx.ellipse(hx2-2.4*s,hy2+0.7*s,2.1*s,1.6*s,0,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.ellipse(hx2+2.4*s,hy2+0.7*s,2.1*s,1.6*s,0,0,Math.PI*2);ctx.stroke();
+    }
+    // Prescription glasses (round wire frames)
+    if(skin.glasses){
+      ctx.strokeStyle='#2a2018';ctx.lineWidth=0.45*s;
+      ctx.beginPath();ctx.arc(hx2-2.4*s,hy2+0.7*s,1.8*s,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.arc(hx2+2.4*s,hy2+0.7*s,1.8*s,0,Math.PI*2);ctx.stroke();
+      // Bridge
+      ctx.beginPath();ctx.moveTo(hx2-0.6*s,hy2+0.7*s);ctx.lineTo(hx2+0.6*s,hy2+0.7*s);ctx.stroke();
+      // Lens glint
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.beginPath();ctx.ellipse(hx2-3*s,hy2+0.1*s,0.6*s,0.35*s,-0.4,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(hx2+1.8*s,hy2+0.1*s,0.6*s,0.35*s,-0.4,0,Math.PI*2);ctx.fill();
+    }
     // Nose (skip for clown — red nose already drawn)
     if(skin.outfit!=='clown'){
       ctx.strokeStyle=_sh2(0x80);ctx.lineWidth=0.7*s;
@@ -22653,6 +23153,59 @@ function drawAlienPreview(cx,cy,sc,skin,facing,walkPhase){
       // Mouth
       ctx.strokeStyle='#a04040';ctx.lineWidth=0.8*s;
       ctx.beginPath();ctx.moveTo(hx2-1.5*s,hy2+6*s);ctx.quadraticCurveTo(hx2,hy2+(6.5+breathe)*s,hx2+1.5*s,hy2+6*s);ctx.stroke();
+    }
+    // Beard / stubble (drawn last so it overlays mouth slightly)
+    if(skin.beard){
+      const bc=skin.beardCol||skin.hair||'#2a1810';
+      if(skin.beard==='goatee'){
+        // Chin goatee + moustache
+        ctx.fillStyle=bc;
+        ctx.beginPath();ctx.ellipse(hx2,hy2+7.5*s,1.8*s,1.2*s,0,0,Math.PI*2);ctx.fill();
+        // Moustache above mouth
+        ctx.fillRect(hx2-2*s,hy2+5*s,4*s,0.6*s);
+        // Jaw stubble dots
+        ctx.globalAlpha=0.5;
+        for(let bi=0;bi<18;bi++){
+          const ba=Math.PI*0.15 + bi*(Math.PI*0.7/17);
+          const bx=hx2+Math.cos(ba)*5.8*s;
+          const by=hy2+2*s+Math.sin(ba)*6.8*s;
+          ctx.beginPath();ctx.arc(bx,by,0.3*s,0,Math.PI*2);ctx.fill();
+        }
+        ctx.globalAlpha=1;
+      } else {
+        // Short beard along jawline — leaves mouth area clear
+        ctx.fillStyle=bc;
+        // Left jaw strip
+        ctx.beginPath();
+        ctx.moveTo(hx2-5.5*s,hy2+3*s);
+        ctx.quadraticCurveTo(hx2-5.5*s,hy2+8*s,hx2-2*s,hy2+8*s);
+        ctx.lineTo(hx2-2.2*s,hy2+7*s);
+        ctx.quadraticCurveTo(hx2-4.2*s,hy2+6*s,hx2-4.4*s,hy2+3.2*s);
+        ctx.closePath();ctx.fill();
+        // Right jaw strip
+        ctx.beginPath();
+        ctx.moveTo(hx2+5.5*s,hy2+3*s);
+        ctx.quadraticCurveTo(hx2+5.5*s,hy2+8*s,hx2+2*s,hy2+8*s);
+        ctx.lineTo(hx2+2.2*s,hy2+7*s);
+        ctx.quadraticCurveTo(hx2+4.2*s,hy2+6*s,hx2+4.4*s,hy2+3.2*s);
+        ctx.closePath();ctx.fill();
+        // Small chin tuft below mouth
+        ctx.beginPath();
+        ctx.ellipse(hx2,hy2+8*s,2.2*s,0.9*s,0,0,Math.PI*2);
+        ctx.fill();
+        // Stubble dots across cheeks for grit
+        ctx.globalAlpha=0.45;ctx.fillStyle='#000';
+        for(let bi=0;bi<14;bi++){
+          const ba=Math.PI*0.15 + bi*(Math.PI*0.7/13);
+          const bx=hx2+Math.cos(ba)*5.2*s;
+          const by=hy2+2.5*s+Math.sin(ba)*5.5*s;
+          ctx.beginPath();ctx.arc(bx,by,0.25*s,0,Math.PI*2);ctx.fill();
+        }
+        ctx.globalAlpha=1;
+        // Moustache
+        ctx.fillStyle=bc;
+        ctx.fillRect(hx2-2.3*s,hy2+5*s,4.6*s,0.6*s);
+      }
     }
   } else if(bt==='blob'){
     // Single or double eyes inside goo at top
@@ -23716,10 +24269,13 @@ function drawMainMenu(){
       {file:'earth-music.mp3 / .wav',  source:'TBD', author:'TBD', license:'TBD'},
       {file:'eerie-music.mp3',         source:'TBD', author:'TBD', license:'TBD'},
       {file:'flame-sound.mp3',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'mercury-music.wav',       source:'Freesound #553417', author:'freelncr',    license:'check freesound'},
       {file:'missile-sfx.wav',         source:'TBD', author:'TBD', license:'TBD'},
+      {file:'moon-music.wav',          source:'Freesound #582263', author:'thewandermiles', license:'check freesound'},
       {file:'mothership-music.mp3',    source:'TBD', author:'TBD', license:'TBD'},
       {file:'nuke-sfx.flac',           source:'TBD', author:'TBD', license:'TBD'},
       {file:'space-ambience.mp3',      source:'TBD', author:'TBD', license:'TBD'},
+      {file:'sun-music.wav',           source:'Freesound #676989', author:'zhr',          license:'check freesound'},
       {file:'underwater-ambience.wav', source:'TBD', author:'TBD', license:'TBD'},
     ];
     credits.forEach(c=>{

@@ -49,6 +49,10 @@ export const ALIEN_RACES = [
       {id:'ghost_wiz',  name:'Ghost Wizard',   body:'#f2d4b4',  head:'#f2d4b4',  eyes:'#000', glow:'#fff', accent:'#8a8ac0', hair:'#4a2a70', outfit:'ghost',     outfitA:'#f5f5fa', outfitB:'#4a2a70'},
       {id:'clown',      name:'Giggles',        body:'#f2d4b4',  head:'#ffe8e0',  eyes:'#22a', glow:'#fff', accent:'#c44488', hair:'#f0404a', outfit:'clown',     outfitA:'#e33', outfitB:'#fc0'},
       {id:'superhero',  name:'Super Hero',     body:'#e8c48a',  head:'#f0cc94',  eyes:'#060', glow:'#fd4', accent:'#f8d060', hair:'#221810', outfit:'hero',      outfitA:'#1e3a8a', outfitB:'#dc2626'},
+      // M46 dev trio — also selectable under Human
+      {id:'human_david',   name:'David',   body:'#ecc8a4', head:'#f4d0ac', eyes:'#3a2a1a', glow:'#fff', accent:'#c8a880', hair:'#4a2e18', outfit:'tshirt', outfitA:'#1a1a1a', outfitB:'#0a0a0a', beard:'goatee', beardCol:'#2a1810'},
+      {id:'human_mathias', name:'Mathias', body:'#f2d4b0', head:'#fadcbc', eyes:'#3a2a1a', glow:'#fff', accent:'#d0b090', hair:'#4a2e18', outfit:'tshirt', outfitA:'#6a3a24', outfitB:'#2a1a10', glasses:true, hairStyle:'long'},
+      {id:'human_mikael',  name:'Mikael',  body:'#d4a878', head:'#dcb080', eyes:'#000',    glow:'#fff', accent:'#a8845c', hair:'#2a1810', outfit:'tshirt', outfitA:'#2a2a30', outfitB:'#1a1a20', bald:true},
   ]},
   { id:'blob',      name:'Blob',      description:'Gelatinous quivering masses',    bodyType:'blob',    skins:[
       {id:'blob_green', name:'Slime',          body:'#50d060',  head:'#70f080',  eyes:'#000', glow:'#8f8', accent:'#30a040'},
